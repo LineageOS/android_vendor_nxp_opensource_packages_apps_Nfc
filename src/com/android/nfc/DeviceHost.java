@@ -62,6 +62,8 @@ public interface DeviceHost {
         public void onHostCardEmulationData(int technology, byte[] data);
         public void onHostCardEmulationDeactivated(int technology);
         public void onAidRoutingTableFull();
+        public void onNotifyT3tConfigure();
+        public void onNotifyReRoutingEntry();
 
         /**
          * Notifies about multiple card presented to
@@ -84,6 +86,12 @@ public interface DeviceHost {
         public void onRemoteFieldActivated();
 
         public void onRemoteFieldDeactivated();
+
+        /*Restart disable watchdog timer*/
+        public void onRestartWatchDog(int enable);
+
+        /*Restart NFC:When Fw dwnld request was stored during SPI onGoing*/
+        public void onFwDwnldReqRestartNfc();
 
         /**
          * Notifies that the SE has been activated in listen mode
@@ -256,10 +264,6 @@ public interface DeviceHost {
 
     public void disableDiscovery();
 
-    //public void enableRoutingToHost();
-
-    //public void disableRoutingToHost();
-
     public int[] doGetSecureElementList();
 
     public int[] doGetActiveSecureElementList();
@@ -290,10 +294,6 @@ public interface DeviceHost {
     public boolean routeAid(byte[] aid, int route, int powerState, boolean isprefix);
 
     public boolean setDefaultRoute(int defaultRouteEntry, int defaultProtoRouteEntry, int defaultTechRouteEntry);
-
-    public boolean routeNfcid2(byte[] nfcid2, byte[] syscode, byte[] optparam);
-
-    public boolean unrouteNfcid2(byte[] nfcid2);
 
     public boolean unrouteAid(byte[] aid);
 
@@ -433,4 +433,5 @@ public interface DeviceHost {
 
     public int doGetSelectedUicc();
 
+    public int setPreferredSimSlot(int uiccSlot);
 }

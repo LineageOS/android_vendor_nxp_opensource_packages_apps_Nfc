@@ -55,6 +55,7 @@ extern "C"
 #define TYPE_LENGTH_SIZE                0x02
 
 #define MAX_GET_ROUTING_BUFFER_SIZE     740
+#define EE_HCI_DEFAULT_HANDLE           0x401
 #endif
 
 //FelicaOnHost
@@ -71,20 +72,6 @@ typedef struct{
 
    // Mutex mMutex; /*add if it is required */
 }NfcID2_info_t;
-
-typedef struct{
-    NfcID2_info_t NfcID2_info[4];
-    IntervalTimer nfcID2_req_timer;
-    UINT8 NfcID2_ReqCount;
-    Mutex mMutex;
-}NfcID2_add_req_info_t;
-
-typedef struct{
-    NfcID2_info_t NfcID2_info[4];
-    IntervalTimer nfcID2_rmv_req_timer;
-    UINT8 NfcID2_Rmv_ReqCount;
-    Mutex mMutex;
-}NfcID2_rmv_req_info_t;
 
 typedef struct
 {
@@ -132,37 +119,41 @@ public:
 
     static RoutingManager& getInstance ();
     bool initialize(nfc_jni_native_data* native);
-    void enableRoutingToHost();
-    void disableRoutingToHost();
 #if(NXP_EXTNS == TRUE)
-    bool setRoutingEntry(int type, int value, int route, int power);
-    bool clearRoutingEntry(int type);
     void setRouting(bool);
-    bool setDefaultRoute(const UINT8 defaultRoute, const UINT8 protoRoute, const UINT8 techRoute);
-    bool clearAidTable ();
+    void getRouting();
+    void notifyReRoutingEntry();
     void HandleAddNfcID2_Req();
     void HandleRmvNfcID2_Req();
     void setCeRouteStrictDisable(UINT32 state);
-#if (JCOP_WA_ENABLE == TRUE)
-    bool is_ee_recovery_ongoing();
+    void setDefaultTechRouting (int seId, int tech_switchon,int tech_switchoff);
+    void setDefaultProtoRouting (int seId, int proto_switchon,int proto_switchoff);
+    void processGetRoutingRsp(tNFA_DM_CBACK_DATA* eventData, UINT8* sRoutingBuff);
+    void nfaEEConnect();
+    bool setRoutingEntry(int type, int value, int route, int power);
+    bool clearRoutingEntry(int type);
+    bool setDefaultRoute(const UINT8 defaultRoute, const UINT8 protoRoute, const UINT8 techRoute);
+    bool clearAidTable ();
+    bool removeNfcid2Routing(UINT8* nfcID2);
+    bool addAidRouting(const UINT8* aid, UINT8 aidLen, int route, int power, bool isprefix);
+    int  addNfcid2Routing(UINT8* nfcid2, UINT8 aidLen,const UINT8* syscode,
+    int  syscodelen,const UINT8* optparam, int optparamlen);
+#if (NXP_NFCEE_REMOVED_NTF_RECOVERY == TRUE)
     void handleSERemovedNtf();
+    bool is_ee_recovery_ongoing();
 #endif
-#if(NFC_NXP_ESE == TRUE && (NFC_NXP_CHIP_TYPE != PN547C2))
+#if((NFC_NXP_ESE == TRUE) && (NXP_ESE_ETSI_READER_ENABLE == TRUE))
+    void setEtsiReaederState(se_rd_req_state_t newState);
     se_rd_req_state_t getEtsiReaederState();
     Rdr_req_ntf_info_t getSwpRrdReqInfo();
 #endif
-    void setEtsiReaederState(se_rd_req_state_t newState);
-    void setDefaultTechRouting (int seId, int tech_switchon,int tech_switchoff);
-    void setDefaultProtoRouting (int seId, int proto_switchon,int proto_switchoff);
-    int addNfcid2Routing(UINT8* nfcid2, UINT8 aidLen,const UINT8* syscode,
-            int syscodelen,const UINT8* optparam, int optparamlen);
-    bool removeNfcid2Routing(UINT8* nfcID2);
-    void getRouting();
-    void processGetRoutingRsp(tNFA_DM_CBACK_DATA* eventData, UINT8* sRoutingBuff);
-    bool addAidRouting(const UINT8* aid, UINT8 aidLen, int route, int power, bool isprefix);
+#if(NXP_NFCC_HCE_F == TRUE)
+    void notifyT3tConfigure();
+#endif
 #else
     bool addAidRouting(const UINT8* aid, UINT8 aidLen, int route);
 #endif
+    void cleanRouting();
     bool removeAidRouting(const UINT8* aid, UINT8 aidLen);
     bool commitRouting();
     int registerT3tIdentifier(UINT8* t3tId, UINT8 t3tIdLen);
@@ -177,18 +168,20 @@ public:
     Mutex  mResetHandlerMutex;
     IntervalTimer LmrtRspTimer;
     SyncEvent mEeUpdateEvent;
+    IntervalTimer mNfcFRspTimer;
 private:
     RoutingManager();
     ~RoutingManager();
     RoutingManager(const RoutingManager&);
     RoutingManager& operator=(const RoutingManager&);
 
-    void cleanRouting();
     void handleData (UINT8 technology, const UINT8* data, UINT32 dataLen, tNFA_STATUS status);
     void notifyActivated (UINT8 technology);
     void notifyDeactivated (UINT8 technology);
     void notifyLmrtFull();
     void printMemberData(void);
+    void extractRouteLocationAndPowerStates(const UINT8 defaultRoute, const UINT8 protoRoute, const UINT8 techRoute);
+    UINT16 getUiccRouteLocId(const UINT8 route);
     void initialiseTableEntries(void);
     void compileProtoEntries(void);
     void compileTechEntries(void);
@@ -246,6 +239,7 @@ private:
     //Behavior as per Android-KitKat by NXP, supporting prefix match for
     //OffHost and prefix and full both for OnHost apps.
     static const int AID_MATCHING_K = 0x02;
+    static void nfcFRspTimerCb(union sigval);
     static void nfaEeCallback (tNFA_EE_EVT event, tNFA_EE_CBACK_DATA* eventData);
     static void stackCallback (UINT8 event, tNFA_CONN_EVT_DATA* eventData);
     static void nfcFCeCallback (UINT8 event, tNFA_CONN_EVT_DATA* eventData);
@@ -298,4 +292,5 @@ private:
     UINT32 mTechSupportedByUicc1;
     UINT32 mTechSupportedByUicc2;
 #endif
+    UINT32 mDefaultHCEFRspTimeout;
 };

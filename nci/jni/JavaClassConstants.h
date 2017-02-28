@@ -54,6 +54,18 @@ namespace android
      */
     extern jmethodID gCachedNfcManagerNotifyHostEmuActivated;
     extern jmethodID gCachedNfcManagerNotifyHostEmuData;
+#if(NXP_EXTNS == TRUE)
+#if(NXP_NFCC_HCE_F == TRUE)
+    extern jmethodID gCachedNfcManagerNotifyT3tConfigure;
+    extern jmethodID gCachedNfcManagerNotifyReRoutingEntry;
+#endif
+#if(NXP_ESE_JCOP_DWNLD_PROTECTION == TRUE)
+    extern jmethodID gCachedNfcManagerNotifyDownloadInProgress;
+#endif
+#if(NXP_NFCC_SPI_FW_DOWNLOAD_SYNC == TRUE)
+    extern jmethodID gCachedNfcManagerNotifyFwDwnldRequested;
+#endif
+#endif
     extern jmethodID gCachedNfcManagerNotifyHostEmuDeactivated;
     extern jmethodID gCachedNfcManagerNotifyAidRoutingTableFull;
     extern jmethodID gCachedNfcManagerNotifySWPReaderRequested;

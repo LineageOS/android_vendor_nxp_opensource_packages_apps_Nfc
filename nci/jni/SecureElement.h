@@ -53,15 +53,43 @@ extern "C"
     #include "phNfcTypes.h"
 #endif
 }
-#if((NFC_NXP_ESE == TRUE)&&(NXP_EXTNS == TRUE))
+#if(NXP_EXTNS == TRUE)
+#define CONNECTIVITY_PIPE_ID_UICC1 0x0A
+#define CONNECTIVITY_PIPE_ID_UICC2 0x23
+#if(NFC_NXP_ESE == TRUE)
 #define SIG_NFC 44
+#define HOST_TYPE_ESE   0xC0
 #endif
+#define HOST_TYPE_UICC1 0x02
+#define HOST_TYPE_UICC2 0x81
+#endif
+
 typedef enum dual_mode{
  SPI_DWPCL_NOT_ACTIVE = 0x00,
  CL_ACTIVE = 0x01,
  SPI_ON = 0x02,
  SPI_DWPCL_BOTH_ACTIVE = 0x03,
 }dual_mode_state;
+#if(NXP_EXTNS == TRUE)
+typedef enum connectivity_pipe_status{
+PIPE_DELETED,
+PIPE_CLOSED,
+PIPE_OPENED
+}pipe_status;
+
+typedef enum
+{
+    UICC_SESSION_NOT_INTIALIZED = 0x00,
+    UICC_CLEAR_ALL_PIPE_NTF_RECEIVED = 0x01,
+    UICC_SESSION_INTIALIZATION_DONE = 0x02
+}nfcee_disc_state;
+#endif
+typedef enum {
+    STATE_IDLE = 0x00,
+    STATE_WK_ENBLE = 0x01,
+    STATE_WK_WAIT_RSP = 0x02,
+    STATE_TIME_OUT = 0x04
+}spiDwpSyncState_t;
 
 typedef enum reset_management{
  TRANS_IDLE = 0x00,
@@ -88,7 +116,7 @@ typedef enum
 
 }se_rd_req_state_t;
 
-#if((NXP_EXTNS == TRUE) && (NFC_NXP_STAT_DUAL_UICC_EXT_SWITCH == TRUE))
+#if(NXP_EXTNS == TRUE)
 
 typedef enum
 {
@@ -100,6 +128,15 @@ typedef enum
     UICC_02_REMOVED,
     UICC_STATUS_UNKNOWN
 }uicc_stat_t;
+typedef enum
+{
+    SWP_DEFAULT = 0x00,
+    SWP1_UICC1 = 0x01,
+    SWP2_ESE = 0x02,
+    SWP1A_UICC2 = 0x04,
+    T4T_NDEFEE = 0x08,
+    HCI_ACESS = 0x10
+}nfcee_swp_getconfig_status;
 #endif
 typedef enum
 {   STATE_SE_RDR_FAILURE_NOT_SUPPORTED ,
@@ -128,8 +165,25 @@ typedef enum operation{
     STANDBY_MODE_OFF
 }nfcc_standby_operation_t;
 void spi_prio_signal_handler (int signum, siginfo_t *info, void *unused);
-#endif
 
+typedef enum apdu_gate{
+    NO_APDU_GATE,
+    PROPREITARY_APDU_GATE,
+    ETSI_12_APDU_GATE
+}se_apdu_gate_info;
+#endif
+typedef enum nfcee_type
+{
+    UICC1 = 0x01,
+    UICC2 = 0x02,
+    ESE   = 0x04
+}nfcee_type_t;
+typedef enum
+{
+    NONE = 0x00,
+    FW_DOWNLOAD,
+    JCOP_DOWNLOAD
+}Downlaod_mode_t;
 namespace android {
 extern SyncEvent sNfaEnableDisablePollingEvent;
 extern void startStopPolling (bool isStartPolling);
@@ -142,22 +196,31 @@ public:
     tNFA_HANDLE  mActiveEeHandle;
 #if(NXP_EXTNS == TRUE)
 #define MAX_NFCEE 5
-
-    struct mNfceeData{
+    struct mNfceeData
+    {
         tNFA_HANDLE mNfceeHandle[MAX_NFCEE];
         tNFA_EE_STATUS mNfceeStatus[MAX_NFCEE];
         UINT8 mNfceePresent;
     };
     mNfceeData  mNfceeData_t;
-    UINT8 mHostsPresent;
-    UINT8 mHostsId[MAX_NFCEE];
+    UINT8       mHostsPresent;
+    UINT8   mETSI12InitStatus;
+    UINT8       mHostsId[MAX_NFCEE];
+    UINT8       eSE_Compliancy;
+    UINT8       mCreatedPipe;
+    UINT8       mDeletePipeHostId;
+    SyncEvent   mCreatePipeEvent;
+    SyncEvent   mPipeOpenedEvent;
+    SyncEvent   mAbortEvent;
+    bool        mAbortEventWaitOk;
+#if (NXP_ESE_DWP_SPI_SYNC_ENABLE == TRUE)
+    bool enableDwp(void);
 #endif
-
-#if(NFC_NXP_ESE == TRUE && (NFC_NXP_CHIP_TYPE != PN547C2))
-    IntervalTimer sSwpReaderTimer; // timer swp reader timeout.
+#if((NFC_NXP_ESE == TRUE) && (NXP_ESE_ETSI_READER_ENABLE == TRUE))
+    IntervalTimer sSwpReaderTimer; /*timer swp reader timeout*/
 #endif
-
-    static const int MAX_NUM_EE = 5;    //max number of EE's
+#endif
+    static const int MAX_NUM_EE = NFA_EE_MAX_EE_SUPPORTED;    /*max number of EE's*/
 
     /*******************************************************************************
     **
@@ -561,8 +624,8 @@ public:
     bool getAtr(jint seID, UINT8* recvBuffer, INT32 *recvBufferSize);
 #if(NXP_EXTNS == TRUE)
     bool getNfceeHostTypeList (void);
-    bool configureNfceeETSI12 (UINT8 host_id);
-
+    bool configureNfceeETSI12 ();
+    void eSE_ClearAllPipe_handler(uint8_t host);
     /**********************************************************************************
      **
      ** Function:        getEeStatus
@@ -573,7 +636,7 @@ public:
      **
      **********************************************************************************/
     UINT16 getEeStatus(UINT16 eehandle);
-#if(NFC_NXP_STAT_DUAL_UICC_EXT_SWITCH == TRUE)
+
     /**********************************************************************************
      **
      ** Function:        getUiccStatus
@@ -610,15 +673,16 @@ public:
      **
      *******************************************************************************/
     bool isTeckInfoReceived (UINT16 eeHandle);
+
 #endif
-#endif
-#if(NFC_NXP_ESE == TRUE && (NFC_NXP_CHIP_TYPE != PN547C2))
+
+#if((NFC_NXP_ESE == TRUE) && (NXP_EXTNS == TRUE) && (NXP_ESE_ETSI_READER_ENABLE == TRUE))
     void etsiInitConfig();
     tNFC_STATUS etsiReaderConfig(int eeHandle);
     tNFC_STATUS etsiResetReaderConfig();
 #endif
 
-#if((NFC_NXP_ESE == TRUE)&&(CONCURRENCY_PROTECTION == TRUE))
+#if((NFC_NXP_ESE == TRUE)&&(NXP_NFCC_ESE_UICC_CONCURRENT_ACCESS_PROTECTION == TRUE))
     /*******************************************************************************
     **
     ** Function:        enablePassiveListen
@@ -635,73 +699,103 @@ public:
     bool            mPassiveListenEnabled;
     bool            meseUiccConcurrentAccess;
     IntervalTimer   mPassiveListenTimer;
+    UINT32          mPassiveListenTimeout;             //Retry timout value for passive listen enable timer
+    UINT8           mPassiveListenCnt;                 //Retry cnt for passive listen enable timer
+    SyncEvent       mPassiveListenEvt;
+    Mutex           mPassiveListenMutex;
 #endif
     jint getSETechnology(tNFA_HANDLE eeHandle);
     static const UINT8 UICC_ID = 0x02;
     static const UINT8 UICC2_ID = 0x04;
     static const UINT8 ESE_ID = 0x01;
     static const UINT8 DH_ID = 0x00;
+#if(NXP_EXTNS == TRUE)
+    static const UINT8 eSE_Compliancy_ETSI_9 = 9;
+    static const UINT8 eSE_Compliancy_ETSI_12 = 12;
+#endif
 
     void getEeHandleList(tNFA_HANDLE *list, UINT8* count);
 
     tNFA_HANDLE getEseHandleFromGenericId(jint eseId);
 
     jint getGenericEseId(tNFA_HANDLE handle);
+    UINT8       mDownloadMode;
+#if((NFC_NXP_ESE == TRUE) && (NXP_EXTNS == TRUE))
+
+    bool        meSESessionIdOk;
+    void        setCPTimeout();
+    SyncEvent   mRfFieldOffEvent;
+    void        NfccStandByOperation(nfcc_standby_operation_t value);
+    NFCSTATUS   eSE_Chip_Reset(void);
+    tNFA_STATUS SecElem_sendEvt_Abort();
 #if (JCOP_WA_ENABLE == TRUE)
     tNFA_STATUS reconfigureEseHciInit();
 #endif
-#if((NFC_NXP_ESE == TRUE)&&(NXP_EXTNS == TRUE))
-    void setCPTimeout();
-    void NfccStandByOperation(nfcc_standby_operation_t value);
-    void eSE_ISO_Reset(void);
-    tNFA_STATUS SecElem_sendEvt_Abort();
 #endif
     bool checkForWiredModeAccess();
-    bool isEtsi12ApduGatePresent();
-    bool mRecvdTransEvt;
-    bool mAllowWiredMode;
-    UINT8           mPassiveListenCnt;                 //Retry cnt for passive listen enable timer
+#if((NFC_NXP_ESE == TRUE) && (NXP_EXTNS == TRUE))
+    se_apdu_gate_info getApduGateInfo();
+#endif
     SyncEvent       mRoutingEvent;
     SyncEvent       mAidAddRemoveEvent;
     SyncEvent       mUiccListenEvent;
     SyncEvent       mEseListenEvent;
-    SyncEvent       mAllowWiredModeEvent;
     SyncEvent       mEeSetModeEvent;
-    UINT32          mPassiveListenTimeout;                 //Retry timout value for passive listen enable timer
-#if((NFC_NXP_ESE == TRUE)&&(CONCURRENCY_PROTECTION == TRUE))
-    SyncEvent       mPassiveListenEvt;
-    Mutex           mPassiveListenMutex;
-#endif
+    SyncEvent       mModeSetNtf;
+    SyncEvent       mHciAddStaticPipe;
 #if ((NXP_EXTNS == TRUE) && (NXP_WIRED_MODE_STANDBY == TRUE))
     SyncEvent       mPwrLinkCtrlEvent;
 #endif
 
 #if(NXP_EXTNS == TRUE)
+    UINT8 getUiccGateAndPipeList(UINT8 uiccNo);
+    /*******************************************************************************
+    **
+    ** Function:        updateNfceeDiscoverInfo
+    **
+    ** Description:     Update the gSeDiscoverycount based on new NFCEE handle
+    **                  discovered
+    **
+    ** Returns:         Count of NFCEE discovered.
+    **
+    *******************************************************************************/
+    UINT8 updateNfceeDiscoverInfo(int numEe, tNFA_EE_INFO* mEeInfo);
+    tNFA_HANDLE getHciHandleInfo();
     SyncEvent       mNfceeInitCbEvent;
     tNFA_STATUS SecElem_EeModeSet(uint16_t handle, uint8_t mode);
-#if (JCOP_WA_ENABLE == TRUE)
+#if (NXP_NFCEE_REMOVED_NTF_RECOVERY == TRUE)
     SyncEvent       mEEdatapacketEvent;
 #endif
     SyncEvent       mTransceiveEvent;
     static const UINT8 EVT_END_OF_APDU_TRANSFER = 0x21;    //NXP Propritory
-#if (NXP_WIRED_MODE_STANDBY == TRUE)
-    static const UINT8 EVT_SUSPEND_APDU_TRANSFER = 0x31;
-#endif
-    tNFA_HANDLE mActiveCeHandle;
-    bool    mIsWiredModeOpen;
-    bool    mlistenDisabled;
-    bool    mIsExclusiveWiredMode;
-    bool    mIsActionNtfReceived;
-    bool    mIsDesfireMifareDisable;
-    bool    mIsAllowWiredInDesfireMifareCE;
+    bool            mIsWiredModeOpen;
+    bool            mlistenDisabled;
+    bool            mIsExclusiveWiredMode;
+    bool            mIsAllowWiredInDesfireMifareCE;
     static const UINT8 EVT_ABORT = 0x11;  //ETSI12
+    static const UINT8 EVT_ABORT_MAX_RSP_LEN = 40;
+    bool    mIsWiredModeBlocked;   /* for wired mode resume feature support */
+    IntervalTimer   mRfFieldEventTimer;
+    UINT32          mRfFieldEventTimeout;
+    tNFA_STATUS  mModeSetInfo;/*Mode set info status*/
+#if (NXP_WIRED_MODE_STANDBY == TRUE)
+    static const UINT8 NFCC_DECIDES     = 0x00;     //NFCC decides
+    static const UINT8 POWER_ALWAYS_ON  = 0x01;     //NFCEE Power Supply always On
+    static const UINT8 COMM_LINK_ACTIVE = 0x02;     //NFCC to NFCEE Communication link always active when the NFCEE  is powered on.
+    static const UINT8 EVT_SUSPEND_APDU_TRANSFER = 0x31;
+    tNFA_STATUS  mPwrCmdstatus;     //completion status of the power link control command
+    UINT8        mNfccPowerMode;
+    tNFA_STATUS  setNfccPwrConfig(UINT8 value);
+#endif
+    bool mIsIntfRstEnabled;
     void setCLState(bool mState);
+    void setDwpTranseiveState(bool state, tNFCC_EVTS_NTF action);
 #endif
 
 private:
     static const unsigned int MAX_RESPONSE_SIZE = 0x8800;//1024; //34K
     enum RouteSelection {NoRoute, DefaultRoute, SecElemRoute};
-#ifdef GEMATO_SE_SUPPORT
+#ifndef GEMATO_SE_SUPPORT
     static const UINT8 STATIC_PIPE_0x70 = 0x19; //PN54X Gemalto's proprietary static pipe
 #else
     static const UINT8 STATIC_PIPE_0x70 = 0x70; //Broadcom's proprietary static pipe
@@ -710,18 +804,11 @@ private:
     static const UINT8 EVT_SEND_DATA = 0x10;    //see specification ETSI TS 102 622 v9.0.0 (Host Controller Interface); section 9.3.3.3
 #if(NXP_EXTNS == TRUE)
     static const UINT8 STATIC_PIPE_UICC = 0x20; //UICC's proprietary static pipe
-#if (NXP_WIRED_MODE_STANDBY == TRUE)
-    static const UINT8 NFCC_DECIDES     = 0x00;     //NFCC decides
-    static const UINT8 POWER_ALWAYS_ON  = 0x01;     //NFCEE Power Supply always On
-    static const UINT8 COMM_LINK_ACTIVE = 0x02;     //NFCC to NFCEE Communication link always active when the NFCEE  is powered on.
-#endif
     static const tNFA_HANDLE EE_HANDLE_0xF3 = 0x4C0;//0x401; //handle to secure element in slot 0
     static const tNFA_HANDLE EE_HANDLE_0xF8 = 0x481; //handle to secure element in slot 2
-#ifdef NXP_UICC_ENABLE
     static const tNFA_HANDLE EE_HANDLE_0xF4 = 0x402; //handle to secure element in slot 1
-#else
-    static const tNFA_HANDLE EE_HANDLE_0xF4 = 0x0F4;//0x4C0; //handle to secure element in slot 1
-#endif
+    static const tNFA_HANDLE EE_HANDLE_HCI  = 0x401;
+    static const tNFA_HANDLE EE_HANDLE_NDEFEE = 0x410;
 #else
     static const tNFA_HANDLE EE_HANDLE_0xF3 = 0x4F3; //handle to secure element in slot 0
     static const tNFA_HANDLE EE_HANDLE_0xF4 = 0x4F4; //handle to secure element in slot 1
@@ -759,8 +846,10 @@ private:
     SyncEvent       mResetOngoingEvent;
 #endif
     SyncEvent       mPipeListEvent;
+#if(NXP_EXTNS != TRUE)
     SyncEvent       mCreatePipeEvent;
     SyncEvent       mPipeOpenedEvent;
+#endif
     SyncEvent       mAllocateGateEvent;
     SyncEvent       mDeallocateGateEvent;
 //    SyncEvent       mRoutingEvent;
@@ -782,10 +871,8 @@ private:
     struct timespec mLastRfFieldToggle; // last time RF field went off
     IntervalTimer   mTransceiveTimer;
     bool            mTransceiveWaitOk;
-    int mWiredModeRfFiledEnable;
+
 #if(NXP_EXTNS == TRUE)
-    SyncEvent       mAbortEvent;
-    bool            mAbortEventWaitOk;
 #define             WIRED_MODE_TRANSCEIVE_TIMEOUT 30000
 #endif
     /*******************************************************************************
@@ -811,6 +898,18 @@ private:
     *******************************************************************************/
     ~SecureElement ();
 
+    /*******************************************************************************
+    **
+    ** Function:        handleClearAllPipe
+    **
+    ** Description:     To handle clear all pipe event received from HCI based on the
+    **                  deleted host
+    **                  eventData: Event data.
+    **
+    ** Returns:         None
+    **
+    *******************************************************************************/
+    static void handleClearAllPipe (tNFA_HCI_EVT_DATA* eventData);
 
     /*******************************************************************************
     **
