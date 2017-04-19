@@ -139,6 +139,8 @@ typedef enum
 
 using namespace::std;
 
+void findConfigFilePathFromTransportConfigPaths(const string& configName, string& filePath);
+
 class CNxpNfcParam : public string
 {
 public:
@@ -325,8 +327,7 @@ int CNxpNfcConfig::getconfiguration_id(char *config_file)
     snprintf(config_file, MAX_DATA_CONFIG_PATH_LEN, "libnfc-%s_%s.conf",
         soc_info, target_type);
 
-    strPath.assign (transport_config_path);
-    strPath += config_file;
+    findConfigFilePathFromTransportConfigPaths(config_file, strPath);
     if (file_exist(strPath.c_str()))
         idx = 0;
 
@@ -840,14 +841,12 @@ CNxpNfcConfig& CNxpNfcConfig::GetInstance ()
              */
             return theInstance;
         }
-        strPath.assign(transport_config_path);
 
         gconfigpathid = theInstance.getconfiguration_id(config_name_generic);
-        strPath += config_name_generic;
+        findConfigFilePathFromTransportConfigPaths(config_name_generic, strPath);
         if (!(theInstance.file_exist(strPath.c_str()))) {
            ALOGI("no matching file found, using default file for stability\n");
-           strPath.assign(transport_config_path);
-           strPath += config_name_default;
+           findConfigFilePathFromTransportConfigPaths(config_name_default, strPath);
         }
         ALOGI("config file used = %s\n", strPath.c_str());
         theInstance.readConfig (strPath.c_str (), true);
