@@ -141,7 +141,6 @@ endif
 
 LOCAL_MODULE := libnqnfc_nci_jni
 LOCAL_MODULE_TAGS := optional
-LOCAL_PROPRIETARY_MODULE := true
 LOCAL_MODULE_OWNER := nxp
 
 include $(BUILD_SHARED_LIBRARY)
