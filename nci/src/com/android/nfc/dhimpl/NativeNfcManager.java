@@ -109,7 +109,7 @@ public class NativeNfcManager implements DeviceHost {
         int nbRetry = 0;
         try {
         byte[] fwFileName;
-        String filePath="/system/vendor/firmware/";
+        String filePath="/vendor/firmware/";
 
         //Read firmware file name from config file
         fwFileName=getFwFileName();
