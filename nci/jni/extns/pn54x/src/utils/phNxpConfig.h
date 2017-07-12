@@ -105,12 +105,23 @@ int updateNxpConfigTimestamp ();
 #define config_name_mtp         "libnfc-mtp_default.conf"
 #define config_name_mtp1        "libnfc-mtp_rf1.conf"
 #define config_name_mtp2        "libnfc-mtp_rf2.conf"
-#define config_name_mtp_NQ3XX	"libnfc-mtp-NQ3XX.conf"
+#define config_name_mtp_NQ3XX   "libnfc-mtp-NQ3XX.conf"
+#define config_name_mtp_NQ4XX   "libnfc-mtp-NQ4XX.conf"
 #define config_name_qrd         "libnfc-qrd_default.conf"
 #define config_name_qrd1        "libnfc-qrd_rf1.conf"
 #define config_name_qrd2        "libnfc-qrd_rf2.conf"
-#define config_name_qrd_NQ3XX	"libnfc-qrd-NQ3XX.conf"
+#define config_name_qrd_NQ3XX   "libnfc-qrd-NQ3XX.conf"
+#define config_name_qrd_NQ4XX   "libnfc-qrd-NQ4XX.conf"
 #define config_name_default     "libnfc-nxp_default.conf"
+
+/**
+ *  @brief defines the different major number used.
+ */
+#define FW_MAJOR_NUM_NQ2xx     "10"
+#define FW_MAJOR_NUM_NQ3xx     "11"
+#define FW_MAJOR_NUM_NQ4xx     "12"
+
+#define FW_MAJOR_NUM_LENGTH    2
 
 /**
  *  @brief defines the maximum length of the target name.
