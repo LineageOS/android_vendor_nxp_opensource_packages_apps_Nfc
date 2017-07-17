@@ -222,7 +222,7 @@ public class NativeNfcManager implements DeviceHost {
     public native boolean sendRawFrame(byte[] data);
 
     @Override
-    public boolean routeAid(byte[] aid, int route, int powerState, boolean isprefix) {
+    public boolean routeAid(byte[] aid, int route, int powerState, int aidInfo) {
 
         boolean status = true;
         //if(mIsAidFilterSupported) {
@@ -230,14 +230,17 @@ public class NativeNfcManager implements DeviceHost {
           //  mAidFilter.addAppAidToCache(aid, route, powerState);
        // } else {
 
-            status = doRouteAid(aid, route, powerState, isprefix);
+            status = doRouteAid(aid, route, powerState, aidInfo);
 
         //}
 
         return status;
     }
 
-    public native boolean doRouteAid(byte[] aid, int route, int powerState, boolean isprefix);
+    public native boolean doRouteAid(byte[] aid, int route, int powerState, int aidInfo);
+
+    @Override
+    public native boolean routeApduPattern(int route, int powerState, byte[] apduData, byte[] apduMask);
 
     @Override
     public native boolean setDefaultRoute(int defaultRouteEntry, int defaultProtoRouteEntry, int defaultTechRouteEntry);
@@ -284,10 +287,13 @@ public class NativeNfcManager implements DeviceHost {
     public native int   getDefaultMifareCLTPowerState();
 
     @Override
+    public native boolean unrouteApduPattern(byte[] apduData);
+
+    @Override
     public native void doSetScreenOrPowerState(int state);
 
     @Override
-    public native void doSetScreenState(int mScreenState);
+    public native void doSetScreenState(int screen_state_mask);
 
     @Override
     public native void doEnablep2p(boolean p2pFlag);
@@ -307,19 +313,19 @@ public class NativeNfcManager implements DeviceHost {
     @Override
     public native void doSetSecureElementListenTechMask(int tech_mask);
 
+    @Override
+    public native int getNciVersion();
 
     private native void doEnableDiscovery(int techMask,
                                           boolean enableLowPowerPolling,
                                           boolean enableReaderMode,
-                                          boolean enableHostRouting,
                                           boolean enableP2p,
                                           boolean restart);
 
     @Override
     public void enableDiscovery(NfcDiscoveryParameters params, boolean restart) {
         doEnableDiscovery(params.getTechMask(), params.shouldEnableLowPowerDiscovery(),
-                params.shouldEnableReaderMode(), params.shouldEnableHostRouting(),
-                params.shouldEnableP2p(), restart);
+                params.shouldEnableReaderMode(), params.shouldEnableP2p(), restart);
     }
 
     @Override
@@ -478,7 +484,7 @@ public class NativeNfcManager implements DeviceHost {
     }
 
     @Override
-    public native void doAbort();
+    public native void doAbort(String msg);
 
     private native boolean doSetTimeout(int tech, int timeout);
     @Override

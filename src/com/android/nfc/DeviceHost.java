@@ -258,7 +258,9 @@ public interface DeviceHost {
 
     public void enableDiscovery(NfcDiscoveryParameters params, boolean restart);
 
-    public void doSetScreenState(int mScreenState);
+    public int getNciVersion();
+
+    public void doSetScreenState(int screen_state_mask);
 
     public void doEnablep2p(boolean p2pFlag);
 
@@ -291,7 +293,7 @@ public interface DeviceHost {
 
     public boolean sendRawFrame(byte[] data);
 
-    public boolean routeAid(byte[] aid, int route, int powerState, boolean isprefix);
+    public boolean routeAid(byte[] aid, int route, int powerState, int aidInfo);
 
     public boolean setDefaultRoute(int defaultRouteEntry, int defaultProtoRouteEntry, int defaultTechRouteEntry);
 
@@ -319,6 +321,8 @@ public interface DeviceHost {
 
     public boolean clearRoutingEntry(int type);
 
+    public boolean routeApduPattern(int route, int powerState, byte[] apduData, byte[] apduMask);
+
     public LlcpConnectionlessSocket createLlcpConnectionlessSocket(int nSap, String sn)
             throws LlcpException;
 
@@ -327,6 +331,8 @@ public interface DeviceHost {
 
     public LlcpSocket createLlcpSocket(int sap, int miu, int rw,
             int linearBufferLength) throws LlcpException;
+
+    public boolean unrouteApduPattern(byte[] apduData);
 
     public boolean doCheckLlcp();
 
@@ -342,7 +348,7 @@ public interface DeviceHost {
 
     public int getTimeout(int technology);
 
-    public void doAbort();
+    public void doAbort(String msg);
 
     boolean canMakeReadOnly(int technology);
 

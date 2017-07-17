@@ -176,6 +176,7 @@ public class CardEmulationManager implements RegisteredServicesCache.Callback,
         mHostNfcFEmulationManager.onUserSwitched();
         mT3tIdentifiersCache.onUserSwitched();
         mEnabledNfcFServices.onUserSwitched(userId);
+        mNfcFServicesCache.onUserSwitched();
         mNfcFServicesCache.invalidateCache(userId);
     }
 
@@ -332,6 +333,20 @@ public class CardEmulationManager implements RegisteredServicesCache.Callback,
         }
     }
 
+    boolean isNfcFServiceInstalled(int userId, ComponentName service) {
+        boolean serviceFound = mNfcFServicesCache.hasService(userId, service);
+        if (!serviceFound) {
+            // If we don't know about this service yet, it may have just been enabled
+            // using PackageManager.setComponentEnabledSetting(). The PackageManager
+            // broadcasts are delayed by 10 seconds in that scenario, which causes
+            // calls to our APIs referencing that service to fail.
+            // Hence, update the cache in case we don't know about the service.
+            if (DBG) Log.d(TAG, "Didn't find passed in service, invalidating cache.");
+            mNfcFServicesCache.invalidateCache(userId);
+        }
+        return mNfcFServicesCache.hasService(userId, service);
+    }
+
     boolean setDefaultServiceForCategoryChecked(int userId, ComponentName service,
             String category) {
         if (!CardEmulation.CATEGORY_PAYMENT.equals(category)) {
@@ -365,19 +380,6 @@ public class CardEmulationManager implements RegisteredServicesCache.Callback,
         return mServiceCache.hasService(userId, service);
     }
 
-    boolean isNfcFServiceInstalled(int userId, ComponentName service) {
-        boolean serviceFound = mNfcFServicesCache.hasService(userId, service);
-        if (!serviceFound) {
-            // If we don't know about this service yet, it may have just been enabled
-            // using PackageManager.setComponentEnabledSetting(). The PackageManager
-            // broadcasts are delayed by 10 seconds in that scenario, which causes
-            // calls to our APIs referencing that service to fail.
-            // Hence, update the cache in case we don't know about the service.
-            if (DBG) Log.d(TAG, "Didn't find passed in service, invalidating cache.");
-            mNfcFServicesCache.invalidateCache(userId);
-        }
-        return mNfcFServicesCache.hasService(userId, service);
-    }
 
     /**
      * Returns whether a service in this package is preferred,

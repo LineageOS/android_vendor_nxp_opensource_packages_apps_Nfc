@@ -132,7 +132,6 @@ public class NxpNfcController {
         }
     }
 
-
     public void setResultForX509Certificates(boolean result) {
         Log.d(TAG, "setResultForX509Certificates() Start, result: " + result);
         if (mWaitX509CheckCert != null) {

@@ -36,10 +36,7 @@ package com.android.nfc;
 
 import android.content.pm.UserInfo;
 import com.android.nfc.beam.BeamManager;
-import com.android.nfc.beam.BeamSendService;
-import com.android.nfc.beam.BeamTransferRecord;
 import android.os.UserManager;
-import android.content.Intent;
 import com.android.nfc.sneptest.ExtDtaSnepServer;
 import com.android.nfc.sneptest.DtaSnepClient;
 import com.android.nfc.echoserver.EchoServer;
@@ -52,8 +49,7 @@ import com.android.nfc.snep.SnepClient;
 import com.android.nfc.snep.SnepMessage;
 import com.android.nfc.snep.SnepServer;
 
-import android.app.ActivityManager;
-import android.app.ActivityManager.RunningTaskInfo;
+
 import android.content.Context;
 import android.content.SharedPreferences;
 import android.content.pm.ApplicationInfo;
@@ -71,14 +67,11 @@ import android.os.Message;
 import android.os.SystemClock;
 import android.os.UserHandle;
 import android.util.Log;
-import android.nfc.FormatException;
 
 import java.io.FileDescriptor;
 import java.io.IOException;
 import java.io.PrintWriter;
 import java.io.UnsupportedEncodingException;
-import java.nio.charset.StandardCharsets;
-import java.util.Arrays;
 import java.util.List;
 
 /**
@@ -583,6 +576,7 @@ class P2pLinkManager implements Handler.Callback, P2pEventListener.Callback {
                 } else {
                     mMessageToSend = createDefaultNdef(pkgs[0]);
                     mUrisToSend = null;
+                    mSendFlags = 0;
                 }
             }
 
@@ -890,7 +884,10 @@ class P2pLinkManager implements Handler.Callback, P2pEventListener.Callback {
                     response = snepResponse.getNdefMessage();
                 }
                 if (response == null) {
-                    return HANDOVER_UNSUPPORTED;
+                    if (snepClient != null)
+                        return HANDOVER_UNSUPPORTED;
+                    else
+                        return HANDOVER_FAILURE;
                 }
             } else {
                 return HANDOVER_UNSUPPORTED;

@@ -46,7 +46,7 @@ extern "C"
 
 int GetNxpStrValue (const char* name, char* p_value, unsigned long len);
 int GetNxpNumValue (const char* name, void* p_value, unsigned long len);
-int GetNxpByteArrayValue (const char* name, char* pValue, unsigned long bufflen, long *len);
+int GetNxpByteArrayValue (const char* name, char* pValue, long bufflen, long *len);
 void resetNxpConfig (void);
 int isNxpConfigModified ();
 int updateNxpConfigTimestamp ();
@@ -94,7 +94,7 @@ int updateNxpConfigTimestamp ();
 #define NAME_NXP_ESE_WIRED_PRT_MASK         "NXP_ESE_WIRED_PRT_MASK"
 #define NAME_NXP_ENABLE_ADD_AID             "NXP_ENABLE_ADD_AID"
 #define NAME_NXP_ADDITIONAL_CONFIG_OPTIONS   "NXP_ADDITIONAL_CONFIG_OPTIONS"
-#if(NXP_ESE_POWER_MODE==TRUE)
+#if(NXP_ESE_POWER_MODE==true)
 #define NAME_NXP_ESE_POWER_DH_CONTROL       "NXP_ESE_POWER_DH_CONTROL"
 #endif
 #define NAME_NXP_DWP_INTF_RESET_ENABLE      "NXP_DWP_INTF_RESET_ENABLE"

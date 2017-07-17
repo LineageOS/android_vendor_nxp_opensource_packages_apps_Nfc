@@ -48,6 +48,8 @@
   * a configuration file will be selected dynamically and the device will be configured.
   */
 
+#define LOG_TAG "pn54x"
+
 #include <phNxpConfig.h>
 #include <stdio.h>
 #include <string>
@@ -165,12 +167,13 @@ public:
     virtual ~CNxpNfcConfig ();
     static CNxpNfcConfig& GetInstance ();
     friend void readOptionalConfig (const char* optional);
+    int checkTimestamp ();
     int updateTimestamp ();
-    int checkTimestamp();
-    bool    getValue (const char* name, char* pValue, size_t& len) const;
+
+    bool    getValue (const char* name, char* pValue, size_t len) const;
     bool    getValue (const char* name, unsigned long& rValue) const;
     bool    getValue (const char* name, unsigned short & rValue) const;
-    bool    getValue (const char* name, char* pValue, unsigned long len, long* readlen) const;
+    bool    getValue (const char* name, char* pValue, long len, long* readlen) const;
     const CNxpNfcParam* find (const char* p_name) const;
 #if(NXP_EXTNS == TRUE)
     void    readNxpTransitConfig(const char* fileName) const;
@@ -574,19 +577,18 @@ bool CNxpNfcConfig::readConfig (const char* name, bool bResetContent)
     mCurrentFile = name;
 #endif
     state = BEGIN_LINE;
-
-    //open config file, read it into a buffer
+    /* open config file, read it into a buffer */
     if ((fd = fopen (name, "rb")) == NULL)
     {
-        ALOGE ("%s Cannot open config file %s\n", __func__, name);
+        ALOGE("%s Cannot open config file %s", __func__, name);
         if (bResetContent)
         {
-            ALOGE ("%s Using default value for all settings\n", __func__);
+            ALOGE("%s Using default value for all settings", __func__);
             mValidFile = false;
         }
         return false;
     }
-    ALOGD("%s Opened %s config %s\n", __func__, (bResetContent ? "base" : "optional"), name);
+    ALOGV("%s Opened %s config %s\n", __func__, (bResetContent ? "base" : "optional"), name);
 
     stat (name, &buf);
 
@@ -913,7 +915,7 @@ CNxpNfcConfig& CNxpNfcConfig::GetInstance ()
 **              false if setting does not exist
 **
 *******************************************************************************/
-bool CNxpNfcConfig::getValue (const char* name, char* pValue, size_t& len) const
+bool CNxpNfcConfig::getValue (const char* name, char* pValue, size_t len) const
 {
     const CNxpNfcParam* pParam = find (name);
     if (pParam == NULL)
@@ -922,15 +924,13 @@ bool CNxpNfcConfig::getValue (const char* name, char* pValue, size_t& len) const
     if (pParam->str_len () > 0)
     {
         memset (pValue, 0, len);
-        if (len > pParam->str_len() - 1)
-            len  = pParam->str_len() - 1;
-        memcpy(pValue, pParam->str_value(), len);
+        memcpy (pValue, pParam->str_value (), pParam->str_len ());
         return true;
     }
     return false;
 }
 
-bool CNxpNfcConfig::getValue (const char* name, char* pValue,unsigned long len,long* readlen) const
+bool CNxpNfcConfig::getValue (const char* name, char* pValue, long len,long* readlen) const
 {
     const CNxpNfcParam* pParam = find (name);
     if (pParam == NULL)
@@ -938,7 +938,7 @@ bool CNxpNfcConfig::getValue (const char* name, char* pValue,unsigned long len,l
 
     if (pParam->str_len () > 0)
     {
-        if(pParam->str_len() <= len)
+        if(pParam->str_len () <= (unsigned long) len)
         {
             memset (pValue, 0, len);
             memcpy (pValue, pParam->str_value (), pParam->str_len ());
@@ -1100,7 +1100,7 @@ void CNxpNfcConfig::add (const CNxpNfcParam* pParam)
 #if(NXP_EXTNS == TRUE)
     if((mCurrentFile.find("nxpTransit") != std::string::npos) && !isAllowed(pParam->c_str()))
     {
-        ALOGD("%s Token restricted. Returning", __func__);
+        ALOGV("%s Token restricted. Returning", __func__);
         return;
     }
 #endif
@@ -1134,14 +1134,14 @@ void CNxpNfcConfig::add (const CNxpNfcParam* pParam)
 *******************************************************************************/
 void CNxpNfcConfig::dump()
 {
-    ALOGD("%s Enter", __func__);
+    ALOGV("%s Enter", __func__);
 
     for (list<const CNxpNfcParam*>::iterator it = m_list.begin(), itEnd = m_list.end(); it != itEnd; ++it)
     {
         if((*it)->str_len()>0)
-            ALOGD("%s %s \t= %s", __func__, (*it)->c_str(),(*it)->str_value());
+            ALOGV("%s %s \t= %s", __func__, (*it)->c_str(),(*it)->str_value());
         else
-            ALOGD("%s %s \t= (0x%0lX)\n", __func__,(*it)->c_str(),(*it)->numValue());
+            ALOGV("%s %s \t= (0x%0lX)\n", __func__,(*it)->c_str(),(*it)->numValue());
     }
 }
 
@@ -1230,7 +1230,7 @@ int CNxpNfcConfig::checkTimestamp ()
 
     if (stat(config_timestamp_path, &st) != 0)
     {
-        ALOGD ("%s file %s not exist, create it.\n", __func__, config_timestamp_path);
+        ALOGV("%s file %s not exist, creat it.", __func__, config_timestamp_path);
         if ((fd = fopen (config_timestamp_path, "w+")) != NULL)
         {
             fwrite (&m_timeStamp, sizeof(unsigned long), 1, fd);
@@ -1243,7 +1243,7 @@ int CNxpNfcConfig::checkTimestamp ()
         fd = fopen (config_timestamp_path, "r+");
         if (fd == NULL)
         {
-            ALOGE ("%s Cannot open file %s\n", __func__, config_timestamp_path);
+            ALOGE("%s Cannot open file %s", __func__, config_timestamp_path);
             return 1;
         }
 
@@ -1323,16 +1323,14 @@ CNxpNfcParam::CNxpNfcParam (const char* name, unsigned long value) :
 **
 ** Description: API function for getting a string value of a setting
 **
-** Returns:     length if found, FALSE[0] otherwise.
+** Returns:     True if found, otherwise False.
 **
 *******************************************************************************/
-extern "C" int GetNxpStrValue (const char* name, char* pValue, unsigned long l)
+extern "C" int GetNxpStrValue (const char* name, char* pValue, unsigned long len)
 {
-    size_t len = l;
     CNxpNfcConfig& rConfig = CNxpNfcConfig::GetInstance ();
 
-    bool b = rConfig.getValue(name, pValue, len);
-    return b ? len : 0;
+    return rConfig.getValue (name, pValue, len);
 }
 
 /*******************************************************************************
@@ -1348,10 +1346,10 @@ extern "C" int GetNxpStrValue (const char* name, char* pValue, unsigned long l)
 **              len     - out parameter to return the number of bytes read from config file,
 **                        return -1 in case bufflen is not enough.
 **
-** Returns:     TRUE[1] if config param name is found in the config file, else FALSE[0]
+** Returns:     true[1] if config param name is found in the config file, else false[0]
 **
 *******************************************************************************/
-extern "C" int GetNxpByteArrayValue (const char* name, char* pValue, unsigned long bufflen, long *len)
+extern "C" int GetNxpByteArrayValue (const char* name, char* pValue, long bufflen, long *len)
 {
     CNxpNfcConfig& rConfig = CNxpNfcConfig::GetInstance ();
 
@@ -1392,6 +1390,9 @@ extern "C" int GetNxpNumValue (const char* name, void* pValue, unsigned long len
     {
     case sizeof(unsigned long):
         *(static_cast<unsigned long*>(pValue)) = (unsigned long) v;
+        break;
+    case sizeof(unsigned int):
+        *(static_cast<unsigned int*>(pValue)) = (unsigned int) v;
         break;
     case sizeof(unsigned short):
         *(static_cast<unsigned short*>(pValue)) = (unsigned short) v;
@@ -1495,7 +1496,7 @@ int CNxpNfcConfig::updateTimestamp()
 
     if(stat(config_timestamp_path, &st) != 0)
     {
-        ALOGD("%s file %s not exist, creat it.\n", __func__, config_timestamp_path);
+        ALOGV("%s file %s not exist, creat it.\n", __func__, config_timestamp_path);
         if ((fd = fopen(config_timestamp_path, "w+")) != NULL)
         {
             fwrite(&m_timeStamp, sizeof(unsigned long), 1, fd);
