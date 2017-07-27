@@ -1803,13 +1803,15 @@ void nfaDeviceManagementCallback (uint8_t dmEvent, tNFA_DM_CBACK_DATA* eventData
     }
 #endif
 #endif
+#if(NFC_NXP_STAT_DUAL_UICC_EXT_SWITCH == false)
     case NFA_DM_SET_POWER_SUB_STATE_EVT:
     {
         ALOGD("%s: NFA_DM_SET_POWER_SUB_STATE_EVT; status=0x%X",__FUNCTION__, eventData->power_sub_state.status);
         SyncEventGuard guard (sNfaSetPowerSubState);
         sNfaSetPowerSubState.notifyOne();
-    }
         break;
+    }
+#endif
     case NFA_DM_EMVCO_PCD_COLLISION_EVT:
         ALOGV("STATUS_EMVCO_PCD_COLLISION - Multiple card detected");
         SecureElement::getInstance().notifyEmvcoMultiCardDetectedListeners();
