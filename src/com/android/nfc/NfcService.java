@@ -411,7 +411,7 @@ public class NfcService implements DeviceHostListener {
     /**
      * ID to be able to select all Secure Elements
      */
-    private static int ALL_SE_ID_TYPE = 7;
+    private static int ALL_SE_ID_TYPE = 3;
 
     public static final int PN547C2_ID = 1;
     public static final int PN65T_ID = 2;
