@@ -1388,9 +1388,11 @@ extern "C" int GetNxpNumValue (const char* name, void* pValue, unsigned long len
     }
     switch (len)
     {
+#if(LOCAL_MULTILIB == 64)
     case sizeof(unsigned long):
         *(static_cast<unsigned long*>(pValue)) = (unsigned long) v;
         break;
+#endif
     case sizeof(unsigned int):
         *(static_cast<unsigned int*>(pValue)) = (unsigned int) v;
         break;
