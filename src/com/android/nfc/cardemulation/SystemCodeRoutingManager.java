@@ -59,12 +59,12 @@ public class SystemCodeRoutingManager {
             for (T3tIdentifier t3tIdentifier : toBeRemoved) {
                 if (DBG) Log.d(TAG, "deregisterNfcFSystemCodeonDh:");
                 NfcService.getInstance().deregisterT3tIdentifier(
-                        t3tIdentifier.systemCode, t3tIdentifier.nfcid2, t3tIdentifier.t3tPmm);
+                        t3tIdentifier.systemCode, t3tIdentifier.nfcid2 );
             }
             for (T3tIdentifier t3tIdentifier : toBeAdded) {
                 if (DBG) Log.d(TAG, "registerNfcFSystemCodeonDh:");
                 NfcService.getInstance().registerT3tIdentifier(
-                        t3tIdentifier.systemCode, t3tIdentifier.nfcid2 , t3tIdentifier.t3tPmm);
+                        t3tIdentifier.systemCode, t3tIdentifier.nfcid2 );
             }
             if (DBG) {
                 Log.d(TAG, "(Before) mConfiguredT3tIdentifiers: size=" +
