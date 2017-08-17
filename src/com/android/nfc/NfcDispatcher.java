@@ -16,7 +16,6 @@
 
 package com.android.nfc;
 
-import android.app.ActivityManager;
 import android.bluetooth.BluetoothAdapter;
 import android.os.UserManager;
 

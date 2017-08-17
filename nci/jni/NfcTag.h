@@ -490,6 +490,7 @@ public:
 #endif
 private:
     std::vector<int> mTechnologyTimeoutsTable;
+    std::vector<int> mTechnologyDefaultTimeoutsTable;
     nfc_jni_native_data* mNativeData;
     bool mIsActivated;
     ActivationState mActivationState;

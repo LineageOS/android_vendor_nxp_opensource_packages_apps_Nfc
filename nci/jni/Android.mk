@@ -13,33 +13,6 @@ LOCAL_CFLAGS += -DNCI_VERSION=$(NCI_VERSION) -O0 -g
 endif
 
 LOCAL_CFLAGS += -Wall -Wextra -Wno-unused-parameter
-#variables for NFC_NXP_CHIP_TYPE
-PN547C2 := 1
-PN548C2 := 2
-PN551   := 3
-PN553   := 4
-PN557   := 5
-NQ110 := $PN547C2
-NQ120 := $PN547C2
-NQ210 := $PN548C2
-NQ220 := $PN548C2
-
-#NXP chip type Enable
-ifeq ($(PN547C2),1)
-LOCAL_CFLAGS += -DPN547C2=1
-endif
-ifeq ($(PN548C2),2)
-LOCAL_CFLAGS += -DPN548C2=2
-endif
-ifeq ($(PN551),3)
-LOCAL_CFLAGS += -DPN551=3
-endif
-ifeq ($(PN553),4)
-LOCAL_CFLAGS += -DPN553=4
-endif
-ifeq ($(PN557),5)
-LOCAL_CFLAGS += -DPN557=5
-endif
 
 #NXP PN547 Enable
 LOCAL_CFLAGS += -DNXP_EXTNS=TRUE
@@ -49,56 +22,7 @@ LOCAL_CFLAGS += -DNFC_NXP_HFO_SETTINGS=FALSE
 #Enable HCE-F specific
 LOCAL_CFLAGS += -DNXP_NFCC_HCE_F=TRUE
 
-#### Select the JCOP OS Version ####
-JCOP_VER_3_1 := 1
-JCOP_VER_3_2 := 2
-JCOP_VER_3_3 := 3
-JCOP_VER_4_0 := 4
-
-LOCAL_CFLAGS += -DJCOP_VER_3_1=$(JCOP_VER_3_1)
-LOCAL_CFLAGS += -DJCOP_VER_3_2=$(JCOP_VER_3_2)
-LOCAL_CFLAGS += -DJCOP_VER_3_3=$(JCOP_VER_3_3)
-LOCAL_CFLAGS += -DJCOP_VER_4_0=$(JCOP_VER_4_0)
-
 NFC_NXP_ESE:= TRUE
-ifeq ($(NFC_NXP_ESE),TRUE)
-LOCAL_CFLAGS += -DNFC_NXP_ESE=TRUE
-LOCAL_CFLAGS += -DNFC_NXP_ESE_VER=$(JCOP_VER_4_0)
-else
-LOCAL_CFLAGS += -DNFC_NXP_ESE=FALSE
-endif
-
-#### Select the CHIP ####
-# Check NQ3XX_PRESENT flag to support NQ3XX chipsets
-ifeq ($(strip $(NQ3XX_PRESENT)),true)
-NXP_CHIP_TYPE := $(PN557)
-else
-NXP_CHIP_TYPE := $(PN548C2)
-endif
-
-ifeq ($(NXP_CHIP_TYPE),$(PN547C2))
-LOCAL_CFLAGS += -DNFC_NXP_CHIP_TYPE=PN547C2
-else ifeq ($(NXP_CHIP_TYPE),$(PN548C2))
-LOCAL_CFLAGS += -DNFC_NXP_CHIP_TYPE=PN548C2
-else ifeq ($(NXP_CHIP_TYPE),$(PN551))
-LOCAL_CFLAGS += -DNFC_NXP_CHIP_TYPE=PN551
-else ifeq ($(NXP_CHIP_TYPE),$(PN553))
-LOCAL_CFLAGS += -DNFC_NXP_CHIP_TYPE=PN553
-else ifeq ($(NXP_CHIP_TYPE),$(PN557))
-LOCAL_CFLAGS += -DNFC_NXP_CHIP_TYPE=PN557
-endif
-
-ifeq ($(call is-board-platform-in-list,msm8909w msm8916 msm8994 msm8909 msm8996 msm8992 msm8952 msm8937 msm8953 msm8998),true)
-LOCAL_CFLAGS += -DNQ_NFC_DUAL_UICC=FALSE
-else
-LOCAL_CFLAGS += -DNQ_NFC_DUAL_UICC=TRUE
-endif
-
-ifeq ($(NXP_CHIP_TYPE),$(PN553))
-LOCAL_CFLAGS += -DJCOP_WA_ENABLE=FALSE
-else
-LOCAL_CFLAGS += -DJCOP_WA_ENABLE=TRUE
-endif
 
 NFC_POWER_MANAGEMENT:= TRUE
 ifeq ($(NFC_POWER_MANAGEMENT),TRUE)
@@ -117,7 +41,6 @@ LOCAL_SRC_FILES := $(call all-subdir-cpp-files) $(call all-subdir-c-files)
 
 LOCAL_C_INCLUDES += \
     frameworks/native/include \
-    libcore/include \
     $(NFA)/include \
     $(NFA)/brcm \
     $(NFC)/include \
