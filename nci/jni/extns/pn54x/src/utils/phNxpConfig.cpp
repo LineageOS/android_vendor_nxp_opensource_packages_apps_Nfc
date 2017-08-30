@@ -1388,7 +1388,7 @@ extern "C" int GetNxpNumValue (const char* name, void* pValue, unsigned long len
     }
     switch (len)
     {
-#if(LOCAL_MULTILIB == 64)
+#if(NFC_ARCH_TYPE == 64)
     case sizeof(unsigned long):
         *(static_cast<unsigned long*>(pValue)) = (unsigned long) v;
         break;
