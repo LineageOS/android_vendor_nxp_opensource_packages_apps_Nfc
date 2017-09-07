@@ -66,7 +66,7 @@ LOCAL_SHARED_LIBRARIES := \
     libnqnfc-nci
 
 ifeq ($(NFC_NXP_ESE),TRUE)
-LOCAL_SHARED_LIBRARIES += libp61-jcop-kit
+LOCAL_SHARED_LIBRARIES += libnqp61-jcop-kit
 endif
 
 #LOCAL_STATIC_LIBRARIES := libxml2
