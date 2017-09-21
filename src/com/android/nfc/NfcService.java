@@ -74,6 +74,7 @@ import android.os.Process;
 import android.os.RemoteException;
 import android.os.ServiceManager;
 import android.os.SystemClock;
+import android.os.SystemProperties;
 import android.os.UserHandle;
 import android.os.UserManager;
 import android.provider.Settings;
@@ -155,7 +156,7 @@ public class NfcService implements DeviceHostListener {
     public static final String NXP_PREF = "NfcServiceNxpPrefs";
 
     static final String PREF_NFC_ON = "nfc_on";
-    static final boolean NFC_ON_DEFAULT = true;
+    static boolean NFC_ON_DEFAULT = true;
     static final String PREF_NDEF_PUSH_ON = "ndef_push_on";
     static final boolean NDEF_PUSH_ON_DEFAULT = true;
     static final String PREF_FIRST_BEAM = "first_beam";
@@ -1210,6 +1211,7 @@ public class NfcService implements DeviceHostListener {
                     break;
                 case TASK_BOOT:
                     Log.d(TAG, "checking on firmware download");
+                    NFC_ON_DEFAULT = SystemProperties.getBoolean("persist.sys.sw.defnfc", true);
                     if (mPrefs.getBoolean(PREF_NFC_ON, NFC_ON_DEFAULT)) {
                         Log.d(TAG, "NFC is on. Doing normal stuff");
                         mIsTaskBoot = true;
