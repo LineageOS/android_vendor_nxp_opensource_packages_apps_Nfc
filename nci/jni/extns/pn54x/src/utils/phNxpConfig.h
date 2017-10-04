@@ -94,14 +94,12 @@ int updateNxpConfigTimestamp ();
 #define NAME_NXP_ESE_WIRED_PRT_MASK         "NXP_ESE_WIRED_PRT_MASK"
 #define NAME_NXP_ENABLE_ADD_AID             "NXP_ENABLE_ADD_AID"
 #define NAME_NXP_ADDITIONAL_CONFIG_OPTIONS   "NXP_ADDITIONAL_CONFIG_OPTIONS"
-#if(NXP_ESE_POWER_MODE==true)
 #define NAME_NXP_ESE_POWER_DH_CONTROL       "NXP_ESE_POWER_DH_CONTROL"
-#endif
 #define NAME_NXP_DWP_INTF_RESET_ENABLE      "NXP_DWP_INTF_RESET_ENABLE"
+
 /**
  *  @brief defines the different config files used.
  */
-
 #define config_name_mtp         "libnfc-mtp_default.conf"
 #define config_name_mtp1        "libnfc-mtp_rf1.conf"
 #define config_name_mtp2        "libnfc-mtp_rf2.conf"
