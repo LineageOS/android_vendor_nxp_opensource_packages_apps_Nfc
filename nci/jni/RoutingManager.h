@@ -50,6 +50,7 @@ extern "C"
 #define TECHNOLOGY_BASED_ROUTING        0x00
 #define PROTOCOL_BASED_ROUTING          0x01
 #define AID_BASED_ROUTING               0x02
+#define AVAILABLE_PROTO_ENTRIES() ((NFA_GetNCIVersion() == NCI_VERSION_2_0)?0x02:0x03)
 
 /*Size of type and length Fields : No of bytes*/
 #define TYPE_LENGTH_SIZE                0x02
@@ -121,6 +122,7 @@ typedef struct
     tNFA_PROTOCOL_MASK      proto_screen_lock;   /* default routing - protocols screen_lock    */
     tNFA_PROTOCOL_MASK      proto_screen_off;  /* default routing - protocols screen_off  */
     tNFA_PROTOCOL_MASK      proto_screen_off_lock;  /* default routing - protocols screen_off_lock  */
+
 } LmrtEntry_t;
 
 class RoutingManager
@@ -157,6 +159,8 @@ public:
     void setDefaultProtoRouting (int seId, int proto_switchon,int proto_switchoff);
     void processGetRoutingRsp(tNFA_DM_CBACK_DATA* eventData, uint8_t* sRoutingBuff);
     void nfaEEConnect();
+    void nfaEEDisconnect();
+    SyncEvent mEEDisconnectEvt;
     bool setRoutingEntry(int type, int value, int route, int power);
     bool clearRoutingEntry(int type);
     bool setDefaultRoute(const int defaultRoute, const int protoRoute, const int techRoute);
@@ -181,7 +185,7 @@ public:
          uint8_t apduDataLen ,const uint8_t* apduMask, uint8_t apduMaskLen);
 
     bool removeApduRouting(uint8_t apduDataLen, const uint8_t* apduData);
-
+    void setEERecovery(bool value);
     void cleanRouting();
     bool removeAidRouting(const uint8_t* aid, uint8_t aidLen);
     bool commitRouting();
@@ -217,6 +221,9 @@ private:
     void consolidateProtoEntries(void);
     void consolidateTechEntries(void);
     void setProtoRouting(void);
+#if(NXP_EXTNS == TRUE)
+    void setEmptyAidEntry(void);
+#endif
     void setTechRouting(void);
     void processTechEntriesForFwdfunctionality(void);
     void configureOffHostNfceeTechMask(void);

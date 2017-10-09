@@ -310,7 +310,7 @@ public class HostNfcFEmulationManager {
                     return;
                 }
                 */
-                if (data.length == 0) {
+                if (data == null || data.length == 0) {
                     Log.e(TAG, "Empty response packet");
                     sendEmptyData();
                     return;
@@ -374,7 +374,7 @@ public class HostNfcFEmulationManager {
     }
 
     public void dump(FileDescriptor fd, PrintWriter pw, String[] args) {
-        pw.println("Bound services: ");
+        pw.println("Bound HCE-F services: ");
         if (mServiceBound) {
             pw.println("    service: " + mServiceName);
         }

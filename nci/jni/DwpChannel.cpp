@@ -161,10 +161,11 @@ if(nfcFL.eseFL._ESE_JCOP_DWNLD_PROTECTION) {
                  * and LS application can invoke
                  * open(), POWER_ALWAYS_ON is needed.
                  */
-                if(se.setNfccPwrConfig(se.POWER_ALWAYS_ON) != NFA_STATUS_OK)
+                if(se.setNfccPwrConfig(se.POWER_ALWAYS_ON|se.COMM_LINK_ACTIVE) != NFA_STATUS_OK)
                 {
                     ALOGV("%s: power link command failed", __func__);
                 }
+                se.SecEle_Modeset(0x01);
             }
         }
     }
@@ -220,7 +221,7 @@ bool transceive (uint8_t* xmitBuffer, int32_t xmitBufferSize, uint8_t* recvBuffe
                  int32_t recvBufferMaxSize, int32_t& recvBufferActualSize, int32_t timeoutMillisec)
 {
     static const char fn [] = "DwpChannel::transceive";
-    bool stat = false;
+    eTransceiveStatus stat = TRANSCEIVE_STATUS_FAILED;
     SecureElement &se = SecureElement::getInstance();
     ALOGV("%s: enter", fn);
 
@@ -241,7 +242,7 @@ bool transceive (uint8_t* xmitBuffer, int32_t xmitBufferSize, uint8_t* recvBuffe
                           recvBufferActualSize,
                           timeoutMillisec);
     ALOGV("%s: exit", fn);
-    return stat;
+    return ((stat == TRANSCEIVE_STATUS_OK) ? true : false);
 }
 
 /*******************************************************************************

@@ -275,7 +275,7 @@ PowerSwitch::getInstance ().setModeOn (PowerSwitch::SE_CONNECTED);
        then turn on the sec elem */
 #if(NXP_EXTNS == TRUE)
 if(nfcFL.nfcNxpEse) {
-    if((!(p61_current_state & (P61_STATE_SPI | P61_STATE_SPI_PRIO))) && (!(dual_mode_current_state & CL_ACTIVE)))
+    if(nfcFL.eseFL._ESE_FORCE_ENABLE && (!(p61_current_state & (P61_STATE_SPI | P61_STATE_SPI_PRIO))) && (!(dual_mode_current_state & CL_ACTIVE)))
         stat = se.SecEle_Modeset(0x01); //Workaround
     usleep(150000); /*provide enough delay if NFCC enter in recovery*/
 }
@@ -340,7 +340,8 @@ if(nfcFL.nfcNxpEse && stat)
 
     if(status != NFA_STATUS_OK)
     {
-        if(nfcFL.eseFL._WIRED_MODE_STANDBY && (se.mNfccPowerMode == 1)) {
+        if(nfcFL.eseFL._WIRED_MODE_STANDBY && (se.mNfccPowerMode == 1) &&
+        !(p61_current_state & (P61_STATE_SPI | P61_STATE_SPI_PRIO))) {
             se.setNfccPwrConfig(se.NFCC_DECIDES);
         }
         se.disconnectEE (secElemHandle);
@@ -665,11 +666,19 @@ static jbyteArray nativeNfcSecureElement_doTransceive (JNIEnv* e, jobject, jint 
     const int32_t recvBufferMaxSize = 0x8800;//1024; 34k
     uint8_t recvBuffer [recvBufferMaxSize];
     int32_t recvBufferActualSize = 0;
+    eTransceiveStatus tranStatus = TRANSCEIVE_STATUS_FAILED;
 
     ScopedByteArrayRW bytes(e, data);
 #if(NXP_EXTNS == TRUE)
     ALOGV("%s: enter; handle=0x%X; buf len=%zu", __func__, handle, bytes.size());
-    SecureElement::getInstance().transceive(reinterpret_cast<uint8_t*>(&bytes[0]), bytes.size(), recvBuffer, recvBufferMaxSize, recvBufferActualSize, WIRED_MODE_TRANSCEIVE_TIMEOUT);
+    tranStatus = SecureElement::getInstance().transceive(reinterpret_cast<uint8_t*>(&bytes[0]), bytes.size(), recvBuffer, recvBufferMaxSize, recvBufferActualSize, WIRED_MODE_TRANSCEIVE_TIMEOUT);
+    if(tranStatus == TRANSCEIVE_STATUS_MAX_WTX_REACHED)
+    {
+        ALOGE ("%s: Wired Mode Max WTX count reached", __FUNCTION__);
+        jbyteArray result = e->NewByteArray(0);
+        nativeNfcSecureElement_doResetSecureElement(e,NULL,handle);
+        return result;
+    }
 
     //copy results back to java
     jbyteArray result = e->NewByteArray(recvBufferActualSize);
