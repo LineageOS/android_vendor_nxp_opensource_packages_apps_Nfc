@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2016, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2016-2017, The Linux Foundation. All rights reserved.
  * Not a Contribution.
  *
  * Copyright (C) 2015 NXP Semiconductors
@@ -664,12 +664,14 @@ tNFA_STATUS GetNumNFCEEConfigured(void)
     uint8_t cmd_buf_len = 0x08;
     uint8_t num_config_params = 0x02;
     uint8_t config_param_len = 0x05;
-    uint8_t buf_offset = 0x08;
-    cmd_buf[buf_offset++] = NXP_NFC_SET_CONFIG_PARAM_EXT;
-    cmd_buf[buf_offset++] = NXP_NFC_PARAM_ID_SWP1A;
-    cmd_buf_len += 0x02;
-    num_config_params++;
-    config_param_len += 0x02;
+    if ((nfcFL.chipType == pn551) || (nfcFL.chipType == pn553) || (nfcFL.chipType == pn557)) {
+        uint8_t buf_offset = 0x08;
+        cmd_buf[buf_offset++] = NXP_NFC_SET_CONFIG_PARAM_EXT;
+        cmd_buf[buf_offset++] = NXP_NFC_PARAM_ID_SWP1A;
+        cmd_buf_len += 0x02;
+        num_config_params++;
+        config_param_len += 0x02;
+    }
     cmd_buf[2] = config_param_len;
     cmd_buf[3] = num_config_params;
 
@@ -842,7 +844,7 @@ tNFA_STATUS enableSWPInterface()
             SetCbStatus(NFA_STATUS_FAILED);
             {
                 SyncEventGuard guard (gnxpfeature_conf.NxpFeatureConfigEvt);
-                if(nfcFL.nfccFL._NFC_NXP_STAT_DUAL_UICC_WO_EXT_SWITCH) {
+                if ((nfcFL.chipType == pn551) || (nfcFL.chipType == pn553) || (nfcFL.chipType == pn557)) {
                     status = NFA_SendNxpNciCommand(sizeof(dual_uicc_cmd_buf),
                             dual_uicc_cmd_buf, NxpResponse_Cb);
                 }
