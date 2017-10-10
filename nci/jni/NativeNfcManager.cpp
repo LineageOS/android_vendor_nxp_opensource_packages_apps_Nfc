@@ -1,6 +1,6 @@
 /******************************************************************************
  *
- *  Copyright (c) 2016, The Linux Foundation. All rights reserved.
+ *  Copyright (c) 2016-2017, The Linux Foundation. All rights reserved.
  *  Not a Contribution.
  *
  *  Copyright (C) 2015 NXP Semiconductors
@@ -7394,15 +7394,15 @@ void write_uicc_context(uint8_t *uiccContext, uint16_t uiccContextLen, uint8_t *
 
     memset (filename, 0, sizeof(filename));
     memset (filename2, 0, sizeof(filename2));
-    strcpy(filename2, "/data/nfc");
-    strncat(filename2, "/nxpStorage.bin", sizeof(filename2)-strlen(filename2)-1);
+    strlcpy(filename2, "/data/nfc", sizeof(filename2));
+    strlcat(filename2, "/nxpStorage.bin", sizeof(filename2));
 
     if (strlen(filename2) > 200)
     {
         ALOGE("%s: filename too long", __func__);
         return;
     }
-    sprintf (filename, "%s%u", filename2, block);
+    snprintf (filename, sizeof(filename), "%s%u", filename2, block);
     ALOGV("%s: bytes=%u; file=%s slotnum=%d", __func__, uiccContextLen, filename, slotnum);
 
     int fileStream = 0;
@@ -7481,14 +7481,14 @@ void read_uicc_context(uint8_t *uiccContext, uint16_t uiccContextLen, uint8_t *u
 
     memset (filename, 0, sizeof(filename));
     memset (filename2, 0, sizeof(filename2));
-    strcpy(filename2, "/data/nfc");
-    strncat(filename2, "/nxpStorage.bin", sizeof(filename2)-strlen(filename2)-1);
+    strlcpy(filename2, "/data/nfc", sizeof(filename2));
+    strlcat(filename2, "/nxpStorage.bin", sizeof(filename2));
     if (strlen(filename2) > 200)
     {
         ALOGE("%s: filename too long", __func__);
         return;
     }
-    sprintf (filename, "%s%u", filename2, block);
+    snprintf (filename, sizeof(filename), "%s%u", filename2, block);
 
     ALOGV("%s: buffer len=%u; file=%s, slotnum=%d", __func__, uiccContextLen, filename, slotnum);
     int fileStream = open (filename, O_RDONLY);
