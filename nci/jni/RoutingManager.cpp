@@ -730,6 +730,12 @@ bool RoutingManager::setDefaultRoute(const int defaultRoute, const int protoRout
 
     extractRouteLocationAndPowerStates(defaultRoute,protoRoute,techRoute);
 
+#if(NXP_EXTNS == TRUE)
+    if(NFA_GetNCIVersion() == NCI_VERSION_2_0) {
+        setEmptyAidEntry();
+    }
+#endif
+
     if (mHostListnTechMask)
     {
        nfaStat = NFA_CeSetIsoDepListenTech(mHostListnTechMask & 0xB);
@@ -767,6 +773,54 @@ void RoutingManager::setCeRouteStrictDisable(uint32_t state)
 {
     ALOGV("%s: mCeRouteScreenLock = 0x%lX", __func__, state);
     mCeRouteStrictDisable = state;
+}
+
+/******************************************************************************
+ ** Function:    nfaEEConnect
+ **
+ ** Description: This function is invoked in case of eSE session reset.
+ **              in this case we already discovered eSE earlierhence eSE the eSE count is
+ **              decremented from gSeDiscoveryCount so that only pending NFCEE(UICC1 & UICC2)
+ **              would be rediscovered.
+ **
+ ** Returns:     None
+ ********************************************************************************/
+void RoutingManager::nfaEEConnect()
+{
+    tNFA_STATUS nfaStat = NFA_STATUS_FAILED;
+    if(NFA_GetNCIVersion() != NCI_VERSION_2_0)
+    {
+      nfaStat = NFA_EeConnect(EE_HCI_DEFAULT_HANDLE, NFC_NFCEE_INTERFACE_HCI_ACCESS, nfaEeCallback);
+    }
+    else
+    {
+      nfaStat = NFA_EeDiscover(nfaEeCallback);
+    }
+    if(nfaStat == NFA_STATUS_OK)
+    {
+        SyncEventGuard g(gNfceeDiscCbEvent);
+        ALOGV("%s, Sem wait for gNfceeDiscCbEvent %d", __FUNCTION__, gdisc_timeout);
+        gNfceeDiscCbEvent.wait(gdisc_timeout);
+    }
+
+}
+
+/******************************************************************************
+ ** Function: nfaEEDisconnect
+ **
+ ** Description: This function can be called to delete the core logical connection
+ ** already created , to create connection again.
+ **
+ ** Returns: None
+ ********************************************************************************/
+void RoutingManager::nfaEEDisconnect()
+{
+    if(NFA_STATUS_OK == NFA_EeDisconnect(EE_HCI_DEFAULT_HANDLE))
+    {
+        SyncEventGuard guard(mEEDisconnectEvt);
+        ALOGV("%s, Sem wait for mEEDisconnectEvt", __FUNCTION__);
+        mEEDisconnectEvt.wait(1000);
+    }
 }
 
 void RoutingManager::printMemberData()
@@ -982,13 +1036,16 @@ void RoutingManager::initialiseTableEntries(void)
 
     mProtoTableEntries[PROTO_T3T_IDX].protocol     = NFA_PROTOCOL_MASK_T3T;
     mProtoTableEntries[PROTO_ISODEP_IDX].protocol  = NFA_PROTOCOL_MASK_ISO_DEP;
-    mProtoTableEntries[PROTO_ISO7816_IDX].protocol = NFC_PROTOCOL_MASK_ISO7816;
+    if(NFA_GetNCIVersion() == NCI_VERSION_1_0) {
+        mProtoTableEntries[PROTO_ISO7816_IDX].protocol = NFC_PROTOCOL_MASK_ISO7816;
+    }
 
     mTechTableEntries[TECH_A_IDX].technology       = NFA_TECHNOLOGY_MASK_A;
     mTechTableEntries[TECH_B_IDX].technology       = NFA_TECHNOLOGY_MASK_B;
     mTechTableEntries[TECH_F_IDX].technology       = NFA_TECHNOLOGY_MASK_F;
 
-    for(int xx = 0; xx < MAX_PROTO_ENTRIES; xx++)
+
+    for(int xx = 0; xx < AVAILABLE_PROTO_ENTRIES(); xx++)
     {
         mProtoTableEntries[xx].routeLoc = mTechTableEntries[xx].routeLoc = 0x00;
         mProtoTableEntries[xx].power    = mTechTableEntries[xx].power    = 0x00;
@@ -1035,9 +1092,11 @@ void RoutingManager::compileProtoEntries(void)
     mProtoTableEntries[PROTO_ISODEP_IDX].power    = mCeRouteStrictDisable ? mDefaultIsoDepPowerstate : (mDefaultIsoDepPowerstate & POWER_STATE_MASK);
     mProtoTableEntries[PROTO_ISODEP_IDX].enable   = ((mHostListnTechMask & 0x03) != 0x00) ? true : false;
 
+    if(NFA_GetNCIVersion() == NCI_VERSION_1_0) {
     mProtoTableEntries[PROTO_ISO7816_IDX].routeLoc = mDefaultIso7816SeID;
     mProtoTableEntries[PROTO_ISO7816_IDX].power    = mCeRouteStrictDisable ? mDefaultIso7816Powerstate : (mDefaultIso7816Powerstate & POWER_STATE_MASK);
     mProtoTableEntries[PROTO_ISO7816_IDX].enable   = (mDefaultIso7816SeID == ROUTE_LOC_HOST_ID) ? (((mHostListnTechMask & 0x03) != 0x00) ? true : false):(true);
+    }
     dumpTables(1);
 
     ALOGV("%s: exit", fn);
@@ -1057,7 +1116,7 @@ void RoutingManager::consolidateProtoEntries(void)
 
     int index = -1;
 
-    for(int xx=0;xx<MAX_PROTO_ENTRIES;xx++)
+    for(int xx=0;xx<AVAILABLE_PROTO_ENTRIES();xx++)
     {
         if(mProtoTableEntries[xx].enable)
         {
@@ -1149,6 +1208,36 @@ void RoutingManager::setProtoRouting()
     }
     ALOGV("%s: exit", fn);
 }
+#if(NXP_EXTNS == TRUE)
+/*
+ * In NCI2.0 Protocol 7816 routing is replaced with empty AID
+ * Routing entry Format :
+ *  Type   = [0x12]
+ *  Length = 2 [0x02]
+ *  Value  = [Route_loc, Power_state]
+ * */
+void RoutingManager::setEmptyAidEntry() {
+
+    ALOGV("%s: enter, ", __func__);
+    tNFA_HANDLE current_handle;
+
+    uint16_t routeLoc;
+    uint8_t power;
+
+    routeLoc = mDefaultIso7816SeID;
+    power    = mCeRouteStrictDisable ? mDefaultIso7816Powerstate : (mDefaultIso7816Powerstate & POWER_STATE_MASK);
+
+    ALOGV("%s: routeLoc 0x%x", __func__,routeLoc);
+    if (routeLoc  == NFA_HANDLE_INVALID)
+    {
+        ALOGV("%s: Invalid routeLoc. Return.", __func__);
+        return;
+    }
+
+    tNFA_STATUS nfaStat = NFA_EeAddAidRouting(routeLoc, 0, NULL, power, 0x10);
+    ALOGV("%s: Status :0x%2x", __func__, nfaStat);
+}
+#endif
 
 /* Compilation of Tech Table entries strictly based on config file parameters
  * Each entry in tech table consistes of route location, technology and power state
@@ -1435,11 +1524,13 @@ void RoutingManager::setTechRouting(void)
 
 void RoutingManager::dumpTables(int xx)
 {
+
+
     switch(xx)
     {
     case 1://print only proto table
         ALOGV("--------------------Proto Table Entries------------------" );
-        for(int xx=0;xx<MAX_PROTO_ENTRIES;xx++)
+        for(int xx=0;xx<AVAILABLE_PROTO_ENTRIES();xx++)
         {
             ALOGV("|Index=%d|RouteLoc=0x%03X|Proto=0x%02X|Power=0x%02X|Enable=0x%01X|",
                     xx,mProtoTableEntries[xx].routeLoc,
@@ -1451,7 +1542,7 @@ void RoutingManager::dumpTables(int xx)
         break;
     case 2://print Lmrt proto table
         ALOGV("----------------------------------------Lmrt Proto Entries------------------------------------" );
-        for(int xx=0;xx<MAX_PROTO_ENTRIES;xx++)
+        for(int xx=0;xx<AVAILABLE_PROTO_ENTRIES();xx++)
         {
             ALOGV("|Index=%d|nfceeID=0x%03X|SWTCH-ON=0x%02X|SWTCH-OFF=0x%02X|BAT-OFF=0x%02X|SCRN-LOCK=0x%02X|SCRN-OFF=0x%02X|SCRN-OFF_LOCK=0x%02X",
                     xx,
@@ -2335,6 +2426,15 @@ void RoutingManager::nfaEeCallback (tNFA_EE_EVT event, tNFA_EE_CBACK_DATA* event
         }
     }
         break;
+
+    case NFA_EE_DISCONNECT_EVT:
+        {
+            ALOGV("%s: NFA_EE_DISCONNECT_EVT received", fn);
+            SyncEventGuard guard(routingManager.mEEDisconnectEvt);
+            routingManager.mEEDisconnectEvt.notifyOne();
+        }
+        break;
+
     case NFA_EE_PWR_LINK_CTRL_EVT:
         if(nfcFL.eseFL._WIRED_MODE_STANDBY) {
             ALOGV("%s: NFA_EE_PWR_LINK_CTRL_EVT; status: 0x%04X ", fn,
@@ -2344,7 +2444,7 @@ void RoutingManager::nfaEeCallback (tNFA_EE_EVT event, tNFA_EE_CBACK_DATA* event
             se.mPwrLinkCtrlEvent.notifyOne();
         }
         break;
-
+#endif
     case NFA_EE_SET_TECH_CFG_EVT:
         {
             ALOGV("%s: NFA_EE_SET_TECH_CFG_EVT; status=0x%X", fn, eventData->status);
@@ -2424,24 +2524,31 @@ void RoutingManager::nfaEeCallback (tNFA_EE_EVT event, tNFA_EE_CBACK_DATA* event
             uint8_t num_ee = eventData->ee_discover.num_ee;
             tNFA_EE_DISCOVER ee_disc_info = eventData->ee_discover;
             ALOGV("%s: NFA_EE_DISCOVER_EVT; status=0x%X; num ee=%u", __func__,eventData->status, eventData->ee_discover.num_ee);
-            if((nfcFL.nfccFL._NFCEE_REMOVED_NTF_RECOVERY) &&
-                    ((mChipId == pn80T || mChipId == pn65T || mChipId == pn66T || mChipId == pn67T || mChipId == pn81T) && android::isNfcInitializationDone() == true)) {
-                for(int xx = 0; xx <  num_ee; xx++)
+            if( (nfcFL.nfccFL._NFCEE_REMOVED_NTF_RECOVERY)                                 &&
+                ( ( (mChipId != pn80T) && (android::isNfcInitializationDone() == true) )   ||
+                  ( (mChipId == pn80T) && (SecureElement::getInstance().mETSI12InitStatus == NFA_STATUS_OK) )
+                )
+              )
+            {
+                if((mChipId == pn65T || mChipId == pn66T || mChipId == pn67T || mChipId == pn80T || mChipId == pn81T))
                 {
-                    ALOGE("xx=%d, ee_handle=0x0%x, status=0x0%x", xx, ee_disc_info.ee_info[xx].ee_handle,ee_disc_info.ee_info[xx].ee_status);
-                    if (ee_disc_info.ee_info[xx].ee_handle == SecureElement::EE_HANDLE_0xF3)
+                    for(int xx = 0; xx <  num_ee; xx++)
                     {
-                        if(ee_disc_info.ee_info[xx].ee_status == NFA_EE_STATUS_REMOVED)
+                        ALOGE("xx=%d, ee_handle=0x0%x, status=0x0%x", xx, ee_disc_info.ee_info[xx].ee_handle,ee_disc_info.ee_info[xx].ee_status);
+                        if (ee_disc_info.ee_info[xx].ee_handle == SecureElement::EE_HANDLE_0xF3)
                         {
-                            recovery=true;
-                            routingManager.ee_removed_disc_ntf_handler(ee_disc_info.ee_info[xx].ee_handle, ee_disc_info.ee_info[xx].ee_status);
-                            break;
-                        }
-                        else if((ee_disc_info.ee_info[xx].ee_status == NFA_EE_STATUS_ACTIVE) && (recovery == true))
-                        {
-                            recovery = false;
-                            SyncEventGuard guard(se.mEEdatapacketEvent);
-                            se.mEEdatapacketEvent.notifyOne();
+                            if(ee_disc_info.ee_info[xx].ee_status == NFA_EE_STATUS_REMOVED)
+                            {
+                                recovery=true;
+                                routingManager.ee_removed_disc_ntf_handler(ee_disc_info.ee_info[xx].ee_handle, ee_disc_info.ee_info[xx].ee_status);
+                                break;
+                            }
+                            else if((ee_disc_info.ee_info[xx].ee_status == NFA_EE_STATUS_ACTIVE) && (recovery == true))
+                            {
+                                recovery = false;
+                                SyncEventGuard guard(se.mEEdatapacketEvent);
+                                se.mEEdatapacketEvent.notifyOne();
+                            }
                         }
                     }
                 }
@@ -2960,7 +3067,6 @@ void *ee_removed_ntf_handler_thread(void *data)
             ALOGV("%s: power link command failed", __func__);
         }
     }
-#endif
     stat = NFA_EeModeSet(SecureElement::EE_HANDLE_0xF3, NFA_EE_MD_DEACTIVATE);
 
     if(stat == NFA_STATUS_OK)
@@ -3114,29 +3220,18 @@ bool RoutingManager::is_ee_recovery_ongoing()
     ALOGV("%s := %s", fn, ((recovery==true) ? "true" : "false" ));
     return recovery;
 }
-void RoutingManager::nfaEEConnect()
+
+void RoutingManager::setEERecovery(bool value)
 {
-    /*This function is invoked in case of
-     * eSE session reset, in this case we already discovered eSE before
-     * hence decrement eSE count from gSeDiscoveryCount so that only
-     * pending NFCEE(UICC1 & UICC2) would be rediscovered
-     * */
-    tNFA_STATUS nfaStat = NFA_STATUS_FAILED;
-    if(NFA_GetNCIVersion() != NCI_VERSION_2_0)
-    {
-      nfaStat = NFA_EeConnect(EE_HCI_DEFAULT_HANDLE, NFC_NFCEE_INTERFACE_HCI_ACCESS, nfaEeCallback);
+    static const char fn [] = "RoutingManager::setEERecovery";
+    if(!nfcFL.nfccFL._NFCEE_REMOVED_NTF_RECOVERY) {
+        ALOGV("%s : NFCEE_REMOVED_NTF_RECOVERY not avaialble.Returning",__func__);
+        return;
     }
-    else
-    {
-      nfaStat = NFA_EeDiscover(nfaEeCallback);
-    }
-    if(nfaStat == NFA_STATUS_OK)
-    {
-      SyncEventGuard g (gNfceeDiscCbEvent);
-      ALOGV("%s: Sem Post for gNfceeDiscCbEvent", __func__);
-      gNfceeDiscCbEvent.wait (gdisc_timeout);
-    }
+    ALOGV("%s: value %x", __func__,value);
+    recovery = value;
 }
+
 /*******************************************************************************
 **
 ** Function:        getRouting

@@ -1041,6 +1041,8 @@ public class NfcService implements DeviceHostListener {
         new EnableDisableTask().execute(TASK_BOOT);  // do blocking boot tasks
 
         mHandler.sendEmptyMessageDelayed(MSG_UPDATE_STATS, STATS_UPDATE_INTERVAL_MS);
+        /*SoundPool clean up before NFC state updated*/
+        initSoundPool();
     }
 
     void initSoundPool() {
@@ -1487,7 +1489,6 @@ public class NfcService implements DeviceHostListener {
                 mLegacyTransactionEvent = true;
             }
 
-            initSoundPool();
             /* Start polling loop */
             Log.e(TAG, "applyRouting -3");
             mScreenState = mScreenStateHelper.checkScreenState();
@@ -1522,6 +1523,8 @@ public class NfcService implements DeviceHostListener {
             }
             Log.i(TAG, "Disabling NFC");
             updateState(NfcAdapter.STATE_TURNING_OFF);
+            /*SoundPool clean up before NFC state updated
+            releaseSoundPool();*/
 
             /* Sometimes mDeviceHost.deinitialize() hangs, use a watch-dog.
              * Implemented with a new thread (instead of a Handler or AsyncTask),
@@ -1581,7 +1584,6 @@ public class NfcService implements DeviceHostListener {
                 updateState(NfcAdapter.STATE_OFF);
             }
 
-            releaseSoundPool();
 
             return result;
         }
@@ -1721,8 +1723,6 @@ public class NfcService implements DeviceHostListener {
 
             return true;
         }
-
-
 
         @Override
         public boolean disable(boolean saveState) throws RemoteException {
@@ -2117,6 +2117,7 @@ public class NfcService implements DeviceHostListener {
                 return null;
             }
         }
+
     }
     final class NxpNfcAdapterService extends INxpNfcAdapter.Stub {
         @Override
@@ -3294,6 +3295,7 @@ public class NfcService implements DeviceHostListener {
                     // Deny access to the NFCEE as long as the device is being setup
                     return EE_ERROR_IO;
                 }
+
                 if (mOpenEe != null) {
                     return EE_ERROR_ALREADY_OPEN;
                 }
@@ -4182,6 +4184,7 @@ public class NfcService implements DeviceHostListener {
     private NfcDiscoveryParameters computeDiscoveryParameters(int screenState) {
         // Recompute discovery parameters based on screen state
         NfcDiscoveryParameters.Builder paramsBuilder = NfcDiscoveryParameters.newBuilder();
+
         // Polling
         if ((screenState >= NFC_POLLING_MODE)||mIsTaskBoot) {
             // Check if reader-mode is enabled
@@ -4439,6 +4442,7 @@ public class NfcService implements DeviceHostListener {
         byte[] t3tIdBytes = new byte[buffer.position()];
         buffer.position(0);
         buffer.get(t3tIdBytes);
+
         return t3tIdBytes;
     }
 
@@ -4737,16 +4741,22 @@ public class NfcService implements DeviceHostListener {
                 case MSG_COMMIT_ROUTING: {
                     Log.e(TAG, "applyRouting -9");
                    boolean commit = false;
+                   boolean enForced = false;
                     synchronized (NfcService.this) {
                         if (mCurrentDiscoveryParameters.shouldEnableDiscovery()) {
                             commit = true;
-                        } else {
+                        }else if(mAidRoutingManager.isRoutingTableUpdated()){
+                            commit = true;
+                            enForced = true;
+                            Log.d(TAG, "Routing table is updated thus needs to be committed.");
+                        }
+                        else {
                             Log.d(TAG, "Not committing routing because discovery is disabled.");
                         }
                     }
                     if (commit) {
                         mIsRoutingTableDirty = true;
-                        applyRouting(false);
+                        applyRouting(enForced);
                     }
 
 
@@ -4863,7 +4873,9 @@ public class NfcService implements DeviceHostListener {
                             new DeviceHost.TagDisconnectedCallback() {
                                 @Override
                                 public void onTagDisconnected(long handle) {
-                                    applyRouting(false);
+                                    if(nci_version != NCI_VERSION_2_0) {
+                                      applyRouting(false);
+                                    }
                                 }
                             };
                     synchronized (NfcService.this) {

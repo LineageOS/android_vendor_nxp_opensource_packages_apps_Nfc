@@ -73,7 +73,6 @@ public class CardEmulationManager implements RegisteredServicesCache.Callback,
         EnabledNfcFServices.Callback {
     static final String TAG = "CardEmulationManager";
     static final boolean DBG = true;
-
     static final int NFC_HCE_APDU = 0x01;
     static final int NFC_HCE_NFCF = 0x04;
 
@@ -178,6 +177,7 @@ public class CardEmulationManager implements RegisteredServicesCache.Callback,
         mEnabledNfcFServices.onUserSwitched(userId);
         mNfcFServicesCache.onUserSwitched();
         mNfcFServicesCache.invalidateCache(userId);
+
     }
 
     public void onT3tConfigure()
@@ -291,7 +291,7 @@ public class CardEmulationManager implements RegisteredServicesCache.Callback,
             int numPaymentServices = 0;
             ComponentName lastFoundPaymentService = null;
             for (NQApduServiceInfo service : services) {
-                if (service.hasCategory(CardEmulation.CATEGORY_PAYMENT))  {
+                if ((service.hasCategory(CardEmulation.CATEGORY_PAYMENT))&&(!service.getAids().isEmpty())) {
                     numPaymentServices++;
                     lastFoundPaymentService = service.getComponent();
                 }
@@ -510,8 +510,8 @@ public class CardEmulationManager implements RegisteredServicesCache.Callback,
             NfcPermissions.enforceUserPermissions(mContext);
             return mPreferredServices.unregisteredPreferredForegroundService(
                     Binder.getCallingUid());
-        }
 
+        }
         @Override
         public boolean supportsAidPrefixRegistration() throws RemoteException {
             return mAidCache.supportsAidPrefixRegistration();

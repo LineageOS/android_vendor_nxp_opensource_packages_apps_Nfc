@@ -85,6 +85,13 @@ typedef enum
     UICC_CLEAR_ALL_PIPE_NTF_RECEIVED = 0x01,
     UICC_SESSION_INTIALIZATION_DONE = 0x02
 }nfcee_disc_state;
+
+typedef enum
+{
+    TRANSCEIVE_STATUS_OK,
+    TRANSCEIVE_STATUS_FAILED,
+    TRANSCEIVE_STATUS_MAX_WTX_REACHED
+} eTransceiveStatus;
 #endif
 typedef enum {
     STATE_IDLE = 0x00,
@@ -162,10 +169,12 @@ typedef enum operation{
     STANDBY_TIMER_TIMEOUT,
     STANDBY_GPIO_HIGH,
     STANDBY_GPIO_LOW,
-    STANDBY_MODE_ON,
-    STANDBY_MODE_OFF,
-    STANDBY_MODE_SUSPEND
+    STANDBY_MODE_ON,      /* standby mode is on */
+    STANDBY_MODE_OFF,     /* standby mode is off */
+    STANDBY_MODE_SUSPEND, /* standby timer timed out */
+    STANDBY_MODE_TIMER_ON /* standby timer running */
 }nfcc_standby_operation_t;
+
 void spi_prio_signal_handler (int signum, siginfo_t *info, void *unused);
 
 typedef enum apdu_gate{
@@ -211,6 +220,7 @@ public:
     uint8_t     eSE_Compliancy;
     uint8_t     mCreatedPipe;
     uint8_t     mDeletePipeHostId;
+    uint16_t    mWmMaxWtxCount;
     bool        meseETSI12Recovery;
     SyncEvent   mCreatePipeEvent;
     SyncEvent   mPipeOpenedEvent;
@@ -355,8 +365,13 @@ public:
     ** Returns:         True if ok.
     **
     *******************************************************************************/
+#if(NXP_EXTNS == TRUE)
+    eTransceiveStatus transceive (uint8_t* xmitBuffer, int32_t xmitBufferSize, uint8_t* recvBuffer,
+                     int32_t recvBufferMaxSize, int32_t& recvBufferActualSize, int32_t timeoutMillisec);
+#else
     bool transceive (uint8_t* xmitBuffer, int32_t xmitBufferSize, uint8_t* recvBuffer,
                      int32_t recvBufferMaxSize, int32_t& recvBufferActualSize, int32_t timeoutMillisec);
+#endif
 
     void notifyModeSet (tNFA_HANDLE eeHandle, bool success, tNFA_EE_STATUS eeStatus);
 
@@ -716,6 +731,7 @@ public:
     uint8_t         mPassiveListenCnt;                 //Retry cnt for passive listen enable timer
     SyncEvent       mPassiveListenEvt;
     Mutex           mPassiveListenMutex;
+    Mutex           mNfccStandbyMutex;
 #endif
     jint getSETechnology(tNFA_HANDLE eeHandle);
     static const uint8_t UICC_ID = 0x02;
@@ -801,13 +817,9 @@ public:
 #endif
 
 private:
+    static uint8_t mStaticPipeProp;
     static const unsigned int MAX_RESPONSE_SIZE = 0x8800;//1024; //34K
     enum RouteSelection {NoRoute, DefaultRoute, SecElemRoute};
-#ifndef GEMATO_SE_SUPPORT
-    static const uint8_t STATIC_PIPE_0x70 = 0x19; //PN54X Gemalto's proprietary static pipe
-#else
-    static const uint8_t STATIC_PIPE_0x70 = 0x70; //Broadcom's proprietary static pipe
-#endif
     static const uint8_t STATIC_PIPE_0x71 = 0x71; //Broadcom's proprietary static pipe
     static const uint8_t EVT_SEND_DATA = 0x10;    //see specification ETSI TS 102 622 v9.0.0 (Host Controller Interface); section 9.3.3.3
 #if(NXP_EXTNS == TRUE)
@@ -876,7 +888,7 @@ private:
     bool            mTransceiveWaitOk;
 
 #if(NXP_EXTNS == TRUE)
-#define             WIRED_MODE_TRANSCEIVE_TIMEOUT 30000
+#define             WIRED_MODE_TRANSCEIVE_TIMEOUT 120000
 #endif
     /*******************************************************************************
     **
