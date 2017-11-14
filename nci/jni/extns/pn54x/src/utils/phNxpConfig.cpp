@@ -350,7 +350,6 @@ int CNxpNfcConfig::getconfiguration_id(char *config_file)
             config_id = CONFIG_GENERIC;
             break;
         case TARGET_MSM8952:
-        case TARGET_MSM8909:
             config_id = QRD_TYPE_DEFAULT;
             strlcpy(config_file, config_name_qrd, MAX_DATA_CONFIG_PATH_LEN);
             break;
@@ -358,6 +357,7 @@ int CNxpNfcConfig::getconfiguration_id(char *config_file)
         case TARGET_MSM8937:
         case TARGET_MSM8940:
         case TARGET_MSM8917:
+        case TARGET_MSM8909:
             if (nq2xx_present) {
                 // NQ210 or NQ220
                 config_id = QRD_TYPE_DEFAULT;
@@ -412,6 +412,7 @@ int CNxpNfcConfig::getconfiguration_id(char *config_file)
         case TARGET_MSM8937:
         case TARGET_MSM8940:
         case TARGET_MSM8917:
+        case TARGET_MSM8909:
             if (nq2xx_present) {
                 // NQ210 or NQ220
                 config_id = MTP_TYPE_DEFAULT;
