@@ -50,6 +50,7 @@ extern "C"
 #define TECHNOLOGY_BASED_ROUTING        0x00
 #define PROTOCOL_BASED_ROUTING          0x01
 #define AID_BASED_ROUTING               0x02
+#define AVAILABLE_PROTO_ENTRIES() ((NFA_GetNCIVersion() == NCI_VERSION_2_0)?0x02:0x03)
 
 /*Size of type and length Fields : No of bytes*/
 #define TYPE_LENGTH_SIZE                0x02
@@ -121,6 +122,7 @@ typedef struct
     tNFA_PROTOCOL_MASK      proto_screen_lock;   /* default routing - protocols screen_lock    */
     tNFA_PROTOCOL_MASK      proto_screen_off;  /* default routing - protocols screen_off  */
     tNFA_PROTOCOL_MASK      proto_screen_off_lock;  /* default routing - protocols screen_off_lock  */
+
 } LmrtEntry_t;
 
 class RoutingManager
@@ -157,6 +159,8 @@ public:
     void setDefaultProtoRouting (int seId, int proto_switchon,int proto_switchoff);
     void processGetRoutingRsp(tNFA_DM_CBACK_DATA* eventData, uint8_t* sRoutingBuff);
     void nfaEEConnect();
+    void nfaEEDisconnect();
+    SyncEvent mEEDisconnectEvt;
     bool setRoutingEntry(int type, int value, int route, int power);
     bool clearRoutingEntry(int type);
     bool setDefaultRoute(const int defaultRoute, const int protoRoute, const int techRoute);
@@ -165,15 +169,11 @@ public:
     bool addAidRouting(const uint8_t* aid, uint8_t aidLen, int route, int power, int aidInfo);
     int  addNfcid2Routing(uint8_t* nfcid2, uint8_t aidLen,const uint8_t* syscode,
     int  syscodelen,const uint8_t* optparam, int optparamlen);
-#if (NXP_NFCEE_REMOVED_NTF_RECOVERY == true)
     void handleSERemovedNtf();
     bool is_ee_recovery_ongoing();
-#endif
-#if((NFC_NXP_ESE == TRUE) && (NXP_ESE_ETSI_READER_ENABLE == true))
     void setEtsiReaederState(se_rd_req_state_t newState);
     se_rd_req_state_t getEtsiReaederState();
     Rdr_req_ntf_info_t getSwpRrdReqInfo();
-#endif
 #if(NXP_NFCC_HCE_F == TRUE)
     void notifyT3tConfigure();
 #endif
@@ -221,6 +221,9 @@ private:
     void consolidateProtoEntries(void);
     void consolidateTechEntries(void);
     void setProtoRouting(void);
+#if(NXP_EXTNS == TRUE)
+    void setEmptyAidEntry(void);
+#endif
     void setTechRouting(void);
     void processTechEntriesForFwdfunctionality(void);
     void configureOffHostNfceeTechMask(void);

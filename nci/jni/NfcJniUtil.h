@@ -40,6 +40,7 @@
 #include <pthread.h>
 #include <sys/queue.h>
 #include <semaphore.h>
+#include "Nxp_Features.h"
 
 #define ALOGV ALOGD
 /* Discovery modes -- keep in sync with NFCManager.DISCOVERY_MODE_* */
@@ -91,8 +92,8 @@
 #define NDEF_MODE_UNKNOWN                3
 
 #if(NXP_EXTNS == TRUE)
-#define VEN_POWER_STATE_ON                   6
-#define VEN_POWER_STATE_OFF                  7
+#define VEN_POWER_STATE_ON                   9
+#define VEN_POWER_STATE_OFF                  10
 // ESE Suppored Technologies
 #define TARGET_TYPE_ISO14443_3A_3B        11
 #endif
@@ -123,6 +124,14 @@
 #if(NXP_EXTNS == TRUE)
 /*NFCEE recovery maximum timeout value*/
 #define MAX_EE_RECOVERY_TIMEOUT    10000
+/* NFC states: Primarily used to decide SPI signal handling (whether to discard or accept)*/
+typedef enum eNfcState
+{
+    NFC_OFF = 0x00, /* Default state */
+    NFC_INITIALIZING_IN_PROGRESS = 0x01, /* Initializing not complete (RF discovery not enabled yet) */
+    NFC_ON = 0x02 /* NFC is fully ON*/
+};
+#define NFC_CMD_TIMEOUT 100 /* 100ms timeout to wait on the semaphore for the command sent */
 #endif
 
 struct nfc_jni_native_data

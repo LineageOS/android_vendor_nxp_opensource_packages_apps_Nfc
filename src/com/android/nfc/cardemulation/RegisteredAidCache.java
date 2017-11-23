@@ -43,7 +43,7 @@ import java.util.Map;
 import java.util.NavigableMap;
 import java.util.PriorityQueue;
 import java.util.TreeMap;
-
+import android.nfc.cardemulation.NQAidGroup;
 public class RegisteredAidCache {
     static final String TAG = "RegisteredAidCache";
 
@@ -61,7 +61,7 @@ public class RegisteredAidCache {
     // is authoritative for the current set of services and defaults.
     // It is only valid for the current user.
     final TreeMap<String, AidResolveInfo> mAidCache = new TreeMap<String, AidResolveInfo>();
-
+    final TreeMap<String, ServiceApduInfo> mapduPatternList= new TreeMap<String, ServiceApduInfo>();
     // The power state for Host AIDs
     int mHostAIDPowerState;
 
@@ -70,7 +70,9 @@ public class RegisteredAidCache {
     static final int POWER_STATE_SWITCH_OFF = 2;
     static final int POWER_STATE_BATTERY_OFF = 4;
     static final int POWER_STATE_ALL = POWER_STATE_SWITCH_ON | POWER_STATE_SWITCH_OFF |POWER_STATE_BATTERY_OFF ;
-
+    static final int SCREEN_STATE_OFF_UNLOCKED = 0x08;
+    static final int SCREEN_STATE_ON_LOCKED = 0x10;
+    static final int SCREEN_STATE_OFF_LOCKED = 0x20;
     // Represents a single AID registration of a service
     final class ServiceAidInfo {
         NQApduServiceInfo service;
@@ -109,6 +111,10 @@ public class RegisteredAidCache {
         }
     }
 
+    final class ServiceApduInfo {
+        NQApduServiceInfo service;
+        NQAidGroup.ApduPattern apdu;
+    }
     // Represents a list of services, an optional default and a category that
     // an AID was resolved to.
     final class AidResolveInfo {
@@ -156,6 +162,7 @@ public class RegisteredAidCache {
         if (mSupportsSubset) {
             if (DBG) Log.d(TAG, "Controller supports AID subset routing");
         }
+        mHostAIDPowerState = POWER_STATE_SWITCH_ON | SCREEN_STATE_ON_LOCKED;
     }
 
     public AidResolveInfo resolveAid(String aid) {
@@ -468,6 +475,21 @@ public class RegisteredAidCache {
                             new ArrayList<ServiceAidInfo>();
                     serviceAidInfos.add(serviceAidInfo);
                     mAidServices.put(serviceAidInfo.aid, serviceAidInfos);
+                }
+            }
+            for(NQAidGroup group : service.getNQAidGroups()) {
+                ArrayList<NQAidGroup.ApduPattern> apduPattern = group.getApduPatternList();
+                if(apduPattern == null || apduPattern.size() == 0x00)
+                    continue;
+                for(NQAidGroup.ApduPattern apdu : apduPattern) {
+                    ServiceApduInfo serviceApduInfo = new ServiceApduInfo();
+                    serviceApduInfo.apdu = apdu;
+                    serviceApduInfo.service = service;
+                    if (mapduPatternList.containsKey(apdu.getreferenceData())) {
+                        Log.e(TAG," Ignoring APDU pattern which is already registered");
+                    } else {
+                        mapduPatternList.put(apdu.getreferenceData(), serviceApduInfo);
+                    }
                 }
             }
         }
@@ -817,7 +839,7 @@ public class RegisteredAidCache {
                 /*If non default off host payment AID ,set screen state*/
                 if (!isOnHost) {
                     Log.d(TAG," set screen off enable for " + aid);
-                    powerstate |= 0x28;
+                    powerstate |= SCREEN_STATE_OFF_UNLOCKED | SCREEN_STATE_OFF_LOCKED;
                 }
                 Log.d(TAG," AID power state before adding screen state" + powerstate);
                 powerstate |= 0x10;
@@ -833,13 +855,13 @@ public class RegisteredAidCache {
                     if (mRoutingManager.GetVzwCache().isAidPresent(plainAid)) {
                         if (mRoutingManager.GetVzwCache().IsAidAllowed(plainAid)){
                             /*if vzw AID reset the previous screen state   */
-                            powerstate &= ~0x28;
+                            powerstate &= ~(SCREEN_STATE_OFF_UNLOCKED|SCREEN_STATE_OFF_LOCKED);
                             /*get the vzw power and screen state  :- SCREEN | L |F */
                             vzwPowerstate = mRoutingManager.GetVzwCache().getPowerState(plainAid);
                             /*merge power state with vzw power state */
                             powerstate &= vzwPowerstate;
                             /*merge the power state with vzw screen state*/
-                            powerstate |= (vzwPowerstate & 0x28);
+                            powerstate |= (vzwPowerstate & (SCREEN_STATE_OFF_UNLOCKED | SCREEN_STATE_OFF_LOCKED));
                             Log.d(TAG," vzw aid" + aid);
                             Log.d(TAG," vzw merged power state" + powerstate);
                         }
@@ -858,15 +880,34 @@ public class RegisteredAidCache {
             } else if (resolveInfo.services.size() == 1) {
                 // Only one service, but not the default, must route to host
                 // to ask the user to choose one.
-                AidElement aidElem = new AidElement(aid, AidElement.ROUTE_WIEGHT_OTHER, 0, mHostAIDPowerState|0x10,aidInfo);
+                AidElement aidElem = new AidElement(aid, AidElement.ROUTE_WIEGHT_OTHER, 0, mHostAIDPowerState,aidInfo);
                 routingEntries.put(aid, aidElem);
             } else if (resolveInfo.services.size() > 1) {
                 // Multiple services, need to route to host to ask
-                AidElement aidElem = new AidElement(aid, AidElement.ROUTE_WIEGHT_OTHER, 0, mHostAIDPowerState|0x10,aidInfo);
+                AidElement aidElem = new AidElement(aid, AidElement.ROUTE_WIEGHT_OTHER, 0, mHostAIDPowerState,aidInfo);
                 routingEntries.put(aid, aidElem);
             }
         }
+        if(mapduPatternList.size() > 0) {
+            addApduPatternEntries();
+        }
         mRoutingManager.configureRouting(routingEntries);
+    }
+
+    public void addApduPatternEntries() {
+        List<AidRoutingManager.ApduPatternResolveInfo> apduPatternRouting = new ArrayList<AidRoutingManager.ApduPatternResolveInfo>();
+        for(Map.Entry<String , ServiceApduInfo> entry : mapduPatternList.entrySet()) {
+            AidRoutingManager.ApduPatternResolveInfo apduEntry = mRoutingManager.new ApduPatternResolveInfo();
+            NQApduServiceInfo service = entry.getValue().service;
+            NQApduServiceInfo.ESeInfo seInfo = service.getSEInfo();
+
+            apduEntry.referenceData = entry.getValue().apdu.getreferenceData();
+            apduEntry.mask = entry.getValue().apdu.getMask();
+            apduEntry.route = seInfo.getSeId();
+            apduEntry.powerState =  seInfo.getPowerState() & POWER_STATE_ALL;
+            apduPatternRouting.add(apduEntry);
+        }
+        mRoutingManager.configureApduPatternRouting(apduPatternRouting);
     }
 
     public void onServicesUpdated(int userId, List<NQApduServiceInfo> services) {
