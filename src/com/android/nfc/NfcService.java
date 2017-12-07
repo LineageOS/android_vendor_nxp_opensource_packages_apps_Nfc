@@ -169,13 +169,13 @@ public class NfcService implements DeviceHostListener {
     private static final String PREF_MIFARE_DESFIRE_PROTO_ROUTE_ID = "mifare_desfire_proto_route";
     private static final String PREF_SET_DEFAULT_ROUTE_ID ="set_default_route";
     private static final String PREF_MIFARE_CLT_ROUTE_ID= "mifare_clt_route";
-    private static final String LS_BACKUP_PATH = "/data/nfc/ls_backup.txt";
-    private static final String LS_UPDATE_BACKUP_PATH = "/data/nfc/loaderservice_updater.txt";
-    private static final String LS_UPDATE_BACKUP_OUT_PATH = "/data/nfc/loaderservice_updater_out.txt";
+    private static final String LS_BACKUP_PATH = "/data/vendor/nfc/ls_backup.txt";
+    private static final String LS_UPDATE_BACKUP_PATH = "/data/vendor/nfc/loaderservice_updater.txt";
+    private static final String LS_UPDATE_BACKUP_OUT_PATH = "/data/vendor/nfc/loaderservice_updater_out.txt";
 
-    private static final String[] path = {"/data/nfc/JcopOs_Update1.apdu",
-                                          "/data/nfc/JcopOs_Update2.apdu",
-                                          "data/nfc/JcopOs_Update3.apdu"};
+    private static final String[] path = {"/data/vendor/nfc/JcopOs_Update1.apdu",
+                                          "/data/vendor/nfc/JcopOs_Update2.apdu",
+                                          "/data/vendor/nfc/JcopOs_Update3.apdu"};
 
     private static final String[] PREF_JCOP_MODTIME = {"jcop file1 modtime",
                                                        "jcop file2 modtime",
@@ -263,7 +263,8 @@ public class NfcService implements DeviceHostListener {
     static final int MSG_UPDATE_STATS = 57;
     /*Restart Nfc disbale watchdog timer*/
     static final int MSG_RESTART_WATCHDOG = 60;
-
+    static final int MSG_ROUTE_APDU = 61;
+    static final int MSG_UNROUTE_APDU = 62;
     // Update stats every 4 hours
     static final long STATS_UPDATE_INTERVAL_MS = 4 * 60 * 60 * 1000;
     static final long MAX_POLLING_PAUSE_TIMEOUT = 40000;
@@ -428,7 +429,9 @@ public class NfcService implements DeviceHostListener {
     public static final int NCI_SYSTEMCODE_LEN = 2;
 
     public static final int LS_RETRY_CNT = 3;
-    public static final int LOADER_SERVICE_VERSION_21 = 0x21;
+    public static final int LOADER_SERVICE_VERSION_LOW_LIMIT = 0x21;
+    public static final int LOADER_SERVICE_VERSION_HIGH_LIMIT = 0x24;
+
     private int mSelectedSeId = 0;
     private boolean mNfcSecureElementState;
     private boolean mIsSmartCardServiceSupported = false;
@@ -1042,6 +1045,8 @@ public class NfcService implements DeviceHostListener {
         new EnableDisableTask().execute(TASK_BOOT);  // do blocking boot tasks
 
         mHandler.sendEmptyMessageDelayed(MSG_UPDATE_STATS, STATS_UPDATE_INTERVAL_MS);
+        /*SoundPool clean up before NFC state updated*/
+        initSoundPool();
     }
 
     void initSoundPool() {
@@ -1487,7 +1492,6 @@ public class NfcService implements DeviceHostListener {
                 mLegacyTransactionEvent = true;
             }
 
-            initSoundPool();
             /* Start polling loop */
             Log.e(TAG, "applyRouting -3");
             mScreenState = mScreenStateHelper.checkScreenState();
@@ -1522,6 +1526,8 @@ public class NfcService implements DeviceHostListener {
             }
             Log.i(TAG, "Disabling NFC");
             updateState(NfcAdapter.STATE_TURNING_OFF);
+            /*SoundPool clean up before NFC state updated
+            releaseSoundPool();*/
 
             /* Sometimes mDeviceHost.deinitialize() hangs, use a watch-dog.
              * Implemented with a new thread (instead of a Handler or AsyncTask),
@@ -1581,7 +1587,6 @@ public class NfcService implements DeviceHostListener {
                 updateState(NfcAdapter.STATE_OFF);
             }
 
-            releaseSoundPool();
 
             return result;
         }
@@ -1721,8 +1726,6 @@ public class NfcService implements DeviceHostListener {
 
             return true;
         }
-
-
 
         @Override
         public boolean disable(boolean saveState) throws RemoteException {
@@ -2433,7 +2436,7 @@ public class NfcService implements DeviceHostListener {
             /*check if format of configs is fine*/
             /*Save configurations to file*/
             try {
-                File newTextFile = new File("/data/nfc/libnfc-nxpTransit.conf");
+                File newTextFile = new File("/data/vendor/nfc/libnfc-nxpTransit.conf");
                 if(configs == null)
                 {
                     if(newTextFile.delete()){
@@ -4210,7 +4213,10 @@ public class NfcService implements DeviceHostListener {
                 paramsBuilder.setTechMask(NfcDiscoveryParameters.NFC_POLL_DEFAULT);
                 paramsBuilder.setEnableP2p(true);
             }
-        } else if (screenState == ScreenStateHelper.SCREEN_STATE_ON_LOCKED && mInProvisionMode) {
+        }
+        if ((screenState == ScreenStateHelper.SCREEN_STATE_ON_LOCKED && mInProvisionMode) &&
+            !mNfcUnlockManager.isLockscreenPollingEnabled()) {
+            if (mReaderModeParams != null)
             paramsBuilder.setTechMask(NfcDiscoveryParameters.NFC_POLL_DEFAULT);
             // enable P2P for MFM/EDU/Corp provisioning
             paramsBuilder.setEnableP2p(true);
@@ -4413,6 +4419,24 @@ public class NfcService implements DeviceHostListener {
     public void unrouteAids(String aid) {
         sendMessage(MSG_UNROUTE_AID, aid);
     }
+
+    public void routeApduPattern(String apdu, String mask ,int route, int powerState) {
+        Message msg = mHandler.obtainMessage();
+        msg.what = MSG_ROUTE_APDU;
+        msg.arg1 = route;
+        msg.arg2 = powerState;
+        Bundle apduPatternbundle = new Bundle();
+        apduPatternbundle.putString("apduData",apdu);
+        apduPatternbundle.putString("apduMask",mask);
+        msg.setData(apduPatternbundle);
+        mHandler.sendMessage(msg);
+   }
+
+    public void unrouteApduPattern(String apdu) {
+        //sendMessage(MSG_UNROUTE_APDU, apdu);
+        mDeviceHost.unrouteApduPattern(hexStringToBytes(apdu));
+    }
+
     public int getNciVersion() {
         return mDeviceHost.getNciVersion();
     }
@@ -4424,6 +4448,7 @@ public class NfcService implements DeviceHostListener {
         byte[] t3tIdBytes = new byte[buffer.position()];
         buffer.position(0);
         buffer.get(t3tIdBytes);
+
         return t3tIdBytes;
     }
 
@@ -4724,6 +4749,7 @@ public class NfcService implements DeviceHostListener {
                     mP2pLinkManager.onManualBeamInvoke((BeamShareData)msg.obj);
                     break;
                 }
+
                 case MSG_UNROUTE_AID: {
                     String aid = (String) msg.obj;
                     mDeviceHost.unrouteAid(hexStringToBytes(aid));
@@ -4747,16 +4773,22 @@ public class NfcService implements DeviceHostListener {
                 case MSG_COMMIT_ROUTING: {
                     Log.e(TAG, "applyRouting -9");
                    boolean commit = false;
+                   boolean enForced = false;
                     synchronized (NfcService.this) {
                         if (mCurrentDiscoveryParameters.shouldEnableDiscovery()) {
                             commit = true;
-                        } else {
+                        }else if(mAidRoutingManager.isRoutingTableUpdated()){
+                            commit = true;
+                            enForced = true;
+                            Log.d(TAG, "Routing table is updated thus needs to be committed.");
+                        }
+                        else {
                             Log.d(TAG, "Not committing routing because discovery is disabled.");
                         }
                     }
                     if (commit) {
                         mIsRoutingTableDirty = true;
-                        applyRouting(false);
+                        applyRouting(enForced);
                     }
 
 
@@ -4873,7 +4905,9 @@ public class NfcService implements DeviceHostListener {
                             new DeviceHost.TagDisconnectedCallback() {
                                 @Override
                                 public void onTagDisconnected(long handle) {
-                                    applyRouting(false);
+                                    if(nci_version != NCI_VERSION_2_0) {
+                                      applyRouting(false);
+                                    }
                                 }
                             };
                     synchronized (NfcService.this) {
@@ -5296,6 +5330,27 @@ public class NfcService implements DeviceHostListener {
                     removeMessages(MSG_UPDATE_STATS);
                     sendEmptyMessageDelayed(MSG_UPDATE_STATS, STATS_UPDATE_INTERVAL_MS);
                     break;
+
+                case MSG_ROUTE_APDU:{
+                    int route = msg.arg1;
+                    int power = msg.arg2;
+                    String apduData = null;
+                    String apduMask = null;
+                    Bundle dataBundle = msg.getData();
+                    if (dataBundle != null) {
+                        apduData = dataBundle.getString("apduData");
+                        apduMask = dataBundle.getString("apduMask");
+                    }
+                    // Send the APDU
+                    if(apduData != null && dataBundle != null)
+                        mDeviceHost.routeApduPattern(route, power, hexStringToBytes(apduData) ,hexStringToBytes(apduMask));
+                    break;
+                }
+                case MSG_UNROUTE_APDU: {
+                    String apdu = (String) msg.obj;
+                    mDeviceHost.unrouteApduPattern(hexStringToBytes(apdu));
+                    break;
+                }
                 default:
                     Log.e(TAG, "Unknown message received");
                     break;
@@ -5650,7 +5705,10 @@ public class NfcService implements DeviceHostListener {
                 if (state == NfcAdapter.STATE_ON) {
                     Log.e(TAG, "Loader service update start from NFC_ON Broadcast");
                     NfcAlaService nas = new NfcAlaService();
-                    if(mNfcAla.doGetLSConfigVersion() == LOADER_SERVICE_VERSION_21)
+                    int lsVersion = mNfcAla.doGetLSConfigVersion();
+
+                    if(lsVersion >= LOADER_SERVICE_VERSION_LOW_LIMIT &&
+                        lsVersion <= LOADER_SERVICE_VERSION_HIGH_LIMIT)
                         nas.updateLoaderService();
             }
         }

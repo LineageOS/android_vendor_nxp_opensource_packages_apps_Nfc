@@ -237,8 +237,12 @@ public class HostEmulationManager {
                     // Ask the user to confirm.
                     // Just ignore all future APDUs until we resolve to only one
                     mState = STATE_W4_DEACTIVATE;
-                    launchResolver((ArrayList<NQApduServiceInfo>)resolveInfo.services, null,
-                            resolveInfo.category);
+                    try{
+                        launchResolver((ArrayList<NQApduServiceInfo>)resolveInfo.services, null,
+                                resolveInfo.category);
+                    }catch(Exception e){
+                        e.printStackTrace();
+                    }
                     return;
                 }
             }
@@ -607,7 +611,7 @@ public class HostEmulationManager {
     }
 
     public void dump(FileDescriptor fd, PrintWriter pw, String[] args) {
-        pw.println("Bound services: ");
+        pw.println("Bound HCE-A/HCE-B services: ");
         if (mPaymentServiceBound) {
             pw.println("    payment: " + mPaymentServiceName);
         }

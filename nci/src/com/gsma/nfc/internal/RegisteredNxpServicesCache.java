@@ -48,6 +48,7 @@ import android.util.Xml;
 import android.graphics.drawable.Drawable;
 import android.graphics.BitmapFactory;
 
+import java.io.ByteArrayOutputStream;
 import org.xmlpull.v1.XmlPullParser;
 import org.xmlpull.v1.XmlPullParserException;
 import org.xmlpull.v1.XmlSerializer;
@@ -256,10 +257,10 @@ public class RegisteredNxpServicesCache {
                 if( null != service) {
                     out.startTag(null, "service");
                     out.attribute(null, "component", service.getKey().flattenToString());
-                    if(service.getValue().getBannerId() <= 0x00 && null != service.getValue().mBanner) {
+                    if(service.getValue().getBannerId() <= 0x00 && null != service.getValue().getBitmapBanner()) {
                         Log.e(TAG, "writeDynamicApduService "+service.getValue().getBannerId());
                         String path = service.getKey().getPackageName() + "_"+ service.getKey().getClassName()+".png";
-                        path = writeDrawableAsBitMap(service.getValue().mBanner ,path);
+                        path = writeDrawableAsBitMap(new BitmapDrawable(service.getValue().getBitmapBanner()) ,path);
                         if(!mApduBanner.containsKey(service.getKey())) {
                             mApduBanner.put(service.getKey(),path);
                         }
@@ -309,6 +310,8 @@ public class RegisteredNxpServicesCache {
             NQAidGroup nqaidGroup = null;
             Drawable DrawableResource = null;
             NQApduServiceInfo apduService =null;
+            Bitmap bitmap = null;
+            byte[] byteArrayBanner = null;
             ArrayList<NQAidGroup> dynamicNQAidGroup = new ArrayList<NQAidGroup>();
 
             String tagName = parser.getName();
@@ -339,6 +342,10 @@ public class RegisteredNxpServicesCache {
                                 if(drawbalePath != null)
                                 {
                                     DrawableResource = readDrawableFromBitMap(drawbalePath);
+                                    bitmap = (Bitmap)((BitmapDrawable) DrawableResource).getBitmap();
+                                    ByteArrayOutputStream stream = new ByteArrayOutputStream();
+                                    bitmap.compress(Bitmap.CompressFormat.PNG, 100, stream);
+                                    byteArrayBanner = stream.toByteArray();
                                     if(!mApduBanner.containsKey(currentComponent)) {
                                         mApduBanner.put(currentComponent, drawbalePath);
                                     }
@@ -369,7 +376,7 @@ public class RegisteredNxpServicesCache {
                             NQApduServiceInfo.ESeInfo mEseInfo = new NQApduServiceInfo.ESeInfo(seId,powerstate);
                             ArrayList<android.nfc.cardemulation.NQAidGroup> staticNQAidGroups = null;
                             apduService = new NQApduServiceInfo(resolveInfo,onHost,description,staticNQAidGroups, dynamicNQAidGroup,
-                                                               requiresUnlock,bannerId,userId, "Fixme: NXP:<Activity Name>", mEseInfo,null, DrawableResource, modifiable);
+                                                               requiresUnlock,bannerId,userId, "Fixme: NXP:<Activity Name>", mEseInfo,null, byteArrayBanner, modifiable);
                             mApduServices.put(currentComponent, apduService);
                             Log.d(TAG,"mApduServices size= "+ mApduServices.size());
                             dynamicNQAidGroup.clear();

@@ -1,5 +1,5 @@
 /******************************************************************************
- *  Copyright (c) 2016, The Linux Foundation. All rights reserved.
+ *  Copyright (c) 2016-2017, The Linux Foundation. All rights reserved.
  *  Not a Contribution.
  *
  *  Copyright (C) 2011-2012 Broadcom Corporation
@@ -62,7 +62,6 @@
 #include <cutils/log.h>
 #include <cutils/properties.h>
 #include <errno.h>
-
 #if GENERIC_TARGET
 const char alternative_config_path[] = "/data/nfc/";
 #else
@@ -294,6 +293,7 @@ int CNxpNfcConfig::getconfiguration_id(char *config_file)
     int config_id = QRD_TYPE_DEFAULT;
     char target_type[MAX_SOC_INFO_NAME_LEN] = {'\0'};
     char soc_info[MAX_SOC_INFO_NAME_LEN] = {'\0'};
+    bool nq2xx_present = false;
     char nq_chipid[PROPERTY_VALUE_MAX] = {0};
     char nq_fw_ver[PROPERTY_VALUE_MAX] = {0};
     string strPath;
@@ -312,12 +312,14 @@ int CNxpNfcConfig::getconfiguration_id(char *config_file)
         ALOGE("get_soc_info(HW_PLATFORM) fail!\n");
         return DEFAULT_CONFIG;
     }
-
     rc = __system_property_get("sys.nfc.nq.chipid", nq_chipid);
     if (rc <= 0)
         ALOGE("get sys.nfc.nq.chipid fail, rc = %d\n", rc);
     else
         ALOGD("sys.nfc.nq.chipid = %s\n", nq_chipid);
+
+    nq2xx_present = (!strncmp(nq_chipid, NQ220, PROPERTY_VALUE_MAX))
+                 || (!strncmp(nq_chipid, NQ210, PROPERTY_VALUE_MAX));
 
     rc = __system_property_get("sys.nfc.nq.fwver", nq_fw_ver);
     if (rc <= 0)
@@ -348,7 +350,6 @@ int CNxpNfcConfig::getconfiguration_id(char *config_file)
             config_id = CONFIG_GENERIC;
             break;
         case TARGET_MSM8952:
-        case TARGET_MSM8909:
             config_id = QRD_TYPE_DEFAULT;
             strlcpy(config_file, config_name_qrd, MAX_DATA_CONFIG_PATH_LEN);
             break;
@@ -356,7 +357,8 @@ int CNxpNfcConfig::getconfiguration_id(char *config_file)
         case TARGET_MSM8937:
         case TARGET_MSM8940:
         case TARGET_MSM8917:
-            if ((!strncmp(nq_chipid, NQ220, PROPERTY_VALUE_MAX)) || (!strncmp(nq_chipid, NQ210, PROPERTY_VALUE_MAX))) {
+        case TARGET_MSM8909:
+            if (nq2xx_present) {
                 // NQ210 or NQ220
                 config_id = QRD_TYPE_DEFAULT;
                 strlcpy(config_file, config_name_qrd, MAX_DATA_CONFIG_PATH_LEN);
@@ -384,7 +386,7 @@ int CNxpNfcConfig::getconfiguration_id(char *config_file)
         case TARGET_MSM8997:
         case TARGET_SDM660:
         case TARGET_SDM630:
-            if ((!strncmp(nq_chipid, NQ220, PROPERTY_VALUE_MAX)) || (!strncmp(nq_chipid, NQ210, PROPERTY_VALUE_MAX))) {
+            if (nq2xx_present) {
                 // NQ210 or NQ220
                 config_id = QRD_TYPE_2;
                 strlcpy(config_file, config_name_qrd2, MAX_DATA_CONFIG_PATH_LEN);
@@ -410,7 +412,8 @@ int CNxpNfcConfig::getconfiguration_id(char *config_file)
         case TARGET_MSM8937:
         case TARGET_MSM8940:
         case TARGET_MSM8917:
-            if ((!strncmp(nq_chipid, NQ220, PROPERTY_VALUE_MAX)) || (!strncmp(nq_chipid, NQ210, PROPERTY_VALUE_MAX))) {
+        case TARGET_MSM8909:
+            if (nq2xx_present) {
                 // NQ210 or NQ220
                 config_id = MTP_TYPE_DEFAULT;
                 strlcpy(config_file, config_name_mtp, MAX_DATA_CONFIG_PATH_LEN);
@@ -433,7 +436,7 @@ int CNxpNfcConfig::getconfiguration_id(char *config_file)
         case TARGET_MSM8997:
         case TARGET_SDM660:
         case TARGET_SDM630:
-            if ((!strncmp(nq_chipid, NQ220, PROPERTY_VALUE_MAX)) || (!strncmp(nq_chipid, NQ210, PROPERTY_VALUE_MAX))) {
+            if (nq2xx_present) {
                 // NQ210 or NQ220
                 config_id = MTP_TYPE_1;
                 strlcpy(config_file, config_name_mtp1, MAX_DATA_CONFIG_PATH_LEN);
