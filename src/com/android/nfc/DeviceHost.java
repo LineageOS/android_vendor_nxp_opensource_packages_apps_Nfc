@@ -433,6 +433,8 @@ public interface DeviceHost {
 
     public void disableDtaMode();
 
+    public void factoryReset();
+
     public byte[] getAdditionalConfigOptions();
 
     public int doselectUicc(int uiccSlot);

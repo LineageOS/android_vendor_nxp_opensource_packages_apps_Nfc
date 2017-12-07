@@ -197,8 +197,16 @@ public class NativeNfcManager implements DeviceHost {
         doDisableDtaMode();
     }
 
+    private native void doFactoryReset();
+
+    @Override
+    public void factoryReset() {
+        doFactoryReset();
+    }
+
     @Override
     public native byte[] getAdditionalConfigOptions();
+
 
     private native boolean doDeinitialize();
 
