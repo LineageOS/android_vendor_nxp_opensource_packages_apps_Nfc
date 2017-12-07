@@ -435,6 +435,8 @@ public interface DeviceHost {
 
     public void factoryReset();
 
+    public void shutdown();
+
     public byte[] getAdditionalConfigOptions();
 
     public int doselectUicc(int uiccSlot);

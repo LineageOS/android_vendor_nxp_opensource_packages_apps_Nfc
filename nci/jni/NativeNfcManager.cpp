@@ -2553,6 +2553,10 @@ static void nfcManager_doFactoryReset(JNIEnv*, jobject) {
   theInstance.FactoryReset();
 }
 
+static void nfcManager_doShutdown(JNIEnv*, jobject) {
+  NfcAdaptation& theInstance = NfcAdaptation::GetInstance();
+  theInstance.DeviceShutdown();
+}
 #if(NXP_EXTNS == TRUE)
 /*******************************************************************************
  **
@@ -5172,6 +5176,7 @@ static JNINativeMethod gMethods[] =
     {"doDisableDtaMode", "()V",
             (void*) nfcManager_doDisableDtaMode},
     {"doFactoryReset", "()V", (void*)nfcManager_doFactoryReset},
+    {"doShutdown", "()V", (void*)nfcManager_doShutdown},
     {"getAdditionalConfigOptions", "()[B",
             (void *)nfcManager_getAdditionalConfigOptions}
 #if(NXP_EXTNS == TRUE)
