@@ -463,6 +463,7 @@ public class NfcService implements DeviceHostListener {
     // as SE access is not granted for non-owner users.
     HashSet<String> mSePackages = new HashSet<String>();
     int mScreenState;
+    int mChipVer;
     boolean mIsTaskBoot = false;
     boolean mInProvisionMode; // whether we're in setup wizard and enabled NFC provisioning
     boolean mIsNdefPushEnabled;
@@ -1294,7 +1295,6 @@ public class NfcService implements DeviceHostListener {
                         mNxpPrefs.getInt(PREF_SECURE_ELEMENT_ID, SECURE_ELEMENT_ID_DEFAULT);
 
                 if (seList != null) {
-
                     if (secureElementId != ALL_SE_ID_TYPE/* SECURE_ELEMENT_ALL */) {
                         mDeviceHost.doDeselectSecureElement(UICC_ID_TYPE);
                         mDeviceHost.doDeselectSecureElement(UICC2_ID_TYPE);
@@ -1456,9 +1456,9 @@ public class NfcService implements DeviceHostListener {
             } finally {
                 watchDog.cancel();
             }
-            int chipVer = mDeviceHost.getChipVer();
-            if((chipVer == PN80T_ID) || (chipVer == PN553_ID)) {
-                ALL_SE_ID_TYPE |= UICC2_ID_TYPE;
+            mChipVer = mDeviceHost.getChipVer();
+            if(mChipVer < PN553_ID) {
+                ALL_SE_ID_TYPE &= ~UICC2_ID_TYPE;
             }
             checkSecureElementConfuration();
 
@@ -2213,7 +2213,9 @@ public class NfcService implements DeviceHostListener {
         @Override
         public int deselectSecureElement(String pkg) throws RemoteException {
             NfcService.this.enforceNfcSeAdminPerm(pkg);
-
+            if(mChipVer < PN553_ID) {
+                mSelectedSeId &= ~UICC2_ID_TYPE;
+            }
             // Check if NFC is enabled
             if (!isNfcEnabled()) {
                 return ErrorCodes.ERROR_NOT_INITIALIZED;
@@ -2253,6 +2255,9 @@ public class NfcService implements DeviceHostListener {
 
         @Override
         public void storeSePreference(int seId) {
+            if(mChipVer < PN553_ID) {
+                seId &= ~UICC2_ID_TYPE;
+            }
             NfcPermissions.enforceAdminPermissions(mContext);
             /* store */
             Log.d(TAG, "SE Preference stored");
@@ -2264,6 +2269,10 @@ public class NfcService implements DeviceHostListener {
         @Override
         public int selectSecureElement(String pkg,int seId) throws RemoteException {
             NfcService.this.enforceNfcSeAdminPerm(pkg);
+
+            if(mChipVer < PN553_ID) {
+                seId &= ~UICC2_ID_TYPE;
+            }
 
             // Check if NFC is enabled
             if (!isNfcEnabled()) {
@@ -5267,17 +5276,14 @@ public class NfcService implements DeviceHostListener {
                 case MSG_APPLY_SCREEN_STATE:
 
                     mScreenState = (int)msg.obj;
-
-                    if(mScreenState == ScreenStateHelper.SCREEN_STATE_ON_UNLOCKED)
-                    {
-                      applyRouting(false);
-                    }
                     int screen_state_mask = (mNfcUnlockManager.isLockscreenPollingEnabled()) ?
                                 (ScreenStateHelper.SCREEN_POLLING_TAG_MASK | mScreenState) : mScreenState;
+                    mDeviceHost.doSetScreenOrPowerState(screen_state_mask);
 
-                   if(mNfcUnlockManager.isLockscreenPollingEnabled())
+                    if(mScreenState == ScreenStateHelper.SCREEN_STATE_ON_UNLOCKED
+                       || mNfcUnlockManager.isLockscreenPollingEnabled()) {
                         applyRouting(false);
-                   mDeviceHost.doSetScreenOrPowerState(screen_state_mask);
+                    }
 
 /*                    mRoutingWakeLock.acquire();
                     try {

@@ -787,9 +787,16 @@ void RoutingManager::setCeRouteStrictDisable(uint32_t state)
  ********************************************************************************/
 void RoutingManager::nfaEEConnect()
 {
-    if(NFA_STATUS_OK == NFA_EeConnect(EE_HCI_DEFAULT_HANDLE,
-                NFC_NFCEE_INTERFACE_HCI_ACCESS,
-                nfaEeCallback))
+    tNFA_STATUS nfaStat = NFA_STATUS_FAILED;
+    if(NFA_GetNCIVersion() != NCI_VERSION_2_0)
+    {
+      nfaStat = NFA_EeConnect(EE_HCI_DEFAULT_HANDLE, NFC_NFCEE_INTERFACE_HCI_ACCESS, nfaEeCallback);
+    }
+    else
+    {
+      nfaStat = NFA_EeDiscover(nfaEeCallback);
+    }
+    if(nfaStat == NFA_STATUS_OK)
     {
         SyncEventGuard g(gNfceeDiscCbEvent);
         ALOGV("%s, Sem wait for gNfceeDiscCbEvent %d", __FUNCTION__, gdisc_timeout);
@@ -2437,7 +2444,7 @@ void RoutingManager::nfaEeCallback (tNFA_EE_EVT event, tNFA_EE_CBACK_DATA* event
             se.mPwrLinkCtrlEvent.notifyOne();
         }
         break;
-
+#endif
     case NFA_EE_SET_TECH_CFG_EVT:
         {
             ALOGV("%s: NFA_EE_SET_TECH_CFG_EVT; status=0x%X", fn, eventData->status);
@@ -3058,7 +3065,6 @@ void *ee_removed_ntf_handler_thread(void *data)
             ALOGV("%s: power link command failed", __func__);
         }
     }
-#endif
     stat = NFA_EeModeSet(SecureElement::EE_HANDLE_0xF3, NFA_EE_MD_DEACTIVATE);
 
     if(stat == NFA_STATUS_OK)
@@ -3211,6 +3217,17 @@ bool RoutingManager::is_ee_recovery_ongoing()
     }
     ALOGV("%s := %s", fn, ((recovery==true) ? "true" : "false" ));
     return recovery;
+}
+
+void RoutingManager::setEERecovery(bool value)
+{
+    static const char fn [] = "RoutingManager::setEERecovery";
+    if(!nfcFL.nfccFL._NFCEE_REMOVED_NTF_RECOVERY) {
+        ALOGV("%s : NFCEE_REMOVED_NTF_RECOVERY not avaialble.Returning",__func__);
+        return;
+    }
+    ALOGV("%s: value %x", __func__,value);
+    recovery = value;
 }
 
 /*******************************************************************************
