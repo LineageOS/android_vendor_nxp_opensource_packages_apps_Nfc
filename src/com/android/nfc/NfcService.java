@@ -130,7 +130,8 @@ import com.nxp.intf.ILoaderService;
 import com.nxp.intf.IJcopService;
 import com.nxp.intf.INxpExtrasService;
 import com.nxp.intf.IeSEClientServicesAdapter;
-import com.nxp.nfc.INfcDta;
+import com.nxp.nfc.INxpNfcDta;
+import android.nfc.INfcDta;
 import com.nxp.nfc.INfcVzw;
 import com.nxp.nfc.INxpNfcAdapterExtras;
 import com.nxp.nfc.INxpNfcAccessExtras;
@@ -2111,6 +2112,12 @@ public class NfcService implements DeviceHostListener {
             return mask;
         }
 
+        @Override
+        public INfcDta getNfcDtaInterface(String pkg) {
+            NfcPermissions.enforceAdminPermissions(mContext);
+            return null;
+        }
+
         /**
          * An interface for nxp extensions
          */
@@ -2144,7 +2151,7 @@ public class NfcService implements DeviceHostListener {
         }
 
         @Override
-        public INfcDta getNfcDtaInterface() {
+        public INxpNfcDta getNfcDtaInterface() {
             NfcPermissions.enforceAdminPermissions(mContext);
             //begin
             if(mDtaService == null){
@@ -3386,7 +3393,7 @@ public class NfcService implements DeviceHostListener {
             return doTransceive(mOpenEe.handle, data);
         }
     };
-    final class NfcDtaService extends INfcDta.Stub {
+    final class NfcDtaService extends INxpNfcDta.Stub {
 
         public boolean snepDtaCmd(String cmdType, String serviceName, int serviceSap, int miu, int rwSize, int testCaseId) throws RemoteException
         {
