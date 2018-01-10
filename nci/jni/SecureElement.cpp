@@ -27,7 +27,7 @@
  */
 #include <semaphore.h>
 #include <errno.h>
-#include <ScopedLocalRef.h>
+#include <nativehelper/ScopedLocalRef.h>
 #include "_OverrideLog.h"
 #include "SecureElement.h"
 #include "config.h"

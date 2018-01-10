@@ -20,7 +20,7 @@
 #include "PowerSwitch.h"
 #include "JavaClassConstants.h"
 #include "_OverrideLog.h"
-#include <ScopedPrimitiveArray.h>
+#include <nativehelper/ScopedPrimitiveArray.h>
 #include "DwpChannel.h"
 #include "SecureElement.h"
 #include "TransactionController.h"

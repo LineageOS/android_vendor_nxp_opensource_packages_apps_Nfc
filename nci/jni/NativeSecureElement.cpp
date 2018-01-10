@@ -25,7 +25,7 @@
 #include "PowerSwitch.h"
 #include "NfcTag.h"
 #include "RoutingManager.h"
-#include <ScopedPrimitiveArray.h>
+#include <nativehelper/ScopedPrimitiveArray.h>
 #include "phNxpConfig.h"
 
 #define ALOGV ALOGD

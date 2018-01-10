@@ -35,7 +35,7 @@
 #pragma once
 #undef LOG_TAG
 #define LOG_TAG "BrcmNfcJni"
-#include <JNIHelp.h>
+#include <nativehelper/JNIHelp.h>
 #include <jni.h>
 #include <pthread.h>
 #include <sys/queue.h>
