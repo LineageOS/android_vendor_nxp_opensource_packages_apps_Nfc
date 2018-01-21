@@ -131,6 +131,9 @@ namespace android
 #if(NXP_EXTNS == TRUE)
 #define NFC_NUM_INTERFACE_MAP 3
 #define NFC_SWP_RD_NUM_INTERFACE_MAP 1
+#define STATIC_PIPE_0x19 0x19 //PN54X Gemalto's proprietary static pipe
+#define STATIC_PIPE_0x70 0x70 //Broadcom's proprietary static pipe
+uint8_t  SecureElement::mStaticPipeProp;
 
 static const tNCI_DISCOVER_MAPS nfc_interface_mapping_default[NFC_NUM_INTERFACE_MAP] =
 {
@@ -347,6 +350,7 @@ bool SecureElement::initialize (nfc_jni_native_data* native)
         mDestinationGate = num;
     ALOGV("%s: Default destination gate: 0x%X", fn, mDestinationGate);
 
+    mStaticPipeProp = nfcFL.nfccFL._GEMALTO_SE_SUPPORT ? STATIC_PIPE_0x19 : STATIC_PIPE_0x70;
     // active SE, if not set active all SEs, use the first one.
     if (GetNumValue("ACTIVE_SE", &num, sizeof(num)))
     {
@@ -474,13 +478,9 @@ bool SecureElement::initialize (nfc_jni_native_data* native)
     for (size_t xx = 0; xx < MAX_NUM_EE; xx++)
     {
 
-#ifdef GEMALTO_SE_SUPPORT
-        if ((mEeInfo[xx].ee_handle != EE_HANDLE_0xF4 ) )
-#else
-            if (((mEeInfo[xx].ee_interface[0] == NCI_NFCEE_INTERFACE_HCI_ACCESS)
-                    &&(mEeInfo[xx].ee_status == NFC_NFCEE_STATUS_ACTIVE)) || (NFA_GetNCIVersion() == NCI_VERSION_2_0))
-#endif
-
+        if((!nfcFL.nfccFL._GEMALTO_SE_SUPPORT && mEeInfo[xx].ee_handle != EE_HANDLE_0xF4)
+           || (nfcFL.nfccFL._GEMALTO_SE_SUPPORT && (((mEeInfo[xx].ee_interface[0] == NCI_NFCEE_INTERFACE_HCI_ACCESS)
+                 && (mEeInfo[xx].ee_status == NFC_NFCEE_STATUS_ACTIVE)) || (NFA_GetNCIVersion() == NCI_VERSION_2_0))))
             {
                 ALOGV("%s: Found HCI network, try hci register", fn);
 
@@ -525,13 +525,10 @@ bool SecureElement::updateEEStatus ()
     // If the controller has an HCI Network, register for that
     for (size_t xx = 0; xx < mActualNumEe; xx++)
     {
-#ifdef GEMALTO_SE_SUPPORT
-        if ((mEeInfo[xx].ee_handle != EE_HANDLE_0xF4 ) )
-#else
-            if (((mEeInfo[xx].ee_interface[0] == NCI_NFCEE_INTERFACE_HCI_ACCESS))
-              || (NFA_GetNCIVersion() == NCI_VERSION_2_0))
-#endif
-            {
+        if((!nfcFL.nfccFL._GEMALTO_SE_SUPPORT && (mEeInfo[xx].ee_handle != EE_HANDLE_0xF4 ))
+            || (nfcFL.nfccFL._GEMALTO_SE_SUPPORT && (((mEeInfo[xx].ee_interface[0] == NCI_NFCEE_INTERFACE_HCI_ACCESS))
+            || (NFA_GetNCIVersion() == NCI_VERSION_2_0))))
+         {
                 ALOGV("%s: Found HCI network, try hci register", __func__);
 
                 SyncEventGuard guard (mHciRegisterEvent);
@@ -1459,28 +1456,28 @@ bool SecureElement::connectEE ()
         uint8_t host;
         if(mActiveEeHandle == EE_HANDLE_0xF3)
         {
-            host = (mNewPipeId == STATIC_PIPE_0x70) ? 0xC0 : 0x03;
+            host = (mNewPipeId == mStaticPipeProp) ? 0xC0 : 0x03;
         }
         else
         {
             host = (mNewPipeId == STATIC_PIPE_UICC) ? 0x02 : 0x03;
         }
 #else
-        uint8_t host = (mNewPipeId == STATIC_PIPE_0x70) ? 0x02 : 0x03;
+        uint8_t host = (mNewPipeId == mStaticPipeProp) ? 0x02 : 0x03;
 #endif
         //TODO according ETSI12 APDU Gate
 #if(NXP_EXTNS == TRUE)
         uint8_t gate;
         if(mActiveEeHandle == EE_HANDLE_0xF3)
         {
-            gate = (mNewPipeId == STATIC_PIPE_0x70) ? 0xF0 : 0xF1;
+            gate = (mNewPipeId == mStaticPipeProp) ? 0xF0 : 0xF1;
         }
         else
         {
             gate = (mNewPipeId == STATIC_PIPE_UICC) ? 0x30 : 0x31;
         }
 #else
-        uint8_t gate = (mNewPipeId == STATIC_PIPE_0x70) ? 0xF0 : 0xF1;
+        uint8_t gate = (mNewPipeId == mStaticPipeProp) ? 0xF0 : 0xF1;
 #endif
 #if(NXP_EXTNS == TRUE)
         ALOGV("%s: Using host id : 0x%X,gate id : 0x%X,pipe id : 0x%X", __func__,host,gate, mNewPipeId);
@@ -1784,7 +1781,7 @@ bool SecureElement::transceive (uint8_t* xmitBuffer, int32_t xmitBufferSize, uin
             }
         }
 #endif
-        if ((mNewPipeId == STATIC_PIPE_0x70) || (mNewPipeId == STATIC_PIPE_0x71))
+        if ((mNewPipeId == mStaticPipeProp) || (mNewPipeId == STATIC_PIPE_0x71))
 #if(NXP_EXTNS == TRUE)
         {
             if (nfcFL.nfccFL._NFCEE_REMOVED_NTF_RECOVERY) {
@@ -2345,8 +2342,8 @@ bool SecureElement::getSeVerInfo(int seIndex, char * verInfo, int verInfoSz, uin
     strlcpy(verInfo, "Version info not available", verInfoSz-2);
 
     uint8_t pipe = (mEeInfo[seIndex].ee_handle == EE_HANDLE_0xF3) ? 0x70 : 0x71;
-    uint8_t host = (pipe == STATIC_PIPE_0x70) ? 0x02 : 0x03;
-    uint8_t gate = (pipe == STATIC_PIPE_0x70) ? 0xF0 : 0xF1;
+    uint8_t host = (pipe == mStaticPipeProp) ? 0x02 : 0x03;
+    uint8_t gate = (pipe == mStaticPipeProp) ? 0xF0 : 0xF1;
 
     tNFA_STATUS nfaStat = NFA_HciAddStaticPipe(mNfaHciHandle, host, gate, pipe);
     if (nfaStat != NFA_STATUS_OK)
@@ -2541,7 +2538,7 @@ void SecureElement::nfaHciCallback (tNFA_HCI_EVT event, tNFA_HCI_EVT_DATA* event
             sSecElem.mAtrStatus = eventData->registry.status;
             sSecElem.mGetRegisterEvent.notifyOne();
         }
-        else if (eventData->registry.data_len >= 19 && ((eventData->registry.pipe == STATIC_PIPE_0x70) || (eventData->registry.pipe == STATIC_PIPE_0x71)))
+        else if (eventData->registry.data_len >= 19 && ((eventData->registry.pipe == mStaticPipeProp) || (eventData->registry.pipe == STATIC_PIPE_0x71)))
         {
             SyncEventGuard guard (sSecElem.mVerInfoEvent);
             // Oberthur OS version is in bytes 16,17, and 18
@@ -2590,7 +2587,7 @@ void SecureElement::nfaHciCallback (tNFA_HCI_EVT event, tNFA_HCI_EVT_DATA* event
         }
 #if(NXP_EXTNS == TRUE)
         else if (((eventData->rcvd_evt.evt_code == NFA_HCI_ABORT) || (eventData->rcvd_evt.last_SentEvtType == EVT_ABORT))
-                &&(eventData->rcvd_evt.pipe == STATIC_PIPE_0x70))
+                &&(eventData->rcvd_evt.pipe == mStaticPipeProp))
         {
             ALOGV("%s: NFA_HCI_EVENT_RCVD_EVT: NFA_HCI_ABORT; status:0x%X, pipe:0x%X, len:%d", fn,\
                 eventData->rcvd_evt.status, eventData->rcvd_evt.pipe, eventData->rcvd_evt.evt_len);
@@ -2611,7 +2608,7 @@ void SecureElement::nfaHciCallback (tNFA_HCI_EVT event, tNFA_HCI_EVT_DATA* event
             }
         }
 #endif
-        else if ((eventData->rcvd_evt.pipe == STATIC_PIPE_0x70) || (eventData->rcvd_evt.pipe == STATIC_PIPE_0x71))
+        else if ((eventData->rcvd_evt.pipe == mStaticPipeProp) || (eventData->rcvd_evt.pipe == STATIC_PIPE_0x71))
         {
             ALOGV("%s: NFA_HCI_EVENT_RCVD_EVT; data from static pipe", fn);
 #if (NXP_EXTNS == TRUE)
@@ -2733,6 +2730,24 @@ void SecureElement::nfaHciCallback (tNFA_HCI_EVT event, tNFA_HCI_EVT_DATA* event
             sSecElem.mNfceeInitCbEvent.notifyOne();
             break;
         }
+    case NFA_HCI_EE_RECOVERY_EVT:
+    {
+        tNFA_HCI_EE_RECOVERY_EVT &ee_recovery = eventData->ee_recovery;
+        ALOGV("%s: NFA_HCI_EE_RECOVERY_EVT; status=0x%X", fn, ee_recovery.status);
+        if(ee_recovery.status == NFA_HCI_EE_RECOVERY_STARTED)
+            RoutingManager::getInstance().setEERecovery(true);
+        else if(ee_recovery.status == NFA_HCI_EE_RECOVERY_COMPLETED)
+        {
+            ALOGV("%s: NFA_HCI_EE_RECOVERY_EVT; recovery completed status=0x%X", fn, ee_recovery.status);
+            RoutingManager::getInstance().setEERecovery(false);
+            if(active_ese_reset_control & TRANS_WIRED_ONGOING)
+            {
+                SyncEventGuard guard(sSecElem.mTransceiveEvent);
+                sSecElem.mTransceiveEvent.notifyOne();
+            }
+        }
+        break;
+    }
     case NFA_HCI_ADD_STATIC_PIPE_EVT:
     {
         ALOGV("%s: NFA_HCI_ADD_STATIC_PIPE_EVT; status=0x%X", fn, eventData->admin_rsp_rcvd.status);
@@ -2833,17 +2848,18 @@ tNFA_HANDLE SecureElement::getDefaultEeHandle ()
             continue; //skip all the EE's that are ignored
         ALOGV("%s: - mEeInfo[xx].ee_handle = 0x%02x, mEeInfo[xx].ee_status = 0x%02x", fn,mEeInfo[xx].ee_handle, mEeInfo[xx].ee_status);
 
+              if((nfcFL.nfccFL._GEMALTO_SE_SUPPORT && (mEeInfo[xx].ee_interface[0] != NCI_NFCEE_INTERFACE_HCI_ACCESS)))
+              {
+                  return (mEeInfo[xx].ee_handle);
+              }
+              else if((!nfcFL.nfccFL._GEMALTO_SE_SUPPORT && ((mEeInfo[xx].ee_handle == EE_HANDLE_0xF3
+                  || mEeInfo[xx].ee_handle == SecureElement::getInstance().EE_HANDLE_0xF4
+                  || (mEeInfo[xx].ee_handle == EE_HANDLE_0xF8 && nfcFL.nfccFL._NFCC_DYNAMIC_DUAL_UICC))
+                  && (mEeInfo[xx].ee_status != NFC_NFCEE_STATUS_INACTIVE))))
+              {
+                  return (mEeInfo[xx].ee_handle);
+              }
 
-#ifndef GEMALTO_SE_SUPPORT
-
-            if((mEeInfo[xx].ee_interface[0] != NCI_NFCEE_INTERFACE_HCI_ACCESS)
-#else
-            if(((mEeInfo[xx].ee_handle == EE_HANDLE_0xF3 || mEeInfo[xx].ee_handle == SecureElement::getInstance().EE_HANDLE_0xF4
-                || (mEeInfo[xx].ee_handle == EE_HANDLE_0xF8 && nfcFL.nfccFL._NXP_NFCC_DYNAMIC_DUAL_UICC))
-                && (mEeInfo[xx].ee_status != NFC_NFCEE_STATUS_INACTIVE))
-#endif
-                )
-            return (mEeInfo[xx].ee_handle);
     }
     return NFA_HANDLE_INVALID;
 }
@@ -2870,21 +2886,20 @@ tNFA_HANDLE SecureElement::getActiveEeHandle (tNFA_HANDLE handle)
     for (uint8_t xx = 0; xx < mActualNumEe; xx++)
     {
         if ( (mActiveSeOverride != ACTIVE_SE_USE_ANY) && (overrideEeHandle != mEeInfo[xx].ee_handle))
-        ALOGE("%s: - mEeInfo[xx].ee_handle = 0x%02x, mEeInfo[xx].ee_status = 0x%02x", fn,mEeInfo[xx].ee_handle, mEeInfo[xx].ee_status);
+             ALOGE("%s: - mEeInfo[xx].ee_handle = 0x%02x, mEeInfo[xx].ee_status = 0x%02x", fn,mEeInfo[xx].ee_handle, mEeInfo[xx].ee_status);
 
+        if(nfcFL.nfccFL._GEMALTO_SE_SUPPORT && (mEeInfo[xx].ee_interface[0] != NCI_NFCEE_INTERFACE_HCI_ACCESS)
+             && (mEeInfo[xx].ee_status != NFC_NFCEE_STATUS_INACTIVE) && (mEeInfo[xx].ee_handle == handle))
+         {
+             return (mEeInfo[xx].ee_handle);
+         }
+         else if (!nfcFL.nfccFL._GEMALTO_SE_SUPPORT && (mEeInfo[xx].ee_handle == EE_HANDLE_0xF3 || mEeInfo[xx].ee_handle == SecureElement::getInstance().EE_HANDLE_0xF4
+              || (mEeInfo[xx].ee_handle == EE_HANDLE_0xF8 && nfcFL.nfccFL._NFCC_DYNAMIC_DUAL_UICC))
+              && (mEeInfo[xx].ee_status != NFC_NFCEE_STATUS_INACTIVE) && (mEeInfo[xx].ee_handle == handle))
+         {
+             return (mEeInfo[xx].ee_handle);
+         }
 
-#ifndef GEMALTO_SE_SUPPORT
-
-            if((mEeInfo[xx].ee_interface[0] != NCI_NFCEE_INTERFACE_HCI_ACCESS)
-#else
-
-            if((mEeInfo[xx].ee_handle == EE_HANDLE_0xF3 || mEeInfo[xx].ee_handle == SecureElement::getInstance().EE_HANDLE_0xF4
-                || (mEeInfo[xx].ee_handle == EE_HANDLE_0xF8 && nfcFL.nfccFL._NXP_NFCC_DYNAMIC_DUAL_UICC))
-
-#endif
-            &&
-            (mEeInfo[xx].ee_status != NFC_NFCEE_STATUS_INACTIVE)&& (mEeInfo[xx].ee_handle == handle))
-            return (mEeInfo[xx].ee_handle);
     }
     return NFA_HANDLE_INVALID;
 }
@@ -3217,15 +3232,6 @@ bool SecureElement::SecEle_Modeset(uint8_t type)
             retval = true;
         }
 #endif
-        /*Mode set on wait for ntf*/
-        if(type)
-        {
-            SyncEventGuard guard (SecureElement::getInstance().mEeSetModeEvent);
-            if(SecureElement::getInstance().mEeSetModeEvent.wait(500) == false)
-            {
-                ALOGE("%s: timeout waiting for setModeNtf", __func__);
-            }
-        }
     }
     else
 #endif
@@ -4028,6 +4034,10 @@ TheEnd:
     return decoded_length;
 }
 #if(NXP_EXTNS == TRUE)
+void cleanupStack(void* p)
+{
+    return;
+}
 /*******************************************************************************
 **
 ** Function:       spiEventHandlerThread
@@ -4039,6 +4049,10 @@ TheEnd:
 *******************************************************************************/
 void *spiEventHandlerThread(void *arg)
 {
+    void (*pCleanupRoutine)(void* ptr) = cleanupStack;
+    __pthread_cleanup_t  __cleanup;
+    SecureElement &se = SecureElement::getInstance();
+
     if(!nfcFL.nfcNxpEse) {
         ALOGV("%s: nfcNxpEse not available. Returning", __func__);
         return NULL;
@@ -4050,7 +4064,7 @@ void *spiEventHandlerThread(void *arg)
     }
     (void)arg;
     uint16_t usEvent = 0, usEvtLen = 0;
-
+    tNFC_STATUS stat;
 
     NFCSTATUS ese_status = NFA_STATUS_FAILED;
 
@@ -4079,6 +4093,8 @@ void *spiEventHandlerThread(void *arg)
          {
              ALOGV("%s: SPI PRIO End Signal\n", __func__);
              hold_the_transceive = false;
+             if(!se.mIsWiredModeOpen)
+                spiDwpSyncState = STATE_DWP_CLOSE;
              setSPIState(false);
              SyncEventGuard guard (sSPIPrioSessionEndEvent);
              sSPIPrioSessionEndEvent.notifyOne ();
@@ -4092,6 +4108,8 @@ void *spiEventHandlerThread(void *arg)
         {
             ALOGV("%s: SPI End Signal\n", __func__);
             hold_the_transceive = false;
+            if(!se.mIsWiredModeOpen)
+                spiDwpSyncState = STATE_DWP_CLOSE;
             setSPIState(false);
         }
 
@@ -4103,6 +4121,10 @@ void *spiEventHandlerThread(void *arg)
                         (usEvent & P61_STATE_SPI))
                 {
                     nfaVSC_ForceDwpOnOff(true);
+                    if(nfcFL.eseFL._WIRED_MODE_STANDBY) {
+                    if(android::nfcManager_getNfcState() != NFC_OFF)
+                        NFC_RelForceDwpOnOffWait((void*)&stat);
+                    }
                 }
                 else if((usEvent & P61_STATE_SPI_PRIO_END) ||
                         (usEvent & P61_STATE_SPI_END))
@@ -4126,6 +4148,10 @@ void *spiEventHandlerThread(void *arg)
                         (usEvent & P61_STATE_SPI)))
         {
             nfaVSC_ForceDwpOnOff(true);
+            if(nfcFL.eseFL._WIRED_MODE_STANDBY) {
+            if(android::nfcManager_getNfcState() != NFC_OFF)
+                NFC_RelForceDwpOnOffWait((void*)&stat);
+            }
         }
         else if(nfcFL.eseFL._ESE_DWP_SPI_SYNC_ENABLE &&
                 ((usEvent & P61_STATE_SPI_PRIO_END) ||
@@ -4167,6 +4193,9 @@ void *spiEventHandlerThread(void *arg)
         }
     }
     ALOGV("%s: exit", __func__);
+    /*Explicit cleanup to avoid any issue due to pthread datastructure corruption*/
+    __pthread_cleanup_push(&__cleanup, pCleanupRoutine, NULL);
+    __pthread_cleanup_pop(&__cleanup, 0);
     pthread_exit(NULL);
     return NULL;
 }
@@ -4221,6 +4250,10 @@ void releaseSPIEvtHandlerThread()
     /* Notifying the signal handler thread to exit if it is waiting */
     SyncEventGuard guard(sSPISignalHandlerEvent);
     sSPISignalHandlerEvent.notifyOne ();
+    {
+        SyncEventGuard guard(SecureElement::getInstance().mModeSetNtf);
+        SecureElement::getInstance().mModeSetNtf.notifyOne();
+    }
 }
 /*******************************************************************************
 **
@@ -4379,6 +4412,7 @@ static void nfaVSC_ForceDwpOnOff(bool type)
             /*If DWP session is closed*/
             (void)SecureElement::getInstance().setNfccPwrConfig(SecureElement::getInstance().NFCC_DECIDES);
         }
+
         if(spiDwpSyncState & STATE_DWP_CLOSE)
         {
             stat = NFA_HciSendEvent (NFA_HANDLE_GROUP_HCI, 0x19, EVT_END_OF_APDU_TRANSFER,
@@ -4722,9 +4756,14 @@ tNFA_STATUS SecureElement::SecElem_EeModeSet(uint16_t handle, uint8_t mode)
             sSecElem.mResetEvent.wait();
         }
     }
+    if((dual_mode_current_state & SPI_ON) && (handle == EE_HANDLE_0xF3) &&
+        (mode == NFA_EE_MD_DEACTIVATE))
+        return NFA_STATUS_OK;
+
     SyncEventGuard guard (sSecElem.mEeSetModeEvent);
     stat =  NFA_EeModeSet(handle, mode);
-    if(stat == NFA_STATUS_OK && !android::nfcManager_isNfcDisabling())
+    if(stat == NFA_STATUS_OK && !android::nfcManager_isNfcDisabling() &&
+       (android::nfcManager_getNfcState() != NFC_OFF))
     {
         sSecElem.mEeSetModeEvent.wait ();
     }

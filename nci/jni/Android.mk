@@ -22,8 +22,6 @@ LOCAL_CFLAGS += -DNFC_NXP_HFO_SETTINGS=FALSE
 #Enable HCE-F specific
 LOCAL_CFLAGS += -DNXP_NFCC_HCE_F=TRUE
 
-NFC_NXP_ESE:= TRUE
-
 NFC_POWER_MANAGEMENT:= TRUE
 ifeq ($(NFC_POWER_MANAGEMENT),TRUE)
 LOCAL_CFLAGS += -DNFC_POWER_MANAGEMENT=TRUE
@@ -31,16 +29,13 @@ else
 LOCAL_CFLAGS += -DNFC_POWER_MANAGEMENT=FALSE
 endif
 
-ifeq ($(NFC_NXP_ESE),TRUE)
 LOCAL_CFLAGS += -DNXP_LDR_SVC_VER_2=TRUE
-else
-LOCAL_CFLAGS += -DNXP_LDR_SVC_VER_2=FALSE
-endif
 
 LOCAL_SRC_FILES := $(call all-subdir-cpp-files) $(call all-subdir-c-files)
 
 LOCAL_C_INCLUDES += \
     frameworks/native/include \
+    libnativehelper/include/nativehelper \
     $(NFA)/include \
     $(NFA)/brcm \
     $(NFC)/include \
