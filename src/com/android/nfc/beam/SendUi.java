@@ -65,6 +65,9 @@ import android.view.animation.DecelerateInterpolator;
 import android.widget.ImageView;
 import android.widget.TextView;
 import android.widget.Toast;
+import android.graphics.Point;
+import android.graphics.Rect;
+import android.hardware.display.DisplayManagerGlobal;
 
 import java.util.List;
 
@@ -626,8 +629,17 @@ public class SendUi implements Animator.AnimatorListener, View.OnTouchListener,
             dims[0] = Math.abs(dims[0]);
             dims[1] = Math.abs(dims[1]);
         }
+        Display display = DisplayManagerGlobal.getInstance()
+                .getRealDisplay(Display.DEFAULT_DISPLAY);
+        Point displaySize = new Point();
+        display.getRealSize(displaySize);
+        final int displayWidth = displaySize.x;
+        final int displayHeight = displaySize.y;
 
-        Bitmap bitmap = SurfaceControl.screenshot((int) dims[0], (int) dims[1]);
+        int rotation = display.getRotation();
+        Rect crop = new Rect(0, 0, displayWidth, displayHeight);
+
+        Bitmap bitmap = SurfaceControl.screenshot(crop, displayWidth, displayHeight, rotation);
         // Bail if we couldn't take the screenshot
         if (bitmap == null) {
             return null;
