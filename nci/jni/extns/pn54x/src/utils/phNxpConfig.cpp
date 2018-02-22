@@ -314,17 +314,17 @@ int CNxpNfcConfig::getconfiguration_id(char *config_file)
         return DEFAULT_CONFIG;
     }
 
-    rc = __system_property_get("sys.nfc.nq.chipid", nq_chipid);
+    rc = __system_property_get("vendor.qti.nfc.chipid", nq_chipid);
     if (rc <= 0)
-        ALOGE("get sys.nfc.nq.chipid fail, rc = %d\n", rc);
+        ALOGE("get vendor.qti.nfc.chipid fail, rc = %d\n", rc);
     else
-        ALOGD("sys.nfc.nq.chipid = %s\n", nq_chipid);
+        ALOGD("vendor.qti.nfc.chipid = %s\n", nq_chipid);
 
-    rc = __system_property_get("sys.nfc.nq.fwver", nq_fw_ver);
+    rc = __system_property_get("vendor.qti.nfc.fwver", nq_fw_ver);
     if (rc <= 0)
-        ALOGE("get sys.nfc.nq.fwver fail, rc = %d\n", rc);
+        ALOGE("get vendor.qti.nfc.fwver fail, rc = %d\n", rc);
     else
-        ALOGD("sys.nfc.nq.fwver = %s\n", nq_fw_ver);
+        ALOGD("vendor.qti.nfc.fwver = %s\n", nq_fw_ver);
 
     // Converting the HW_PLATFORM detail that is read from target to lowercase
     for (int i=0;target_type[i];i++)
