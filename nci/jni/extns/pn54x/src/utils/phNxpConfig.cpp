@@ -1,5 +1,5 @@
 /******************************************************************************
- *  Copyright (c) 2016, The Linux Foundation. All rights reserved.
+ *  Copyright (c) 2016-18, The Linux Foundation. All rights reserved.
  *  Not a Contribution.
  *
  *  Copyright (C) 2015 The Android Open Source Project
@@ -87,6 +87,8 @@ typedef enum
   QRD_TYPE_NQ3XX                         = 0x08, /**< qrd config : for NQ3XX chip */
   MTP_TYPE_NQ4XX                         = 0x09, /**< mtp config : for NQ4XX chip */
   QRD_TYPE_NQ4XX                         = 0x10, /**< qrd config : for NQ4XX chip */
+  MTP_TYPE_SN100                         = 0x11, /**< mtp config : for SN100 chip */
+  QRD_TYPE_SN100                         = 0x12, /**< qrd config : for SN100 chip */
   DEFAULT_CONFIG                         = QRD_TYPE_DEFAULT, /**< default is qrd default config */
   CONFIG_INVALID                         = 0xFF
 } CONFIGIDVALUE;
@@ -112,6 +114,7 @@ typedef enum
   TARGET_SDM670                        = 336, /**< SDM670 target */
   TARGET_SDM630                        = 318, /**< SDM630 target */
   TARGET_SDM845                        = 321, /**< SDM845 target */
+  TARGET_SM8150                        = 339, /**< SM8150 target */
   TARGET_DEFAULT                       = TARGET_GENERIC, /**< new targets */
   TARGET_INVALID                       = 0xFF
 } TARGETTYPE;
@@ -335,6 +338,10 @@ int CNxpNfcConfig::getconfiguration_id(char *config_file)
             config_id = QRD_TYPE_1;
             strlcpy(config_file, config_name_qrd1, MAX_DATA_CONFIG_PATH_LEN);
             break;
+        case TARGET_SM8150:
+            config_id = QRD_TYPE_SN100;
+            strlcpy(config_file, config_name_qrd_SN100, MAX_DATA_CONFIG_PATH_LEN);
+            break;
         case TARGET_SDM845:
         case TARGET_SDM670:
             if (!strncmp(nq_fw_ver, FW_MAJOR_NUM_NQ4xx, FW_MAJOR_NUM_LENGTH)) {
@@ -384,6 +391,10 @@ int CNxpNfcConfig::getconfiguration_id(char *config_file)
                 config_id = MTP_TYPE_NQ3XX;
                 strlcpy(config_file, config_name_mtp_NQ3XX, MAX_DATA_CONFIG_PATH_LEN);
             }
+            break;
+        case TARGET_SM8150:
+            config_id = MTP_TYPE_SN100;
+            strlcpy(config_file, config_name_mtp_SN100, MAX_DATA_CONFIG_PATH_LEN);
             break;
         case TARGET_SDM845:
         case TARGET_SDM670:

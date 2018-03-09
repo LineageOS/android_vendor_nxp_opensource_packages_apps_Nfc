@@ -68,11 +68,13 @@ int isNxpConfigModified();
 #define config_name_mtp2        "libnfc-mtp_rf2.conf"
 #define config_name_mtp_NQ3XX   "libnfc-mtp-NQ3XX.conf"
 #define config_name_mtp_NQ4XX   "libnfc-mtp-NQ4XX.conf"
+#define config_name_mtp_SN100   "libnfc-mtp-SN100.conf"
 #define config_name_qrd         "libnfc-qrd_default.conf"
 #define config_name_qrd1        "libnfc-qrd_rf1.conf"
 #define config_name_qrd2        "libnfc-qrd_rf2.conf"
 #define config_name_qrd_NQ3XX   "libnfc-qrd-NQ3XX.conf"
 #define config_name_qrd_NQ4XX   "libnfc-qrd-NQ4XX.conf"
+#define config_name_qrd_SN100   "libnfc-qrd-SN100.conf"
 #define config_name_default     "libnfc-nxp_default.conf"
 
 /**
