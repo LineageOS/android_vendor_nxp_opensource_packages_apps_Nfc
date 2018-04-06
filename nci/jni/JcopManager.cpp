@@ -80,9 +80,9 @@ tNFA_STATUS JcopManager::JcopInitialize ()
 {
     tNFA_STATUS wStatus = NFA_STATUS_OK;
     //Getting pointer to JCOP module
-    Pgpx_Jcop_handle = dlopen("system/lib64/libp61-jcop-kit.so",RTLD_NOW);
+    Pgpx_Jcop_handle = dlopen("vendor/lib64/libnqp61-jcop-kit.so",RTLD_NOW);
     if(Pgpx_Jcop_handle == NULL){
-        ALOGE("%s: Error : opening (system/lib64/libp61-jcop-kit.so) !!", __func__);
+        ALOGE("%s: Error : opening (vendor/lib64/libnqp61-jcop-kit.so) !!", __func__);
         return NFA_STATUS_FAILED;
     }
     // Getting pointer to ALA_Init function
@@ -161,7 +161,7 @@ tNFA_STATUS JcopManager::JcopDeInitialize ()
 {
     if(Pgpx_Jcop_handle != NULL){
         if((dlclose(Pgpx_Jcop_handle)) != DL_STATUS_OK){
-            ALOGE("%s: Error : closing (system/lib64/libp61-jcop-kit.so) !!", __func__);
+            ALOGE("%s: Error : closing (vendor/lib64/libnqp61-jcop-kit.so) !!", __func__);
             return NFA_STATUS_FAILED;
         }
     }else{
