@@ -745,7 +745,8 @@ public class NfcService implements DeviceHostListener {
             if(mIsNfcOff) {
                 try {
                     Log.e(TAG, "mSecureElementclientCallback.onStateChange true ###################");
-                    mSecureElementclientCallback.onStateChange(true);
+                    if (mSecureElementclientCallback != null)
+                        mSecureElementclientCallback.onStateChange(true);
                 } catch (Exception e) {
                     Log.e(TAG, "mSecureElementclientCallback.onStateChange");
                 }
@@ -770,7 +771,8 @@ public class NfcService implements DeviceHostListener {
             try {
                 Log.e(TAG, "mSecureElementclientCallback.onStateChange false ################# ");
                 mIsNfcOff = true;
-                mSecureElementclientCallback.onStateChange(false);
+                if (mSecureElementclientCallback != null)
+                    mSecureElementclientCallback.onStateChange(false);
                 mIsSecureElementOpened = false;
             } catch (RemoteException e) {
                 Log.e(TAG, "mSecureElementclientCallback.onStateChange");
