@@ -21,6 +21,7 @@ LOCAL_JNI_SHARED_LIBRARIES := libnqnfc_nci_jni
 LOCAL_JAVA_LIBRARIES := com.nxp.nfc.nq
 LOCAL_PROGUARD_ENABLED := disabled
 LOCAL_STATIC_JAVA_LIBRARIES := android-support-v4
+LOCAL_STATIC_JAVA_LIBRARIES += android.hardware.secure_element-V1.0-java
 
 LOCAL_MODULE_OWNER := nxp
 

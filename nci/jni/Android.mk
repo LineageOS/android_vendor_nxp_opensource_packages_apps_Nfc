@@ -12,12 +12,27 @@ LOCAL_PRELINK_MODULE := false
 ifneq ($(NCI_VERSION),)
 LOCAL_CFLAGS += -DNCI_VERSION=$(NCI_VERSION) -O0 -g
 endif
+# set SRC_FILES_LIST to all the .cpp files in $(LOCAL_PATH)
+SRC_FILES_LIST += $(wildcard $(LOCAL_PATH)/*.cpp $(LOCAL_PATH)/extns/pn54x/src/mifare/*.cpp)
+SRC_FILES_LIST += $(wildcard $(LOCAL_PATH)/extns/pn54x/src/*.cpp $(LOCAL_PATH)/extns/pn54x/src/log/*.cpp)
+SRC_FILES_LIST += $(wildcard $(LOCAL_PATH)/extns/pn54x/src/utils/*.cpp $(LOCAL_PATH)/extns/pn54x/src/common/*.cpp)
+
+NXP_EXTNS:=TRUE
+ifeq ($(NXP_EXTNS),TRUE)
+ LOCAL_CFLAGS += -DNXP_EXTNS=TRUE
+ LOCAL_SRC_FILES := $(call all-subdir-cpp-files) $(call all-subdir-c-files)
+else
+# exclude $(LOCAL_PATH)
+LOCAL_CFLAGS += -DNXP_EXTNS=FALSE
+SRC_FILES_LIST := $(filter-out $(LOCAL_PATH)/NativeSecureElement.cpp, $(SRC_FILES_LIST))
+SRC_FILES_LIST := $(filter-out $(LOCAL_PATH)/SecureElement.cpp, $(SRC_FILES_LIST))
+SRC_FILES_LIST := $(filter-out $(LOCAL_PATH)/DwpChannel.cpp, $(SRC_FILES_LIST))
+LOCAL_SRC_FILES := $(SRC_FILES_LIST:$(LOCAL_PATH)/%=%)
+endif
 
 NFC_NXP_ESE:= TRUE
-
+LOCAL_CFLAGS += -DDCHECK_ALWAYS_ON=TRUE
 LOCAL_CFLAGS += -Wall -Wextra -Wno-unused-parameter -Werror
-LOCAL_CFLAGS += -DNXP_EXTNS=TRUE
-LOCAL_SRC_FILES := $(call all-subdir-cpp-files) $(call all-subdir-c-files)
 
 LOCAL_C_INCLUDES += \
     external/libxml2/include \
@@ -32,6 +47,7 @@ LOCAL_C_INCLUDES += \
     $(VOB_COMPONENTS)/include \
     $(VOB_COMPONENTS)/gki/ulinux \
     $(VOB_COMPONENTS)/gki/common \
+    $(VOB_COMPONENTS) \
     $(LIBNFC_PATH)/utils/include \
     $(LIBNFC_PATH)/extns/impl
 

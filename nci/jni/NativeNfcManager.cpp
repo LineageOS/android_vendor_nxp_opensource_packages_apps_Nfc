@@ -41,6 +41,7 @@
 #include "SyncEvent.h"
 #include "nfc_config.h"
 #if(NXP_EXTNS == TRUE)
+#include "nfca_version.h"
 #include "SecureElement.h"
 #include "DwpChannel.h"
 #include "JcDnld.h"
@@ -55,10 +56,16 @@
 #include "phNxpExtns.h"
 #include "rw_api.h"
 
+
+
+
 using android::base::StringPrintf;
 
 extern const uint8_t nfca_version_string[];
 extern const uint8_t nfa_version_string[];
+#if(NXP_EXTNS == TRUE)
+extern bool nfc_debug_enabled;
+#endif
 extern tNFA_DM_DISC_FREQ_CFG* p_nfa_dm_rf_disc_freq_cfg;  // defined in stack
 namespace android {
 extern bool gIsTagDeactivating;
@@ -191,9 +198,9 @@ static int NFA_SCREEN_POLLING_TAG_MASK = 0x10;
 static bool gIsDtaEnabled = false;
 /////////////////////////////////////////////////////////////
 /////////////////////////////////////////////////////////////
-
+#if (NXP_EXTNS != TRUE)
 bool nfc_debug_enabled;
-
+#endif
 namespace {
 void initializeGlobalDebugEnabledFlag() {
   nfc_debug_enabled =
@@ -1075,7 +1082,9 @@ static jint nfcManager_getLfT3tMax(JNIEnv*, jobject) {
 **
 *******************************************************************************/
 static jboolean nfcManager_doInitialize(JNIEnv* e, jobject o) {
+#if (NXP_EXTNS == TRUE)
   tNFA_MW_VERSION mwVer;
+#endif
   DLOG_IF(INFO, nfc_debug_enabled)
       << StringPrintf("%s: enter; ver=%s nfa=%s NCI_VERSION=0x%02X", __func__,
                       nfca_version_string, nfa_version_string, NCI_VERSION);
@@ -1088,11 +1097,12 @@ static jboolean nfcManager_doInitialize(JNIEnv* e, jobject o) {
         << StringPrintf("%s: already enabled", __func__);
     goto TheEnd;
   }
+#if (NXP_EXTNS == TRUE)
     mwVer=  NFA_GetMwVersion();
     LOG(ERROR) << StringPrintf("%s:  MW Version: NFC_NCIHALx_AR%X.%x.%x.%x_RC%x",
             __func__, mwVer.validation, mwVer.android_version,
             mwVer.major_version,mwVer.minor_version,mwVer.rc_version);
-
+#endif
   powerSwitch.initialize(PowerSwitch::FULL_POWER);
 
   {

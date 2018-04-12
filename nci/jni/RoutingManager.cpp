@@ -126,6 +126,11 @@ bool RoutingManager::initialize(nfc_jni_native_data* native) {
        mDefaultTechFPowerstate = num;
     else
        mDefaultTechFPowerstate = 0x3F;
+    if (GetNxpNumValue (NAME_NXP_DEFAULT_SE, (void*)&num, sizeof(num)))
+        mDefaultEe = num;
+    else
+        mDefaultEe = 0x02;
+    mUiccListnTechMask = NfcConfig::getUnsigned("NAME_UICC_LISTEN_TECH_MASK", 0x07);
 #endif
   if ((mActiveSe != 0) || (mActiveSeNfcF != 0)) {
     DLOG_IF(INFO, nfc_debug_enabled)
@@ -176,9 +181,9 @@ bool RoutingManager::initialize(nfc_jni_native_data* native) {
 
         // Set technology routes to UICC if it's there
         nfaStat = NFA_EeSetDefaultTechRouting(eeHandle, seTechMask, seTechMask,
-                                              seTechMask,
+                                              seTechMask
 #if(NXP_EXTNS == TRUE)
-                                              seTechMask, seTechMask, seTechMask
+                                              ,seTechMask, seTechMask, seTechMask
 #endif
                                               );
         if (nfaStat != NFA_STATUS_OK)
@@ -936,7 +941,7 @@ bool RoutingManager::setDefaultRoute(const int defaultRoute, const int protoRout
     static const char fn []   = "RoutingManager::setDefaultRoute";
     tNFA_STATUS       nfaStat = NFA_STATUS_FAILED;
 
-    DLOG_IF(VERBOSE, nfc_debug_enabled)
+    DLOG_IF(INFO, nfc_debug_enabled)
           << StringPrintf("%s: enter; defaultRoute:0x%2X protoRoute:0x%2X TechRoute:0x%2X HostListenMask:0x%X", fn, defaultRoute, protoRoute, techRoute, mHostListnTechMask);
     extractRouteLocationAndPowerStates(defaultRoute,protoRoute,techRoute);
 
@@ -973,7 +978,7 @@ bool RoutingManager::setDefaultRoute(const int defaultRoute, const int protoRout
 
     configureOffHostNfceeTechMask();
 
-    DLOG_IF(VERBOSE, nfc_debug_enabled)
+    DLOG_IF(INFO, nfc_debug_enabled)
           << StringPrintf("%s: exit", fn);
     return true;
 }
@@ -1013,14 +1018,14 @@ void RoutingManager::extractRouteLocationAndPowerStates(const int defaultRoute, 
  * */
 void RoutingManager::setEmptyAidEntry() {
 
-    DLOG_IF(VERBOSE, nfc_debug_enabled) << StringPrintf("%s: enter",__func__);
+    DLOG_IF(INFO, nfc_debug_enabled) << StringPrintf("%s: enter",__func__);
     uint16_t routeLoc;
     uint8_t power;
 
     routeLoc = mDefaultIso7816SeID;
 
     power    = mCeRouteStrictDisable ? mDefaultIso7816Powerstate : (mDefaultIso7816Powerstate & POWER_STATE_MASK);
-    DLOG_IF(VERBOSE, nfc_debug_enabled) << StringPrintf("%s: route %x",__func__,routeLoc);
+    DLOG_IF(INFO, nfc_debug_enabled) << StringPrintf("%s: route %x",__func__,routeLoc);
     if(routeLoc == 0x400) power &= 0x11;
     if (routeLoc  == NFA_HANDLE_INVALID)
     {
@@ -1029,7 +1034,7 @@ void RoutingManager::setEmptyAidEntry() {
     }
 
     tNFA_STATUS nfaStat = NFA_EeAddAidRouting(routeLoc, 0, NULL, power, 0x10);
-    DLOG_IF(VERBOSE, nfc_debug_enabled) << StringPrintf("%s: Status :0x%2x", __func__, nfaStat);
+    DLOG_IF(INFO, nfc_debug_enabled) << StringPrintf("%s: Status :0x%2x", __func__, nfaStat);
 }
 
 /* To check whether the route location for ISO-DEP protocol defined by user in config file is actually connected or not
@@ -1041,7 +1046,7 @@ void RoutingManager::checkProtoSeID(void)
     tNFA_HANDLE       ActDevHandle                  = NFA_HANDLE_INVALID;
     unsigned long     check_default_proto_se_id_req = 0;
     static const char fn []   = "RoutingManager::checkProtoSeID";
-    DLOG_IF(VERBOSE, nfc_debug_enabled) << StringPrintf("%s: enter",__func__);
+    DLOG_IF(INFO, nfc_debug_enabled) << StringPrintf("%s: enter",__func__);
 //FIX THIS
     /*
     if (GetNxpNumValue(NAME_CHECK_DEFAULT_PROTO_SE_ID, &check_default_proto_se_id_req, sizeof(check_default_proto_se_id_req)))
