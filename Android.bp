@@ -11,7 +11,7 @@ android_app {
     jni_libs: ["libsn100nfc_nci_jni"],
     libs: ["com.nxp.nfc.nq"],
     static_libs: [
-        "android-support-core-utils",
+        "androidx.legacy_legacy-support-v4",
         "vendor.nxp.hardware.nfc-V1.1-java",
         ],
     optimize: {
