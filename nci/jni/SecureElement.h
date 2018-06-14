@@ -59,7 +59,7 @@ public:
   uint8_t mNewPipeId;
 
   bool mIsWiredModeOpen;
-
+  uint32_t SmbTransceiveTimeOutVal;/* maximum time to wait for APDU response */
 
   SyncEvent   mPwrLinkCtrlEvent;
   tNFA_HANDLE EE_HANDLE_0xF4;   //handle to secure element in slot 1
@@ -112,7 +112,7 @@ void getEeHandleList(tNFA_HANDLE *list, uint8_t* count);
   bool    mGetAtrRspwait;
   bool    mAbortEventWaitOk;
   bool    mIsPiping;              //is a pipe connected to the controller?
-
+  uint8_t mTransceiveStatus;      /* type to indicate the status of transceive sent*/
   tNFA_HCI_GET_GATE_PIPE_LIST mHciCfg;
   tNFA_STATUS mCommandStatus;     //completion status of the last command
   tNFA_HANDLE     mNfaHciHandle;          //NFA handle to NFA's HCI component
@@ -144,9 +144,14 @@ void getEeHandleList(tNFA_HANDLE *list, uint8_t* count);
   uint8_t mVerInfo [3];
   uint8_t mAtrInfo[40];
   uint8_t mResponseData [MAX_RESPONSE_SIZE];
+  uint8_t mAtrRespData [EVT_ABORT_MAX_RSP_LEN];
+  uint8_t mAtrRespLen;
   uint8_t mNumEePresent;          // actual number of usable EE's
   uint8_t     mCreatedPipe;
   static uint8_t mStaticPipeProp;
+  Mutex           mMutex; // protects fields below
+  bool            mRfFieldIsOn; // last known RF field state
+  struct timespec mLastRfFieldToggle; // last time RF field went off
 
 
 struct mNfceeData
@@ -181,23 +186,9 @@ SecureElement();
 *******************************************************************************/
 static int decodeBerTlvLength(uint8_t* data, int index, int data_length);
 
-/*******************************************************************************
-**
-** Function:        notifyTransactionListenersOfAid
-**
-** Description:     Notify the NFC service about a transaction event from
-**                  secure element.
-**                  aid: Buffer contains application ID.
-**                  aidLen: Length of application ID.
-**
-** Returns:         None
-**
-*******************************************************************************/
-void notifyTransactionListenersOfAid(const uint8_t* aidBuffer,
-                                       uint8_t aidBufferLen,
-                                       const uint8_t* dataBuffer,
-                                       uint32_t dataBufferLen, uint32_t evtSrc);
+/*******************************************************************************/
 
+bool notifySeInitialized();
 /*******************************************************************************
 **
 ** Function:        nfaHciCallback
@@ -212,6 +203,7 @@ void notifyTransactionListenersOfAid(const uint8_t* aidBuffer,
 static void nfaHciCallback(tNFA_HCI_EVT event, tNFA_HCI_EVT_DATA* eventData);
 
 public:
+bool    mActivatedInListenMode; // whether we're activated in listen mode
 /*******************************************************************************
 **
 ** Function:        getInstance
@@ -285,6 +277,18 @@ bool transceive (uint8_t* xmitBuffer, int32_t xmitBufferSize, uint8_t* recvBuffe
 bool activate (jint seID);
 /*******************************************************************************
 **
+** Function:        getActiveSecureElementList
+**
+** Description:     Get the list of handles of all execution environments.
+**                  e: Java Virtual Machine.
+**
+** Returns:         List of handles of all execution environments.
+**
+*******************************************************************************/
+jintArray getActiveSecureElementList (JNIEnv* e);
+
+/*******************************************************************************
+**
 ** Function:        deactivate
 **
 ** Description:     Turn off the secure element.
@@ -313,7 +317,19 @@ tNFA_STATUS SecElem_EeModeSet(uint16_t handle, uint8_t mode);
 ** Returns:         Returns True if success
 **
 *******************************************************************************/
-bool getAtr(jint seID, uint8_t* recvBuffer, int32_t *recvBufferSize);
+bool apduGateReset(jint seID, uint8_t* recvBuffer, int32_t *recvBufferSize);
+
+/*******************************************************************************
+**
+** Function:        getAtrData
+**
+** Description:     Return stored GetAtr response
+**
+** Returns:         Returns True if success
+**
+*******************************************************************************/
+bool getAtr(uint8_t* recvBuffer, int32_t *recvBufferSize);
+
 /*******************************************************************************
  **
  ** Function:       SecElem_EeModeSet
@@ -324,6 +340,17 @@ bool getAtr(jint seID, uint8_t* recvBuffer, int32_t *recvBufferSize);
  **
  *******************************************************************************/
 bool SecEle_Modeset(uint8_t type);
+/*******************************************************************************
+ **
+ ** Function:        notifyRfFieldEvent
+ **
+ ** Description:     Notify the NFC service about RF field events from the stack.
+ **                  isActive: Whether any secure element is activated.
+ **
+ ** Returns:         None
+ **
+*******************************************************************************/
+    void notifyRfFieldEvent (bool isActive);
 /*******************************************************************************
 **
 ** Function:        initializeEeHandle
@@ -357,6 +384,16 @@ tNFA_HANDLE getEseHandleFromGenericId(jint eseId);
 bool getEeInfo ();
 /*******************************************************************************
 **
+** Function:        isRfFieldOn
+**
+** Description:     Can be used to determine if the SE is in an RF field
+**
+** Returns:         True if the SE is activated in an RF field
+**
+*******************************************************************************/
+bool isRfFieldOn();
+/*******************************************************************************
+**
 ** Function:        findEeByHandle
 **
 ** Description:     Find information about an execution environment.
@@ -368,6 +405,17 @@ bool getEeInfo ();
 tNFA_EE_INFO *findEeByHandle (tNFA_HANDLE eeHandle);
 /*******************************************************************************
 **
+** Function:        notifyListenModeState
+**
+** Description:     Notify the NFC service about whether the SE was activated
+**                  in listen mode.
+**                  isActive: Whether the secure element is activated.
+**
+** Returns:         None
+**
+*******************************************************************************/
+void notifyListenModeState (bool isActivated);
+/*******************************************************************************
 ** Function:        getActiveEeHandle
 **
 ** Description:     Get the handle of the active execution environment.
@@ -376,6 +424,16 @@ tNFA_EE_INFO *findEeByHandle (tNFA_HANDLE eeHandle);
 **
 *******************************************************************************/
 tNFA_HANDLE getActiveEeHandle (tNFA_HANDLE eeHandle);
+    /*******************************************************************************
+    **
+    ** Function         getLastRfFiledToggleTime
+    **
+    ** Description      Provides the last RF filed toggile timer
+    **
+    ** Returns          timespec
+    **
+    *******************************************************************************/
+    struct timespec getLastRfFiledToggleTime(void);
 /*******************************************************************************
 **
 ** Function         setNfccPwrConfig
@@ -426,4 +484,14 @@ uint8_t getGateAndPipeList();
 **
 *******************************************************************************/
 void finalize();
+/*******************************************************************************
+**
+** Function:        releasePendingTransceive
+**
+** Description:     release any pending transceive wait.
+**
+** Returns:         None.
+**
+*******************************************************************************/
+void releasePendingTransceive();
 };

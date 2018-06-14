@@ -30,6 +30,7 @@
 #include <nativehelper/ScopedPrimitiveArray.h>
 #include <nativehelper/ScopedUtfChars.h>
 #include <semaphore.h>
+#include "HciEventManager.h"
 #include "JavaClassConstants.h"
 #include "NfcAdaptation.h"
 #include "NfcJniUtil.h"
@@ -41,6 +42,7 @@
 #include "SyncEvent.h"
 #include "nfc_config.h"
 #if(NXP_EXTNS == TRUE)
+#include "MposManager.h"
 #include "nfca_version.h"
 #include "SecureElement.h"
 #include "DwpChannel.h"
@@ -56,16 +58,8 @@
 #include "phNxpExtns.h"
 #include "rw_api.h"
 
-
-
-
 using android::base::StringPrintf;
 
-extern const uint8_t nfca_version_string[];
-extern const uint8_t nfa_version_string[];
-#if(NXP_EXTNS == TRUE)
-extern bool nfc_debug_enabled;
-#endif
 extern tNFA_DM_DISC_FREQ_CFG* p_nfa_dm_rf_disc_freq_cfg;  // defined in stack
 namespace android {
 extern bool gIsTagDeactivating;
@@ -76,6 +70,7 @@ extern void nativeNfcTag_notifyRfTimeout();
 extern void nativeNfcTag_doConnectStatus(jboolean is_connect_ok);
 extern void nativeNfcTag_doDeactivateStatus(int status);
 extern void nativeNfcTag_doWriteStatus(jboolean is_write_ok);
+extern jboolean nativeNfcTag_doDisconnect(JNIEnv*, jobject);
 extern void nativeNfcTag_doCheckNdefResult(tNFA_STATUS status,
                                            uint32_t max_size,
                                            uint32_t current_size,
@@ -110,7 +105,19 @@ IChannel_t Dwp;
 bool gActivated = false;
 SyncEvent gDeactivatedEvent;
 SyncEvent sNfaSetPowerSubState;
-
+#if(NXP_EXTNS == TRUE)
+/*Structure to store  discovery parameters*/
+typedef struct discovery_Parameters
+{
+    int technologies_mask;
+    bool enable_lptd;
+    bool reader_mode;
+    bool enable_p2p;
+    bool enable_host_routing;
+    bool restart;
+}discovery_Parameters_t;
+discovery_Parameters_t mDiscParams;
+#endif
 namespace android {
 jmethodID gCachedNfcManagerNotifyNdefMessageListeners;
 jmethodID gCachedNfcManagerNotifyTransactionListeners;
@@ -136,7 +143,15 @@ const char* gNativeNfcManagerClassName =
 #if (NXP_EXTNS == TRUE)
 const char* gNativeNfcSecureElementClassName =
     "com/android/nfc/dhimpl/NativeNfcSecureElement";
+const char*             gNativeNfcMposManagerClassName       =
+    "com/android/nfc/dhimpl/NativeNfcMposManager";
+    void                    enableLastRfDiscovery();
+    void                    storeLastDiscoveryParams(int technologies_mask, bool enable_lptd,
+                                bool reader_mode,  bool enable_host_routing ,bool enable_p2p, bool restart);
 #endif
+jmethodID  gCachedNfcManagerNotifySeListenActivated;
+jmethodID  gCachedNfcManagerNotifySeListenDeactivated;
+jmethodID  gCachedNfcManagerNotifySeInitialized;
 void doStartupConfig();
 void startStopPolling(bool isStartPolling);
 void startRfDiscovery(bool isStart);
@@ -184,7 +199,9 @@ static void nfaDeviceManagementCallback(uint8_t event,
                                         tNFA_DM_CBACK_DATA* eventData);
 static bool isPeerToPeer(tNFA_ACTIVATED& activated);
 static bool isListenMode(tNFA_ACTIVATED& activated);
+#if (NXP_EXTNS==FALSE)
 static void enableDisableLptd(bool enable);
+#endif
 static tNFA_STATUS stopPolling_rfDiscoveryDisabled();
 static tNFA_STATUS startPolling_rfDiscoveryDisabled(
     tNFA_TECHNOLOGY_MASK tech_mask);
@@ -198,9 +215,9 @@ static int NFA_SCREEN_POLLING_TAG_MASK = 0x10;
 static bool gIsDtaEnabled = false;
 /////////////////////////////////////////////////////////////
 /////////////////////////////////////////////////////////////
-#if (NXP_EXTNS != TRUE)
+
 bool nfc_debug_enabled;
-#endif
+
 namespace {
 void initializeGlobalDebugEnabledFlag() {
   nfc_debug_enabled =
@@ -375,11 +392,25 @@ static void nfaConnectionCallback(uint8_t connEvent,
         nativeNfcTag_doConnectStatus(true);
         break;
       }
+#if(NXP_EXTNS == TRUE)
+      if(nfcFL.nfcNxpEse) {
+          if(nfcFL.eseFL._ESE_ETSI_READER_ENABLE) {
+     /*
+                     * Handle Reader over SWP START_READER_EVENT
+     * */
+          if(eventData->activated.activate_ntf.intf_param.type == NCI_INTERFACE_UICC_DIRECT ||
+                          eventData->activated.activate_ntf.intf_param.type == NCI_INTERFACE_ESE_DIRECT)
+          {
+             MposManager::getInstance().setEtsiReaederState(STATE_SE_RDR_MODE_ACTIVATED);
+             MposManager::getInstance().notifyEEReaderEvent(ETSI_READER_ACTIVATED);
+             break;
+          }
+        }
+     }
+#endif
       NfcTag::getInstance().setActive(true);
       if (sIsDisabling || !sIsNfaEnabled) break;
       gActivated = true;
-
-      initializeGlobalDebugEnabledFlag();
 
       NfcTag::getInstance().setActivationState();
       if (gIsSelectingRfInterface) {
@@ -421,6 +452,9 @@ static void nfaConnectionCallback(uint8_t connEvent,
         // listen mode then it is likely for an SE transaction.
         // Send the RF Event.
         if (isListenMode(eventData->activated)) {
+#if(NXP_EXTNS == TRUE)
+          SecureElement::getInstance().notifyListenModeState (true);
+#endif
           sSeRfActive = true;
         }
       }
@@ -455,6 +489,9 @@ static void nfaConnectionCallback(uint8_t connEvent,
           (eventData->deactivated.type == NFA_DEACTIVATE_TYPE_DISCOVERY)) {
         if (sSeRfActive) {
           sSeRfActive = false;
+#if(NXP_EXTNS == TRUE)
+          SecureElement::getInstance().notifyListenModeState (false);
+#endif
         } else if (sP2pActive) {
           sP2pActive = false;
           // Make sure RF field events are re-enabled
@@ -644,6 +681,7 @@ static void nfaConnectionCallback(uint8_t connEvent,
 **
 *******************************************************************************/
 static jboolean nfcManager_initNativeStruc(JNIEnv* e, jobject o) {
+  initializeGlobalDebugEnabledFlag();
   DLOG_IF(INFO, nfc_debug_enabled) << StringPrintf("%s: enter", __func__);
 
   nfc_jni_native_data* nat =
@@ -661,7 +699,9 @@ static jboolean nfcManager_initNativeStruc(JNIEnv* e, jobject o) {
   ScopedLocalRef<jclass> cls(e, e->GetObjectClass(o));
   jfieldID f = e->GetFieldID(cls.get(), "mNative", "J");
   e->SetLongField(o, f, (jlong)nat);
-
+#if(NXP_EXTNS == TRUE)
+  MposManager::initMposNativeStruct(e, o);
+#endif
   /* Initialize native cached references */
   gCachedNfcManagerNotifyNdefMessageListeners =
       e->GetMethodID(cls.get(), "notifyNdefMessageListeners",
@@ -690,6 +730,14 @@ static jboolean nfcManager_initNativeStruc(JNIEnv* e, jobject o) {
   gCachedNfcManagerNotifyRfFieldDeactivated =
       e->GetMethodID(cls.get(), "notifyRfFieldDeactivated", "()V");
 
+  gCachedNfcManagerNotifySeListenActivated =
+      e->GetMethodID(cls.get(),"notifySeListenActivated", "()V");
+  gCachedNfcManagerNotifySeListenDeactivated =
+      e->GetMethodID(cls.get(),"notifySeListenDeactivated", "()V");
+  gCachedNfcManagerNotifyTransactionListeners = e->GetMethodID(
+      cls.get(), "notifyTransactionListeners", "([B[BLjava/lang/String;)V");
+  gCachedNfcManagerNotifySeInitialized =
+      e->GetMethodID(cls.get(),"notifySeInitialized", "()V");
   if (nfc_jni_cache_object(e, gNativeNfcTagClassName, &(nat->cached_NfcTag)) ==
       -1) {
     LOG(ERROR) << StringPrintf("%s: fail cache NativeNfcTag", __func__);
@@ -774,7 +822,11 @@ void nfaDeviceManagementCallback(uint8_t dmEvent,
       DLOG_IF(INFO, nfc_debug_enabled) << StringPrintf(
           "%s: NFA_DM_RF_FIELD_EVT; status=0x%X; field status=%u", __func__,
           eventData->rf_field.status, eventData->rf_field.rf_field_status);
-      if (!sP2pActive && eventData->rf_field.status == NFA_STATUS_OK) {
+#if(NXP_EXTNS == TRUE)
+      SecureElement::getInstance().notifyRfFieldEvent (
+                    eventData->rf_field.rf_field_status == NFA_DM_RF_FIELD_ON);
+#endif
+if (!sP2pActive && eventData->rf_field.status == NFA_STATUS_OK) {
         struct nfc_jni_native_data* nat = getNative(NULL, NULL);
         JNIEnv* e = NULL;
         ScopedAttach attach(nat->vm, &e);
@@ -859,7 +911,14 @@ void nfaDeviceManagementCallback(uint8_t dmEvent,
       break;
   }
 }
-
+#if(NXP_EXTNS == TRUE)
+static jintArray nfcManager_getActiveSecureElementList(JNIEnv *e, jobject o)
+{
+    (void)e;
+    (void)o;
+    return SecureElement::getInstance().getActiveSecureElementList(e);
+}
+#endif
 /*******************************************************************************
 **
 ** Function:        nfcManager_sendRawFrame
@@ -1024,6 +1083,8 @@ static jint nfcManager_doRegisterT3tIdentifier(JNIEnv* e, jobject,
 
   DLOG_IF(INFO, nfc_debug_enabled)
       << StringPrintf("%s: handle=%d", __func__, handle);
+  if (handle != NFA_HANDLE_INVALID)
+    RoutingManager::getInstance().commitRouting();
   DLOG_IF(INFO, nfc_debug_enabled) << StringPrintf("%s: exit", __func__);
 
   return handle;
@@ -1047,6 +1108,7 @@ static void nfcManager_doDeregisterT3tIdentifier(JNIEnv*, jobject,
       << StringPrintf("%s: enter; handle=%d", __func__, handle);
 
   RoutingManager::getInstance().deregisterT3tIdentifier(handle);
+  RoutingManager::getInstance().commitRouting();
 
   DLOG_IF(INFO, nfc_debug_enabled) << StringPrintf("%s: exit", __func__);
 }
@@ -1085,9 +1147,7 @@ static jboolean nfcManager_doInitialize(JNIEnv* e, jobject o) {
 #if (NXP_EXTNS == TRUE)
   tNFA_MW_VERSION mwVer;
 #endif
-  DLOG_IF(INFO, nfc_debug_enabled)
-      << StringPrintf("%s: enter; ver=%s nfa=%s NCI_VERSION=0x%02X", __func__,
-                      nfca_version_string, nfa_version_string, NCI_VERSION);
+  initializeGlobalDebugEnabledFlag();
   tNFA_STATUS stat = NFA_STATUS_OK;
 
   PowerSwitch& powerSwitch = PowerSwitch::getInstance();
@@ -1134,7 +1194,10 @@ static jboolean nfcManager_doInitialize(JNIEnv* e, jobject o) {
         NfcTag::getInstance().initialize(getNative(e, o));
         PeerToPeer::getInstance().initialize();
         PeerToPeer::getInstance().handleNfcOnOff(true);
-
+        HciEventManager::getInstance().initialize(getNative(e, o));
+#if(NXP_EXTNS == TRUE)
+        MposManager::getInstance().initialize(getNative(e, o));
+#endif
         /////////////////////////////////////////////////////////////////////////////////
         // Add extra configuration here (work-arounds, etc.)
 
@@ -1245,7 +1308,56 @@ static void nfcManager_enableDiscovery(JNIEnv* e, jobject o,
                                        jboolean enable_p2p, jboolean restart) {
   tNFA_TECHNOLOGY_MASK tech_mask = DEFAULT_TECH_MASK;
   struct nfc_jni_native_data* nat = getNative(e, o);
+#if(NXP_EXTNS == TRUE)
+  storeLastDiscoveryParams(technologies_mask, enable_lptd,
+        reader_mode, enable_host_routing ,enable_p2p, restart);
+  tNFA_STATUS status = NFA_STATUS_OK;
+  tNFA_TECHNOLOGY_MASK etsi_tech_mask = 0;
+    if((nfcFL.nfcNxpEse && nfcFL.eseFL._ESE_ETSI_READER_ENABLE) &&
+            (MposManager::getInstance().getEtsiReaederState() == STATE_SE_RDR_MODE_STARTED)) {
+        DLOG_IF(INFO, nfc_debug_enabled)
+      << StringPrintf("%s: enter STATE_SE_RDR_MODE_START_CONFIG", __func__);
+        Rdr_req_ntf_info_t mSwp_info = MposManager::getInstance().getSwpRrdReqInfo();
+        {
+            SyncEventGuard guard (android::sNfaEnableDisablePollingEvent);
+            DLOG_IF(INFO, nfc_debug_enabled)
+      << StringPrintf("%s: disable polling", __func__);
+            status = NFA_DisablePolling ();
+            if (status == NFA_STATUS_OK)
+            {
+                android::sNfaEnableDisablePollingEvent.wait (); //wait for NFA_POLL_DISABLED_EVT
+            }
+            else
+            {
+                DLOG_IF(INFO, nfc_debug_enabled)
+      << StringPrintf("%s: fail disable polling; error=0x%X", __func__, status);
+            }
+        }
 
+        if(mSwp_info.swp_rd_req_info.tech_mask & NFA_TECHNOLOGY_MASK_A)
+            etsi_tech_mask |= NFA_TECHNOLOGY_MASK_A;
+        if(mSwp_info.swp_rd_req_info.tech_mask & NFA_TECHNOLOGY_MASK_B)
+            etsi_tech_mask |= NFA_TECHNOLOGY_MASK_B;
+
+        {
+            SyncEventGuard guard (android::sNfaEnableDisablePollingEvent);
+            status = NFA_EnablePolling (etsi_tech_mask);
+            if (status == NFA_STATUS_OK)
+            {
+                DLOG_IF(INFO, nfc_debug_enabled)
+      << StringPrintf("%s: wait for enable event", __func__);
+                android::sNfaEnableDisablePollingEvent.wait (); //wait for NFA_POLL_ENABLED_EVT
+            }
+            else
+            {
+                DLOG_IF(INFO, nfc_debug_enabled)
+      << StringPrintf("%s: fail enable polling; error=0x%X", __func__, status);
+            }
+        }
+        startRfDiscovery (true);
+        return;
+    }
+#endif
   if (technologies_mask == -1 && nat)
     tech_mask = (tNFA_TECHNOLOGY_MASK)nat->tech_mask;
   else if (technologies_mask != -1)
@@ -1268,7 +1380,9 @@ static void nfcManager_enableDiscovery(JNIEnv* e, jobject o,
   // Check polling configuration
   if (tech_mask != 0) {
     stopPolling_rfDiscoveryDisabled();
+#if (NXP_EXTNS==FALSE)
     enableDisableLptd(enable_lptd);
+#endif
     startPolling_rfDiscoveryDisabled(tech_mask);
 
     // Start P2P listening if tag polling was enabled
@@ -1338,6 +1452,25 @@ void nfcManager_disableDiscovery(JNIEnv* e, jobject o) {
   DLOG_IF(INFO, nfc_debug_enabled) << StringPrintf("%s: enter;", __func__);
 
   pn544InteropAbortNow();
+#if(NXP_EXTNS == TRUE)
+    if(nfcFL.nfcNxpEse && nfcFL.eseFL._ESE_ETSI_READER_ENABLE) {
+        if(MposManager::getInstance().getEtsiReaederState() == STATE_SE_RDR_MODE_START_IN_PROGRESS)
+        {
+            Rdr_req_ntf_info_t mSwp_info = MposManager::getInstance().getSwpRrdReqInfo();
+            //        if(android::isDiscoveryStarted() == true)
+            android::startRfDiscovery(false);
+            {
+                status = NFA_CeConfigureUiccListenTech (mSwp_info.swp_rd_req_info.src, 0x00);
+            }
+            goto TheEnd;
+        }
+        else if(MposManager::getInstance().getEtsiReaederState() == STATE_SE_RDR_MODE_STOP_IN_PROGRESS)
+        {
+            android::startRfDiscovery(false);
+            goto TheEnd;
+        }
+    }
+#endif
   if (sDiscoveryEnabled == false) {
     DLOG_IF(INFO, nfc_debug_enabled)
         << StringPrintf("%s: already disabled", __func__);
@@ -1358,7 +1491,7 @@ void nfcManager_disableDiscovery(JNIEnv* e, jobject o) {
 TheEnd:
   DLOG_IF(INFO, nfc_debug_enabled) << StringPrintf("%s: exit", __func__);
 }
-
+#if (NXP_EXTNS==FALSE)
 void enableDisableLptd(bool enable) {
   // This method is *NOT* thread-safe. Right now
   // it is only called from the same thread so it's
@@ -1404,7 +1537,7 @@ void enableDisableLptd(bool enable) {
                                __func__);
   return;
 }
-
+#endif
 /*******************************************************************************
 **
 ** Function:        nfcManager_doCreateLlcpServiceSocket
@@ -1527,7 +1660,10 @@ static jboolean nfcManager_doDeinitialize(JNIEnv*, jobject) {
   pn544InteropAbortNow();
   RoutingManager::getInstance().onNfccShutdown();
   PowerSwitch::getInstance().initialize(PowerSwitch::UNKNOWN_LEVEL);
-
+  HciEventManager::getInstance().finalize();
+#if (NXP_EXTNS == TRUE)
+  SecureElement::getInstance().releasePendingTransceive();
+#endif
   if (sIsNfaEnabled) {
     SyncEventGuard guard(sNfaDisableEvent);
     EXTNS_Close();
@@ -1967,8 +2103,8 @@ static void nfcManager_doSetScreenState(JNIEnv* e, jobject o,
       NCI_LISTEN_DH_NFCEE_ENABLE_MASK | NCI_POLLING_DH_ENABLE_MASK;
 
   DLOG_IF(INFO, nfc_debug_enabled)
-      << StringPrintf("%s: state = %d discovry_param = %d", __FUNCTION__, state,
-                      discovry_param);
+      << StringPrintf("%s: state = %d prevScreenState= %d, discovry_param = %d",
+                      __FUNCTION__, state, prevScreenState, discovry_param);
 
   if (sIsDisabling || !sIsNfaEnabled ||
       (NFC_GetNCIVersion() != NCI_VERSION_2_0))
@@ -2034,6 +2170,13 @@ static void nfcManager_doSetScreenState(JNIEnv* e, jobject o,
       sNfaSetPowerSubState.wait();
     }
   }
+  if ((state == NFA_SCREEN_STATE_OFF_LOCKED ||
+       state == NFA_SCREEN_STATE_OFF_UNLOCKED) &&
+      prevScreenState == NFA_SCREEN_STATE_ON_UNLOCKED) {
+    // screen turns off, disconnect tag if connected
+    nativeNfcTag_doDisconnect(NULL, NULL);
+  }
+
   prevScreenState = state;
 }
 /*******************************************************************************
@@ -2230,8 +2373,9 @@ static JNINativeMethod gMethods[] = {
             (void *)nfcManager_doCheckJcopDlAtBoot},
      {"JCOSDownload", "()I",
             (void *)nfcManager_doJcosDownload},
+     {"doGetActiveSecureElementList", "()[I",
+            (void *)nfcManager_getActiveSecureElementList},
 #endif
-
 };
 
 /*******************************************************************************
@@ -2271,7 +2415,7 @@ void startRfDiscovery(bool isStart) {
   SyncEventGuard guard(sNfaEnableDisablePollingEvent);
   status = isStart ? NFA_StartRfDiscovery() : NFA_StopRfDiscovery();
   if (status == NFA_STATUS_OK) {
-    sNfaEnableDisablePollingEvent.wait();  // wait for NFA_RF_DISCOVERY_xxxx_EVT
+    sNfaEnableDisablePollingEvent.wait (); //wait for NFA_RF_DISCOVERY_xxxx_EVT
     sRfEnabled = isStart;
   } else {
     LOG(ERROR) << StringPrintf(
@@ -2301,11 +2445,12 @@ bool isDiscoveryStarted() { return sRfEnabled; }
 **
 *******************************************************************************/
 void doStartupConfig() {
-  struct nfc_jni_native_data* nat = getNative(0, 0);
+#if (NXP_EXTNS == FALSE)
+ struct nfc_jni_native_data* nat = getNative(0, 0);
   tNFA_STATUS stat = NFA_STATUS_FAILED;
 
-  // If polling for Active mode, set the ordering so that we choose Active over
-  // Passive mode first.
+   //If polling for Active mode, set the ordering so that we choose Active over
+   //Passive mode first.
   if (nat && (nat->tech_mask &
               (NFA_TECHNOLOGY_MASK_A_ACTIVE | NFA_TECHNOLOGY_MASK_F_ACTIVE))) {
     uint8_t act_mode_order_param[] = {0x01};
@@ -2314,7 +2459,7 @@ void doStartupConfig() {
                          &act_mode_order_param[0]);
     if (stat == NFA_STATUS_OK) sNfaSetConfigEvent.wait();
   }
-
+#endif
   // configure RF polling frequency for each technology
   static tNFA_DM_DISC_FREQ_CFG nfa_dm_disc_freq_cfg;
   // values in the polling_frequency[] map to members of nfa_dm_disc_freq_cfg
@@ -2527,6 +2672,33 @@ static int nfcManager_doJcosDownload(JNIEnv* /* e */, jobject /* o */)
         startRfDiscovery (true);
     }
       return status;
+}
+
+void enableLastRfDiscovery()
+{
+    DLOG_IF(INFO, nfc_debug_enabled)
+      << StringPrintf("%s: enter", __FUNCTION__);
+    RoutingManager::getInstance().configureOffHostNfceeTechMask();
+    nfcManager_enableDiscovery(NULL, NULL,
+        mDiscParams.technologies_mask,
+        mDiscParams.enable_lptd,
+        mDiscParams.reader_mode,
+        mDiscParams.enable_host_routing,
+        mDiscParams.enable_p2p,
+        true);
+}
+
+void storeLastDiscoveryParams(int technologies_mask, bool enable_lptd,
+    bool reader_mode, bool enable_host_routing ,bool enable_p2p, bool restart)
+{
+    DLOG_IF(INFO, nfc_debug_enabled)
+      << StringPrintf("%s: enter", __FUNCTION__);
+    mDiscParams.technologies_mask = technologies_mask;
+    mDiscParams.enable_lptd = enable_lptd;
+    mDiscParams.reader_mode = reader_mode;
+    mDiscParams.enable_p2p = enable_p2p;
+    mDiscParams.enable_host_routing = enable_host_routing;
+    mDiscParams.restart = restart;
 }
 #endif
 

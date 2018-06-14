@@ -47,7 +47,17 @@ public interface DeviceHost {
         public void onHostCardEmulationActivated(int technology);
         public void onHostCardEmulationData(int technology, byte[] data);
         public void onHostCardEmulationDeactivated(int technology);
+        /**
+         * Notifies that the SE has been activated in listen mode
+         */
+        public void onSeListenActivated();
 
+        /**
+         * Notifies that the SE has been deactivated
+         */
+        public void onSeListenDeactivated();
+
+        public void onSeInitialized();
         /**
          * Notifies P2P Device detected, to activate LLCP link
          */
@@ -63,6 +73,22 @@ public interface DeviceHost {
         public void onRemoteFieldActivated();
 
         public void onRemoteFieldDeactivated();
+        /**
+         * Notifies SWP Reader Events.
+         */
+        public void onETSIReaderRequestedEvent(boolean istechA, boolean istechB);
+
+        public void onETSIReaderRequestedFail(int FailCause);
+
+        public void onETSIReaderModeStartConfig(int eeHandle);
+
+        public void onETSIReaderModeStopConfig(int disc_ntf_timeout);
+
+        public void onETSIReaderModeSwpTimeout(int disc_ntf_timeout);
+
+        public void onETSIReaderModeRestart();
+
+        public void onNfcTransactionEvent(byte[] aid, byte[] data, String seName);
     }
 
     public interface TagEndpoint {
@@ -198,6 +224,7 @@ public interface DeviceHost {
 
     public void disableDiscovery();
 
+    public int[] doGetActiveSecureElementList();
     public boolean sendRawFrame(byte[] data);
 
     public boolean routeAid(byte[] aid, int route, int aidInfo, int powerState);
@@ -272,6 +299,26 @@ public interface DeviceHost {
     boolean disableScreenOffSuspend();
 
     public void doSetScreenState(int screen_state_mask);
+
+    void setEtsiReaederState(int newState);
+
+    int getEtsiReaederState();
+
+    void etsiReaderConfig(int eeHandle);
+
+    void etsiResetReaderConfig();
+
+    void notifyEEReaderEvent(int evt);
+
+    void etsiInitConfig();
+
+    void stopPoll(int mode);
+
+    void startPoll();
+
+    int mposSetReaderMode(boolean on);
+
+    boolean mposGetReaderMode();
 
     public int getNciVersion();
 

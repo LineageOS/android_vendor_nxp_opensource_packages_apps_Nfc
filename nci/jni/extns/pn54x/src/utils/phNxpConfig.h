@@ -58,6 +58,9 @@ int isNxpConfigModified();
 #define NAME_NXP_LOADER_SERICE_VERSION "NXP_LOADER_SERVICE_VERSION"
 /* default configuration */
 #define default_storage_location "/data/nfc"
+#if(NXP_EXTNS == TRUE)
+#define NAME_NFA_CONFIG_FORMAT              "NFA_CONFIG_FORMAT"
+#endif
 
 /**
  *  @brief defines the different config files used.

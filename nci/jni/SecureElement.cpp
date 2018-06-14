@@ -35,11 +35,14 @@
 #include "phNxpConfig.h"
 #include "nfc_config.h"
 #include "RoutingManager.h"
+#include "HciEventManager.h"
 using android::base::StringPrintf;
 
 SecureElement SecureElement::sSecElem;
 const char* SecureElement::APP_NAME = "nfc_jni";
+extern bool nfc_debug_enabled;
 
+#include "MposManager.h"
 namespace android
 {
 extern void startRfDiscovery (bool isStart);
@@ -59,11 +62,14 @@ SecureElement::SecureElement() :
     mNativeData(NULL),
     mbNewEE (true),
     mIsInit (false),
-    mNewSourceGate (0)
+    mNewSourceGate (0),
+    mRfFieldIsOn(false),
+    mActivatedInListenMode (false)
 {
     memset (&mEeInfo, 0, nfcFL.nfccFL._NFA_EE_MAX_EE_SUPPORTED *sizeof(tNFA_EE_INFO));
     memset (mAidForEmptySelect, 0, sizeof(mAidForEmptySelect));
     memset (&mHciCfg, 0, sizeof(mHciCfg));
+    memset (&mLastRfFieldToggle, 0, sizeof(mLastRfFieldToggle));
 }
 /*******************************************************************************
 **
@@ -102,7 +108,7 @@ bool SecureElement::initialize(nfc_jni_native_data* native) {
     mbNewEE         = true;
     mNewPipeId      = 0;
     mNewSourceGate  = 0;
-
+    unsigned long val = 0;
     memset (mEeInfo, 0, sizeof(mEeInfo));
     memset (&mHciCfg, 0, sizeof(mHciCfg));
     memset(mAidForEmptySelect, 0, sizeof(mAidForEmptySelect));
@@ -110,6 +116,15 @@ bool SecureElement::initialize(nfc_jni_native_data* native) {
     {
         muicc2_selected = UICC2_ID;
     }
+    if (GetNxpNumValue(NAME_NXP_SMB_TRANSCEIVE_TIMEOUT, &val, sizeof(val)) == true)
+    {
+        SmbTransceiveTimeOutVal = val;
+    }
+    else
+    {
+        SmbTransceiveTimeOutVal = WIRED_MODE_TRANSCEIVE_TIMEOUT;
+    }
+    LOG(INFO) << StringPrintf("%s: SMB transceive timeout %d", fn, SmbTransceiveTimeOutVal);
     initializeEeHandle();
 
     // Get Fresh EE info.
@@ -180,118 +195,109 @@ jint SecureElement::getGenericEseId(tNFA_HANDLE handle) {
     LOG(INFO) << StringPrintf("%s: exit; ESE-Generic-ID = 0x%02X", fn, ret);
     return ret;
 }
-
 /*******************************************************************************
 **
-** Function:        notifyTransactionListenersOfAid
+** Function         TimeDiff
 **
-** Description:     Notify the NFC service about a transaction event from
-**                  secure element.
-**                  aid: Buffer contains application ID.
-**                  aidLen: Length of application ID.
+** Description      Computes time difference in milliseconds.
+**
+** Returns          Time difference in milliseconds
+**
+*******************************************************************************/
+static uint32_t TimeDiff(timespec start, timespec end)
+{
+    end.tv_sec -= start.tv_sec;
+    end.tv_nsec -= start.tv_nsec;
+
+    if (end.tv_nsec < 0) {
+        end.tv_nsec += 10e8;
+        end.tv_sec -=1;
+    }
+
+    return (end.tv_sec * 1000) + (end.tv_nsec / 10e5);
+}
+/*******************************************************************************
+**
+** Function:        isRfFieldOn
+**
+** Description:     Can be used to determine if the SE is in an RF field
+**
+** Returns:         True if the SE is activated in an RF field
+**
+*******************************************************************************/
+bool SecureElement::isRfFieldOn() {
+    AutoMutex mutex(mMutex);
+    if (mRfFieldIsOn) {
+        return true;
+    }
+    struct timespec now;
+    int ret = clock_gettime(CLOCK_MONOTONIC, &now);
+    if (ret == -1) {
+        DLOG_IF(ERROR, nfc_debug_enabled)
+                << StringPrintf("isRfFieldOn(): clock_gettime failed");
+        return false;
+    }
+    if (TimeDiff(mLastRfFieldToggle, now) < 50) {
+        // If it was less than 50ms ago that RF field
+        // was turned off, still return ON.
+        return true;
+    } else {
+        return false;
+    }
+}
+/*******************************************************************************
+**
+** Function:        notifyListenModeState
+**
+** Description:     Notify the NFC service about whether the SE was activated
+**                  in listen mode.
+**                  isActive: Whether the secure element is activated.
 **
 ** Returns:         None
 **
 *******************************************************************************/
-void SecureElement::notifyTransactionListenersOfAid(const uint8_t* aidBuffer,
-                                                    uint8_t aidBufferLen,
-                                                    const uint8_t* dataBuffer,
-                                                    uint32_t dataBufferLen,
-                                                    uint32_t evtSrc) {
-{
-        static const char fn [] = "SecureElement::notifyTransactionListenersOfAid";
+void SecureElement::notifyListenModeState (bool isActivated) {
+    static const char fn [] = "SecureElement::notifyListenMode";
 
-        if (aidBufferLen == 0) {
-            return;
-        }
+    DLOG_IF(INFO, nfc_debug_enabled)
+                << StringPrintf("%s: enter; listen mode active=%u", fn, isActivated);
 
-        JNIEnv* e = NULL;
-        ScopedAttach attach(mNativeData->vm, &e);
-        if (e == NULL)
-        {
-            LOG(ERROR) << StringPrintf("%s: jni env is null", fn);
-            return;
-        }
-
-        const uint16_t tlvMaxLen = aidBufferLen + 10;
-        uint8_t* tlv = new uint8_t [tlvMaxLen];
-        if (tlv == NULL)
-        {
-            LOG(ERROR) << StringPrintf("%s: fail allocate tlv", fn);
-            return;
-        }
-
-        memcpy (tlv, aidBuffer, aidBufferLen);
-        uint16_t tlvActualLen = aidBufferLen;
-
-        ScopedLocalRef<jobject> tlvJavaArray(e, e->NewByteArray(tlvActualLen));
-        if (tlvJavaArray.get() == NULL)
-        {
-            LOG(ERROR) << StringPrintf("%s: fail allocate array", fn);
-            goto TheEnd;
-        }
-
-        e->SetByteArrayRegion ((jbyteArray)tlvJavaArray.get(), 0, tlvActualLen, (jbyte *)tlv);
-        if (e->ExceptionCheck())
-        {
-            e->ExceptionClear();
-            LOG(ERROR) << StringPrintf("%s: fail fill array", fn);
-            goto TheEnd;
-        }
-
-        if(dataBufferLen > 0)
-        {
-            const uint32_t dataTlvMaxLen = dataBufferLen + 10;
-            uint8_t* datatlv = new uint8_t [dataTlvMaxLen];
-            if (datatlv == NULL)
-            {
-                LOG(ERROR) << StringPrintf("%s: fail allocate tlv", fn);
-                return;
-            }
-
-            memcpy (datatlv, dataBuffer, dataBufferLen);
-            uint16_t dataTlvActualLen = dataBufferLen;
-
-            ScopedLocalRef<jobject> dataTlvJavaArray(e, e->NewByteArray(dataTlvActualLen));
-            if (dataTlvJavaArray.get() == NULL)
-            {
-                LOG(ERROR) << StringPrintf("%s: fail allocate array", fn);
-                goto Clean;
-            }
-
-            e->SetByteArrayRegion ((jbyteArray)dataTlvJavaArray.get(), 0, dataTlvActualLen, (jbyte *)datatlv);
-            if (e->ExceptionCheck())
-            {
-                e->ExceptionClear();
-                LOG(ERROR) << StringPrintf("%s: fail fill array", fn);
-                goto Clean;
-            }
-
-            e->CallVoidMethod (mNativeData->manager, android::gCachedNfcManagerNotifyTransactionListeners, tlvJavaArray.get(), dataTlvJavaArray.get(), evtSrc);
-            if (e->ExceptionCheck())
-            {
-                e->ExceptionClear();
-                LOG(ERROR) << StringPrintf("%s: fail notify", fn);
-                goto Clean;
-            }
-
-         Clean:
-            delete [] datatlv;
-        }
-        else
-        {
-            e->CallVoidMethod (mNativeData->manager, android::gCachedNfcManagerNotifyTransactionListeners, tlvJavaArray.get(), NULL, evtSrc);
-            if (e->ExceptionCheck())
-            {
-                e->ExceptionClear();
-                LOG(ERROR) << StringPrintf("%s: fail notify", fn);
-                goto TheEnd;
-            }
-        }
-    TheEnd:
-        delete [] tlv;
-        LOG(INFO) << StringPrintf("%s: exit", fn);
+    JNIEnv* e = NULL;
+    if (mNativeData == NULL)
+    {
+        DLOG_IF(ERROR, nfc_debug_enabled)
+                << StringPrintf("%s: mNativeData is null", fn);
+        return;
     }
+
+    ScopedAttach attach(mNativeData->vm, &e);
+    if (e == NULL)
+    {
+        DLOG_IF(ERROR, nfc_debug_enabled)
+                << StringPrintf("%s: jni env is null", fn);
+        return;
+    }
+
+    mActivatedInListenMode = isActivated;
+
+    if (mNativeData != NULL) {
+        if (isActivated) {
+            e->CallVoidMethod (mNativeData->manager, android::gCachedNfcManagerNotifySeListenActivated);
+        }
+        else {
+            e->CallVoidMethod (mNativeData->manager, android::gCachedNfcManagerNotifySeListenDeactivated);
+        }
+    }
+
+    if (e->ExceptionCheck())
+    {
+        e->ExceptionClear();
+        DLOG_IF(ERROR, nfc_debug_enabled)
+                << StringPrintf("%s: fail notify", fn);
+    }
+
+    DLOG_IF(INFO, nfc_debug_enabled)
+                << StringPrintf("%s: exit", fn);
 }
 
 /*******************************************************************************
@@ -377,7 +383,42 @@ TheEnd:
 
     return decoded_length;
 }
+/*******************************************************************************
+**
+** Function:        notifyRfFieldEvent
+**
+** Description:     Notify the NFC service about RF field events from the stack.
+**                  isActive: Whether any secure element is activated.
+**
+** Returns:         None
+**
+*******************************************************************************/
+void SecureElement::notifyRfFieldEvent (bool isActive)
+{
+    static const char fn [] = "SecureElement::notifyRfFieldEvent";
+    DLOG_IF(ERROR, nfc_debug_enabled)
+                << StringPrintf("%s: enter; is active=%u", fn, isActive);
 
+
+    mMutex.lock();
+    int ret = clock_gettime (CLOCK_MONOTONIC, &mLastRfFieldToggle);
+    if (ret == -1) {
+        DLOG_IF(ERROR, nfc_debug_enabled)
+                << StringPrintf("%s: clock_gettime failed", fn);
+        // There is no good choice here...
+    }
+    if (isActive)
+    {
+        mRfFieldIsOn = true;
+    }
+    else
+    {
+        mRfFieldIsOn = false;
+    }
+    mMutex.unlock();
+    DLOG_IF(ERROR, nfc_debug_enabled)
+                << StringPrintf("%s: exit", fn);
+}
 /*******************************************************************************
 **
 ** Function:        nfaHciCallback
@@ -480,6 +521,7 @@ void SecureElement::nfaHciCallback(tNFA_HCI_EVT event,
                     sSecElem.mTransceiveWaitOk = true;
                     sSecElem.mActualResponseSize = (eventData->apdu_rcvd.apdu_len > MAX_RESPONSE_SIZE) ? MAX_RESPONSE_SIZE : eventData->apdu_rcvd.apdu_len;
                 }
+            sSecElem.mTransceiveStatus = eventData->apdu_rcvd.status;
             sSecElem.mTransceiveEvent.notifyOne ();
             break;
         }
@@ -565,7 +607,7 @@ void SecureElement::nfaHciCallback(tNFA_HCI_EVT event,
                 sSecElem.mAbortEvent.notifyOne();
             }
         }
-        else if (eventData->rcvd_evt.evt_code == NFA_HCI_EVT_POST_DATA)
+        if (eventData->rcvd_evt.evt_code == NFA_HCI_EVT_POST_DATA)
         {
             LOG(INFO) << StringPrintf("%s: NFA_HCI_EVENT_RCVD_EVT; NFA_HCI_EVT_POST_DATA", fn);
             SyncEventGuard guard (sSecElem.mTransceiveEvent);
@@ -607,13 +649,24 @@ void SecureElement::nfaHciCallback(tNFA_HCI_EVT event,
                         dataStartPosition = 2+aidlen+5;
                     }
                     data  = &eventData->rcvd_evt.p_evt_buf[dataStartPosition];
-                    sSecElem.notifyTransactionListenersOfAid (&eventData->rcvd_evt.p_evt_buf[2],aidlen,data,datalen,evtSrc);
+
+                    if (nfcFL.nfcNxpEse && nfcFL.eseFL._ESE_ETSI_READER_ENABLE)
+                    {
+                        if(MposManager::getInstance().validateHCITransactionEventParams(data, datalen) == NFA_STATUS_OK)
+                            HciEventManager::getInstance().nfaHciCallback(event, eventData);
+                    }
+                    else
+                            HciEventManager::getInstance().nfaHciCallback(event, eventData);
                 }
                 else
                 {
                     LOG(ERROR) << StringPrintf("Event data TLV length encoding Unsupported!");
                 }
             }
+        }
+        else if(eventData->rcvd_evt.evt_code == NFA_HCI_EVT_INIT_COMPLETED) {
+            LOG(INFO) << StringPrintf("%s: NFA_HCI_EVT_INIT_COMPLETED; received", fn);
+            SecureElement::getInstance().notifySeInitialized();
         }
         else if (eventData->rcvd_evt.evt_code == NFA_HCI_EVT_CONNECTIVITY)
         {
@@ -642,6 +695,24 @@ void SecureElement::nfaHciCallback(tNFA_HCI_EVT event,
     }
 }
 
+bool SecureElement::notifySeInitialized() {
+    JNIEnv* e = NULL;
+    static const char fn [] = "SecureElement::notifySeInitialized";
+    ScopedAttach attach(mNativeData->vm, &e);
+    if (e == NULL)
+    {
+        DLOG_IF(ERROR, nfc_debug_enabled)
+            << StringPrintf("%s: jni env is null", fn);
+        return false;
+    }
+    if(mNativeData == NULL)
+    {
+        return false;
+    }
+    e->CallVoidMethod (mNativeData->manager, android::gCachedNfcManagerNotifySeInitialized);
+    CHECK(!e->ExceptionCheck());
+    return true;
+}
 /*******************************************************************************
 **
 ** Function:        transceive
@@ -666,6 +737,7 @@ bool SecureElement::transceive (uint8_t* xmitBuffer, int32_t xmitBufferSize, uin
     tNFA_STATUS nfaStat = NFA_STATUS_FAILED;
     bool isSuccess = false;
     mTransceiveWaitOk = false;
+    mTransceiveStatus = NFA_STATUS_OK;
     uint8_t newSelectCmd[NCI_MAX_AID_LEN + 10];
     isSuccess                  = false;
 
@@ -727,6 +799,15 @@ bool SecureElement::transceive (uint8_t* xmitBuffer, int32_t xmitBufferSize, uin
             goto TheEnd;
         }
     }
+    if(mTransceiveStatus == NFA_STATUS_HCI_WTX_TIMEOUT)
+    {
+        SyncEventGuard guard (mAbortEvent);
+        nfaStat = NFA_HciAbortApdu(mNfaHciHandle,mActiveEeHandle,4000);
+        if (nfaStat == NFA_STATUS_OK)
+        {
+            mAbortEvent.wait();
+        }
+    }
         if (mActualResponseSize > recvBufferMaxSize)
             recvBufferActualSize = recvBufferMaxSize;
         else
@@ -736,6 +817,57 @@ bool SecureElement::transceive (uint8_t* xmitBuffer, int32_t xmitBufferSize, uin
      isSuccess = true;
         TheEnd:
      return (isSuccess);
+}
+/*******************************************************************************
+**
+** Function:        getActiveSecureElementList
+**
+** Description:     Get the list of Activated Secure elements.
+**                  e: Java Virtual Machine.
+**
+** Returns:         List of Activated Secure elements.
+**
+*******************************************************************************/
+jintArray SecureElement::getActiveSecureElementList (JNIEnv* e)
+{
+    uint8_t num_of_nfcee_present = 0;
+    tNFA_HANDLE nfcee_handle[MAX_NFCEE];
+    tNFA_EE_STATUS nfcee_status[MAX_NFCEE];
+    jint seId = 0;
+    int cnt = 0;
+    int i;
+
+    if (! getEeInfo())
+        return (NULL);
+
+    num_of_nfcee_present = mNfceeData_t.mNfceePresent;
+
+    jintArray list = e->NewIntArray (num_of_nfcee_present); //allocate array
+
+    for(i = 1; i<= num_of_nfcee_present ; i++)
+    {
+        nfcee_handle[i] = mNfceeData_t.mNfceeHandle[i];
+        nfcee_status[i] = mNfceeData_t.mNfceeStatus[i];
+
+        if(nfcee_handle[i] == EE_HANDLE_0xF3 && nfcee_status[i] == NFC_NFCEE_STATUS_ACTIVE)
+        {
+            seId = getGenericEseId(EE_HANDLE_0xF3 & ~NFA_HANDLE_GROUP_EE);
+        }
+
+        if(nfcee_handle[i] == EE_HANDLE_0xF4 && nfcee_status[i] == NFC_NFCEE_STATUS_ACTIVE)
+        {
+            seId = getGenericEseId(EE_HANDLE_0xF4 & ~NFA_HANDLE_GROUP_EE);
+        }
+
+        if(nfcee_handle[i] == EE_HANDLE_0xF8 && nfcee_status[i] == NFC_NFCEE_STATUS_ACTIVE)
+        {
+            seId = getGenericEseId(EE_HANDLE_0xF8 & ~NFA_HANDLE_GROUP_EE);
+        }
+
+        e->SetIntArrayRegion (list, cnt++, 1, &seId);
+    }
+
+    return list;
 }
 /*******************************************************************************
 **
@@ -981,7 +1113,7 @@ void SecureElement::notifyModeSet (tNFA_HANDLE eeHandle, bool success, tNFA_EE_S
 ** Returns:         Returns True if success
 **
 *******************************************************************************/
-bool SecureElement::getAtr(jint seID, uint8_t* recvBuffer, int32_t *recvBufferSize)
+bool SecureElement::apduGateReset(jint seID, uint8_t* recvBuffer, int32_t *recvBufferSize)
 {
     static const char fn[] = "SecureElement::getAtr";
     tNFA_STATUS nfaStat = NFA_STATUS_FAILED;
@@ -991,10 +1123,9 @@ bool SecureElement::getAtr(jint seID, uint8_t* recvBuffer, int32_t *recvBufferSi
     if(nfcFL.nfcNxpEse) {
             /*ETSI 12 Gate Info ATR */
             mAbortEventWaitOk = false;
-            uint8_t mAtrInfo1[EVT_ABORT_MAX_RSP_LEN]={0};
-            uint8_t atr_len = EVT_ABORT_MAX_RSP_LEN;
             SyncEventGuard guard (mAbortEvent);
-            nfaStat = NFA_HciSendEvent(mNfaHciHandle, mNewPipeId, EVT_ABORT, 0, NULL, atr_len, mAtrInfo1, timeoutMillisec);
+            nfaStat = NFA_HciAbortApdu(mNfaHciHandle,mActiveEeHandle,timeoutMillisec);
+            if (nfaStat == NFA_STATUS_OK)
             {
                 mAbortEvent.wait();
             }
@@ -1006,12 +1137,41 @@ bool SecureElement::getAtr(jint seID, uint8_t* recvBuffer, int32_t *recvBufferSi
             else
             {
                 *recvBufferSize = mAtrInfolen;
+                mAtrRespLen = mAtrInfolen;
                 memcpy(recvBuffer, mAtrInfo, mAtrInfolen);
+                memset(mAtrRespData, 0, EVT_ABORT_MAX_RSP_LEN);
+                memcpy(mAtrRespData, mAtrInfo, mAtrInfolen);
             }
     }
 
     return (nfaStat == NFA_STATUS_OK)?true:false;
 }
+
+/*******************************************************************************
+**
+** Function:        getAtrData
+**
+** Description:     Stored GetAtr response
+**
+** Returns:         Returns True if success
+**
+*******************************************************************************/
+bool SecureElement::getAtr(uint8_t* recvBuffer, int32_t *recvBufferSize)
+{
+    static const char fn[] = "SecureElement::getAtrData";
+    tNFA_STATUS nfaStat = NFA_STATUS_FAILED;
+
+    LOG(INFO) << StringPrintf("%s: enter;", fn);
+
+    if(nfcFL.nfcNxpEse && mAtrRespLen != 0) {
+      *recvBufferSize = mAtrRespLen;
+      memcpy(recvBuffer, mAtrRespData, mAtrRespLen);
+      nfaStat = NFA_STATUS_OK;
+    }
+
+    return (nfaStat == NFA_STATUS_OK)?true:false;
+}
+
 /*******************************************************************************
 **
 ** Function:        SecEle_Modeset
@@ -1308,6 +1468,19 @@ uint8_t SecureElement::getGateAndPipeList()
 }
 /*******************************************************************************
 **
+** Function         getLastRfFiledToggleTime
+**
+** Description      Provides the last RF filed toggile timer
+**
+** Returns          timespec
+**
+*******************************************************************************/
+struct timespec SecureElement::getLastRfFiledToggleTime(void)
+{
+  return mLastRfFieldToggle;
+}
+/*******************************************************************************
+**
 ** Function:        finalize
 **
 ** Description:     Release all resources.
@@ -1318,4 +1491,25 @@ uint8_t SecureElement::getGateAndPipeList()
 void SecureElement::finalize() {
   mIsInit     = false;
   mNativeData = NULL;
+}
+
+/*******************************************************************************
+**
+** Function:        releasePendingTransceive
+**
+** Description:     release any pending transceive wait.
+**
+** Returns:         None.
+**
+*******************************************************************************/
+void SecureElement::releasePendingTransceive()
+{
+    static const char fn [] = "SecureElement::releasePendingTransceive";
+    LOG(INFO) << StringPrintf("%s: Entered", fn);
+    if(mIsWiredModeOpen)
+    {
+        SyncEventGuard guard (mTransceiveEvent);
+        mTransceiveEvent.notifyOne();
+    }
+    LOG(INFO) << StringPrintf("%s: Exit", fn);
 }
