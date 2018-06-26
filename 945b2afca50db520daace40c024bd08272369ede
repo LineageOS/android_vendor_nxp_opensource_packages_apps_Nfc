@@ -1,0 +1,21 @@
+{
+  "comments": [
+    {
+      "key": {
+        "uuid": "ffbe636d_fe6a6853",
+        "filename": "nci/jni/JcopManager.cpp",
+        "patchSetId": 1
+      },
+      "lineNbr": 83,
+      "author": {
+        "id": 4550
+      },
+      "writtenOn": "2018-06-26T14:05:31Z",
+      "side": 1,
+      "message": "Should fix the lib name again",
+      "revId": "945b2afca50db520daace40c024bd08272369ede",
+      "serverId": "1ec6b3db-b2c1-4fa4-84a2-4c7efe89ba71",
+      "unresolved": false
+    }
+  ]
+}
