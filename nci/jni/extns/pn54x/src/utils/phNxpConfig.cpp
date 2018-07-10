@@ -139,6 +139,10 @@ typedef enum
   TARGET_SDM670                        = 336, /**< SDM670 target */
   TARGET_SDM710                        = 360, /**< SDM710 target */
   TARGET_SDM630                        = 318, /**< SDM630 target */
+  TARGET_SDM632                        = 349, /**< SDM632 target */
+  TARGET_SDM439                        = 353, /**< SDM439 target */
+  TARGET_SDM429                        = 354, /**< SDM429 target */
+  TARGET_SDM450                        = 338, /**< SDM450 target */
   TARGET_SDM845                        = 321, /**< SDM845 target */
   TARGET_DEFAULT                       = TARGET_GENERIC, /**< new targets */
   TARGET_INVALID                       = 0xFF
@@ -358,10 +362,17 @@ int CNxpNfcConfig::getconfiguration_id(char *config_file)
         case TARGET_MSM8937:
         case TARGET_MSM8940:
         case TARGET_MSM8917:
+        case TARGET_SDM632:
+        case TARGET_SDM439:
+        case TARGET_SDM429:
+        case TARGET_SDM450:
             if ((!strncmp(nq_chipid, NQ220, PROPERTY_VALUE_MAX)) || (!strncmp(nq_chipid, NQ210, PROPERTY_VALUE_MAX))) {
                 // NQ210 or NQ220
                 config_id = QRD_TYPE_DEFAULT;
                 strlcpy(config_file, config_name_qrd, MAX_DATA_CONFIG_PATH_LEN);
+            } else if (!strncmp(nq_fw_ver, FW_MAJOR_NUM_NQ4xx, FW_MAJOR_NUM_LENGTH)) {
+                config_id = QRD_TYPE_NQ4XX;
+                strlcpy(config_file, config_name_qrd_NQ4XX, MAX_DATA_CONFIG_PATH_LEN);
             } else {
                 config_id = QRD_TYPE_NQ3XX;
                 strlcpy(config_file, config_name_qrd_NQ3XX, MAX_DATA_CONFIG_PATH_LEN);
@@ -414,10 +425,17 @@ int CNxpNfcConfig::getconfiguration_id(char *config_file)
         case TARGET_MSM8937:
         case TARGET_MSM8940:
         case TARGET_MSM8917:
+        case TARGET_SDM632:
+        case TARGET_SDM439:
+        case TARGET_SDM429:
+        case TARGET_SDM450:
             if ((!strncmp(nq_chipid, NQ220, PROPERTY_VALUE_MAX)) || (!strncmp(nq_chipid, NQ210, PROPERTY_VALUE_MAX))) {
                 // NQ210 or NQ220
                 config_id = MTP_TYPE_DEFAULT;
                 strlcpy(config_file, config_name_mtp, MAX_DATA_CONFIG_PATH_LEN);
+            } else if (!strncmp(nq_fw_ver, FW_MAJOR_NUM_NQ4xx, FW_MAJOR_NUM_LENGTH)) {
+                config_id = MTP_TYPE_NQ4XX;
+                strlcpy(config_file, config_name_mtp_NQ4XX, MAX_DATA_CONFIG_PATH_LEN);
             } else {
                 config_id = MTP_TYPE_NQ3XX;
                 strlcpy(config_file, config_name_mtp_NQ3XX, MAX_DATA_CONFIG_PATH_LEN);
@@ -1394,9 +1412,11 @@ extern "C" int GetNxpNumValue (const char* name, void* pValue, unsigned long len
     }
     switch (len)
     {
+#if(NFC_ARCH_TYPE == 64)
     case sizeof(unsigned long):
         *(static_cast<unsigned long*>(pValue)) = (unsigned long) v;
         break;
+#endif
     case sizeof(unsigned int):
         *(static_cast<unsigned int*>(pValue)) = (unsigned int) v;
         break;
