@@ -1,5 +1,5 @@
-VOB_COMPONENTS := vendor/nxp/opensource/external/libnfc-nci/src
-LIBNFC_PATH := vendor/nxp/opensource/external/libnfc-nci
+VOB_COMPONENTS := vendor/nxp/opensource/commonsys/external/libnfc-nci/src
+LIBNFC_PATH := vendor/nxp/opensource/commonsys/external/libnfc-nci
 NFA := $(VOB_COMPONENTS)/nfa
 NFC := $(VOB_COMPONENTS)/nfc
 
@@ -54,7 +54,7 @@ LOCAL_C_INCLUDES += \
     $(LIBNFC_PATH)/extns/impl
 
 ifeq ($(NFC_NXP_ESE),TRUE)
-LOCAL_C_INCLUDES += vendor/nxp/opensource/external/libnfc-nci/p61-jcop-kit/include
+LOCAL_C_INCLUDES += vendor/nxp/opensource/commonsys/external/libnfc-nci/p61-jcop-kit/include
 
 endif
 
