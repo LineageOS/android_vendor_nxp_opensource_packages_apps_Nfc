@@ -3,7 +3,7 @@
  *  Copyright (c) 2016, The Linux Foundation. All rights reserved.
  *  Not a Contribution.
  *
- *  Copyright (C) 2015 NXP Semiconductors
+ *  Copyright (C) 2015-2018 NXP Semiconductors
  *  The original Work has been changed by NXP Semiconductors.
  *
  *  Copyright (C) 2012 The Android Open Source Project
@@ -239,6 +239,7 @@ SecureElement::SecureElement ()
     mIsAllowWiredInDesfireMifareCE(false),
     mRfFieldEventTimeout(0),
     mIsIntfRstEnabled (false),
+    mIsEmvCoPollEnabled(false),
     mETSI12InitStatus (NFA_STATUS_FAILED),
     mModeSetInfo(NFA_STATUS_FAILED),
     meseETSI12Recovery(false),
@@ -274,7 +275,6 @@ SecureElement::SecureElement ()
     memset (&mEeInfo, 0, nfcFL.nfccFL._NFA_EE_MAX_EE_SUPPORTED *sizeof(tNFA_EE_INFO));
     memset (&mUiccInfo, 0, sizeof(mUiccInfo));
     memset (&mHciCfg, 0, sizeof(mHciCfg));
-    memset (mResponseData, 0, sizeof(mResponseData));
     memset (mAidForEmptySelect, 0, sizeof(mAidForEmptySelect));
     memset (&mLastRfFieldToggle, 0, sizeof(mLastRfFieldToggle));
     memset (mAtrInfo, 0, sizeof( mAtrInfo));
@@ -460,6 +460,7 @@ bool SecureElement::initialize (nfc_jni_native_data* native)
     memset(mAidForEmptySelect, 0, sizeof(mAidForEmptySelect));
 #if(NXP_EXTNS == TRUE)
     mIsWiredModeBlocked = false;
+    mIsEmvCoPollEnabled = false;
 #endif
 
     // if no SE is to be used, get out.
@@ -1754,7 +1755,7 @@ bool SecureElement::transceive (uint8_t* xmitBuffer, int32_t xmitBufferSize, uin
     {
         SyncEventGuard guard (mTransceiveEvent);
         mActualResponseSize = 0;
-        memset (mResponseData, 0, sizeof(mResponseData));
+        memset (recvBuffer, 0, recvBufferMaxSize);
 #if(NXP_EXTNS == TRUE)
         if(nfcFL.nfcNxpEse) {
             struct timeval start_timer, end_timer;
@@ -1825,13 +1826,13 @@ bool SecureElement::transceive (uint8_t* xmitBuffer, int32_t xmitBufferSize, uin
         if(nfcFL.nfcNxpEse && nfcFL.eseFL._NFCC_ESE_UICC_CONCURRENT_ACCESS_PROTECTION) {
             isTransceiveOngoing = true;
         }
-            nfaStat = NFA_HciSendEvent (mNfaHciHandle, mNewPipeId, EVT_SEND_DATA, xmitBufferSize, xmitBuffer, sizeof(mResponseData), mResponseData, timeoutMillisec);
+            nfaStat = NFA_HciSendEvent (mNfaHciHandle, mNewPipeId, EVT_SEND_DATA, xmitBufferSize, xmitBuffer, recvBufferMaxSize, recvBuffer, timeoutMillisec);
 #if(NXP_EXTNS == TRUE)
         }
         else if (mNewPipeId == STATIC_PIPE_UICC)
         {
             ALOGV("%s, Starting UICC wired mode!!!!!!.....", fn);
-            nfaStat = NFA_HciSendEvent (mNfaHciHandle, mNewPipeId, EVT_SEND_DATA, xmitBufferSize, xmitBuffer, sizeof(mResponseData), mResponseData, timeoutMillisec);
+            nfaStat = NFA_HciSendEvent (mNfaHciHandle, mNewPipeId, EVT_SEND_DATA, xmitBufferSize, xmitBuffer, recvBufferMaxSize, recvBuffer, timeoutMillisec);
         }
 #endif
         else
@@ -1851,7 +1852,7 @@ bool SecureElement::transceive (uint8_t* xmitBuffer, int32_t xmitBufferSize, uin
             if(nfcFL.nfcNxpEse && nfcFL.eseFL._NFCC_ESE_UICC_CONCURRENT_ACCESS_PROTECTION) {
                 isTransceiveOngoing = true;
             }
-            nfaStat = NFA_HciSendEvent (mNfaHciHandle, mNewPipeId, NFA_HCI_EVT_POST_DATA, xmitBufferSize, xmitBuffer, sizeof(mResponseData), mResponseData, timeoutMillisec);
+            nfaStat = NFA_HciSendEvent (mNfaHciHandle, mNewPipeId, NFA_HCI_EVT_POST_DATA, xmitBufferSize, xmitBuffer, recvBufferMaxSize, recvBuffer, timeoutMillisec);
 #if(NXP_EXTNS == TRUE)
         }
 #endif
@@ -1909,7 +1910,6 @@ bool SecureElement::transceive (uint8_t* xmitBuffer, int32_t xmitBufferSize, uin
         else
             recvBufferActualSize = mActualResponseSize;
 
-        memcpy (recvBuffer, mResponseData, recvBufferActualSize);
 #if(NXP_EXTNS == TRUE)
     tranStatus = TRANSCEIVE_STATUS_OK;
 #else
@@ -2522,6 +2522,14 @@ void SecureElement::nfaHciCallback (tNFA_HCI_EVT event, tNFA_HCI_EVT_DATA* event
             tNFA_HCI_RSP_RCVD& rsp_rcvd = eventData->rsp_rcvd;
             ALOGV("%s: NFA_HCI_RSP_RCVD_EVT; status: 0x%X; code: 0x%X; pipe: 0x%X; len: %u", fn,
                     rsp_rcvd.status, rsp_rcvd.rsp_code, rsp_rcvd.pipe, rsp_rcvd.rsp_len);
+            if((rsp_rcvd.rsp_code == NFA_HCI_ANY_E_PIPE_NOT_OPENED) && (sSecElem.IsCmdsentOnOpenDwpSession))
+            {
+                SyncEventGuard guard (sSecElem.mPipeStatusCheckEvent);
+                sSecElem.mCommandStatus = eventData->closed.status;
+                sSecElem.pipeStatus = NFA_HCI_ANY_E_PIPE_NOT_OPENED;
+                sSecElem.mPipeStatusCheckEvent.notifyOne();
+                sSecElem.IsCmdsentOnOpenDwpSession = false;
+            }
         }
         break;
 
@@ -2586,6 +2594,14 @@ void SecureElement::nfaHciCallback (tNFA_HCI_EVT event, tNFA_HCI_EVT_DATA* event
 #endif
         }
 #if(NXP_EXTNS == TRUE)
+        else if (sSecElem.IsCmdsentOnOpenDwpSession)
+        {
+            SyncEventGuard guard (sSecElem.mPipeStatusCheckEvent);
+            sSecElem.mCommandStatus = eventData->closed.status;
+            sSecElem.mPipeStatusCheckEvent.notifyOne();
+            sSecElem.IsCmdsentOnOpenDwpSession = false;
+
+        }
         else if (((eventData->rcvd_evt.evt_code == NFA_HCI_ABORT) || (eventData->rcvd_evt.last_SentEvtType == EVT_ABORT))
                 &&(eventData->rcvd_evt.pipe == mStaticPipeProp))
         {
@@ -2628,7 +2644,9 @@ void SecureElement::nfaHciCallback (tNFA_HCI_EVT event, tNFA_HCI_EVT_DATA* event
                 if(eventData->rcvd_evt.evt_len > 0)
                 {
                     sSecElem.mTransceiveWaitOk = true;
-                    sSecElem.NfccStandByOperation(STANDBY_TIMER_START);
+
+                    if(nfcFL.eseFL._ESE_ETSI_READER_ENABLE)
+                        sSecElem.NfccStandByOperation(STANDBY_TIMER_START);
                 }
                 /*If there is pending reset event to process*/
                 if((nfcFL.eseFL._JCOP_WA_ENABLE) &&(active_ese_reset_control&RESET_BLOCKED)&&
@@ -3305,6 +3323,50 @@ bool SecureElement::configureNfceeETSI12()
     return retval;
 }
 
+bool SecureElement::checkPipeStatusAndRecreate()
+{
+    bool pipeCorrectStatus = false;
+    bool success = true;
+    tNFA_STATUS nfaStat = NFA_STATUS_FAILED;
+    se_apdu_gate_info gateInfo = NO_APDU_GATE;
+    uint8_t xmitBuffer[] = {0x00, 0x00, 0x00, 0x00};
+    uint8_t EVT_SEND_DATA = 0x10;
+    ALOGD ("checkPipeStatusAndRecreate: Enter");
+    pipeCorrectStatus = NFA_IsPipeStatusNotCorrect();
+    if(pipeCorrectStatus)
+    {
+        gateInfo = getApduGateInfo();
+        if(gateInfo == ETSI_12_APDU_GATE)
+        {
+            pipeStatus = NFA_HCI_ANY_OK;
+            IsCmdsentOnOpenDwpSession = true;
+            SyncEventGuard guard (mPipeStatusCheckEvent);
+
+            nfaStat = NFA_HciSendEvent(mNfaHciHandle, mNewPipeId, EVT_SEND_DATA, sizeof(xmitBuffer), xmitBuffer, 0x00, NULL, 0);
+            if(nfaStat == NFA_STATUS_OK)
+            {
+                mPipeStatusCheckEvent.wait(500);
+            }
+            IsCmdsentOnOpenDwpSession = false;
+            if(pipeStatus == NFA_HCI_ANY_E_PIPE_NOT_OPENED)
+            {
+                SyncEventGuard guard (mPipeOpenedEvent);
+                nfaStat = NFA_HciOpenPipe (mNfaHciHandle, mNewPipeId);
+                if (nfaStat != NFA_STATUS_OK)
+                {
+                    ALOGE("checkPipeStatusAndRecreate:fail open pipe; error=0x%X", nfaStat);
+                }
+
+                if(!mPipeOpenedEvent.wait (500) || (mCommandStatus != NFA_STATUS_OK))
+                {
+                    success = false;
+                }
+            }
+        }
+    }
+ ALOGD ("checkPipeStatusAndRecreate: Exit status x%x",success);
+ return success;
+}
 /*******************************************************************************
 **
 ** Function:        getUiccGateAndPipeList
@@ -3921,6 +3983,10 @@ tNFC_STATUS SecureElement::etsiReaderConfig(int eeHandle)
         ALOGV("%s: UNKNOWN SOURCE!!! ", __func__);
         return NFA_STATUS_FAILED;
     }
+    if(mIsWiredModeOpen)
+        NfccStandByOperation(STANDBY_TIMER_STOP);
+    mIsEmvCoPollEnabled = true;
+
     return NFA_STATUS_OK;
 }
 
@@ -3939,15 +4005,18 @@ tNFC_STATUS SecureElement::etsiResetReaderConfig()
         ALOGV("%s: ETSI_READER not available. Returning", __func__);
         return NFA_STATUS_FAILED;
     }
-    tNFC_STATUS status;
+    tNFC_STATUS status = NFA_STATUS_FAILED;
     ALOGV("%s: Enter", __func__);
 
     status = android::EmvCo_dosetPoll(false);
     if (status != NFA_STATUS_OK)
     {
         ALOGE("%s: fail enable polling; error=0x%X", __func__, status);
+        status = NFA_STATUS_FAILED;
     }
+    else
     {
+        mIsEmvCoPollEnabled = false; /*Emvco poll is disabled*/
         SyncEventGuard guard (mDiscMapEvent);
         ALOGV("%s: mapping intf for DH", __func__);
         status = NFC_DiscoveryMap (NFC_NUM_INTERFACE_MAP,(tNCI_DISCOVER_MAPS *) nfc_interface_mapping_default
@@ -3958,8 +4027,11 @@ tNFC_STATUS SecureElement::etsiResetReaderConfig()
             return status;
         }
         mDiscMapEvent.wait ();
-        return NFA_STATUS_OK;
+
+        if(mIsWiredModeOpen)
+            NfccStandByOperation(STANDBY_TIMER_START);
     }
+    return status;
 }
 
 int SecureElement::decodeBerTlvLength(uint8_t* data,int index, int data_length )
@@ -4760,14 +4832,42 @@ tNFA_STATUS SecureElement::SecElem_EeModeSet(uint16_t handle, uint8_t mode)
         (mode == NFA_EE_MD_DEACTIVATE))
         return NFA_STATUS_OK;
 
-    SyncEventGuard guard (sSecElem.mEeSetModeEvent);
-    stat =  NFA_EeModeSet(handle, mode);
-    if(stat == NFA_STATUS_OK && !android::nfcManager_isNfcDisabling() &&
-       (android::nfcManager_getNfcState() != NFC_OFF))
-    {
-        sSecElem.mEeSetModeEvent.wait ();
-    }
 
+    if(nfcFL.eseFL._WIRED_MODE_STANDBY) {
+        if((handle == EE_HANDLE_0xF3) && (mode == NFA_EE_MD_ACTIVATE)) {
+            SyncEventGuard guard (mModeSetNtf);
+            stat =  NFA_EeModeSet(handle, mode);
+            if(stat == NFA_STATUS_OK && !android::nfcManager_isNfcDisabling() &&
+               (android::nfcManager_getNfcState() != NFC_OFF)) {
+                ALOGD("Waiting for Mode Set Ntf");
+                if(mModeSetNtf.wait(500) == false) {
+                    ALOGE("%s: timeout waiting for setModeNtf", __func__);
+                } else {
+                    // do nothing
+                }
+            } else {
+                // do nothing
+            }
+        } else {
+            SyncEventGuard guard (mEeSetModeEvent);
+            stat =  NFA_EeModeSet(handle, mode);
+            if(stat == NFA_STATUS_OK && !android::nfcManager_isNfcDisabling() &&
+               (android::nfcManager_getNfcState() != NFC_OFF)) {
+                mEeSetModeEvent.wait ();
+            } else {
+                // do nothing
+            }
+        }
+    } else {
+        SyncEventGuard guard (mEeSetModeEvent);
+        stat =  NFA_EeModeSet(handle, mode);
+        if(stat == NFA_STATUS_OK && !android::nfcManager_isNfcDisabling() &&
+           (android::nfcManager_getNfcState() != NFC_OFF)) {
+            mEeSetModeEvent.wait ();
+        } else {
+            // do nothing
+        }
+    }
     if(nfcFL.nfcNxpEse) {
         if(nfcFL.eseFL._JCOP_WA_ENABLE && (active_ese_reset_control&RESET_BLOCKED))
         {

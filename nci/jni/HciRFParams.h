@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2015 NXP Semiconductors
+ * Copyright (C) 2015-2018 NXP Semiconductors
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -23,6 +23,10 @@ extern "C"
 {
     #include "nfa_api.h"
 }/*namespace android*/
+
+#if(NXP_EXTNS == TRUE)
+#define ESE_HANDLE    0x4C0
+#endif
 
 namespace android {
 
@@ -74,7 +78,9 @@ public:
 
     void getESeUid(uint8_t* uidbuff, uint8_t* uidlen);
     uint8_t getESeSak();
-
+#if(NXP_EXTNS == TRUE)
+    bool isCeWithEseDisabled();
+#endif
 private:
 
     uint8_t bPipeStatus_CeA;

@@ -32,6 +32,10 @@ extern "C"
     #include "nfa_rw_api.h"
 }
 
+#define MIN_FWI (1)
+#define MAX_FWI (14)
+#define MIN_TRANSCEIVE_TIMEOUT_IN_MILLISEC (500.0)
+
 typedef struct activationParams{
     int mTechParams;
     int mTechLibNfcTypes;
@@ -490,6 +494,7 @@ public:
 #endif
 private:
     std::vector<int> mTechnologyTimeoutsTable;
+    std::vector<int> mTechnologyDefaultTimeoutsTable;
     nfc_jni_native_data* mNativeData;
     bool mIsActivated;
     ActivationState mActivationState;

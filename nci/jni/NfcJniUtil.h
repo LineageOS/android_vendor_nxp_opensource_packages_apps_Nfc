@@ -17,7 +17,7 @@
  *
  *  The original Work has been changed by NXP Semiconductors.
  *
- *  Copyright (C) 2015 NXP Semiconductors
+ *  Copyright (C) 2015-2018 NXP Semiconductors
  *
  *  Licensed under the Apache License, Version 2.0 (the "License");
  *  you may not use this file except in compliance with the License.
@@ -103,7 +103,7 @@
 #define TARGET_TYPE_ISO14443_3B           2
 #define TARGET_TYPE_ISO14443_4            3
 #define TARGET_TYPE_FELICA                4
-#define TARGET_TYPE_ISO15693              5
+#define TARGET_TYPE_V                     5
 #define TARGET_TYPE_NDEF                  6
 #define TARGET_TYPE_NDEF_FORMATABLE       7
 #define TARGET_TYPE_MIFARE_CLASSIC        8
@@ -131,7 +131,7 @@ typedef enum eNfcState
     NFC_INITIALIZING_IN_PROGRESS = 0x01, /* Initializing not complete (RF discovery not enabled yet) */
     NFC_ON = 0x02 /* NFC is fully ON*/
 };
-#define NFC_CMD_TIMEOUT 100 /* 100ms timeout to wait on the semaphore for the command sent */
+#define NFC_CMD_TIMEOUT 2000 /* 2 sec timeout to wait on the semaphore for the command sent */
 #endif
 
 struct nfc_jni_native_data

@@ -2,7 +2,7 @@
  * Copyright (c) 2016, The Linux Foundation. All rights reserved.
  * Not a Contribution.
  *
- * Copyright (C) 2015 NXP Semiconductors
+ * Copyright (C) 2015-2018 NXP Semiconductors
  * The original Work has been changed by NXP Semiconductors.
  *
  * Copyright (C) 2012 The Android Open Source Project
@@ -427,11 +427,13 @@ void NfcTag::discoverTechnologies (tNFA_ACTIVATED& activationData)
         if((rfDetail.rf_tech_param.mode == NFC_DISCOVERY_TYPE_POLL_A) ||
            (rfDetail.rf_tech_param.mode == NFC_DISCOVERY_TYPE_POLL_A_ACTIVE))
         {
+            double fc = 13560000;
             uint8_t fwi = rfDetail.intf_param.intf_param.pa_iso.fwi;
-            if(fwi > 0 && fwi < 15)
+            if(fwi >= MIN_FWI && fwi <= MAX_FWI)
             {
-                // fwt = (((2^fwi) * 256 * 16 ) / (13.56 * 10^6)) * 1000msec
-                double fwt = (((2 << (fwi - 1)) * 256 * 16) / 13560000) * 1000;
+                double fwt = (((1 << fwi) * 256 * 16) / fc) * 1000;
+                if(fwt < MIN_TRANSCEIVE_TIMEOUT_IN_MILLISEC)
+                    fwt = MIN_TRANSCEIVE_TIMEOUT_IN_MILLISEC;
                 ALOGD ("Setting the Xceive timeout = %f, fwi = %0#x", fwt, fwi);
                 setTransceiveTimeout(mTechList[mNumTechList], fwt);
             }
@@ -477,10 +479,10 @@ void NfcTag::discoverTechnologies (tNFA_ACTIVATED& activationData)
             memcpy (&(mTechParams[mNumTechList]), &(rfDetail.rf_tech_param), sizeof(rfDetail.rf_tech_param));
         }
     }
-    else if(NFC_PROTOCOL_15693 == rfDetail.protocol)
+    else if(NFC_PROTOCOL_T5T == rfDetail.protocol)
     {
         //is TagTechnology.NFC_V by Java API
-         mTechList [mNumTechList] = TARGET_TYPE_ISO15693;
+         mTechList [mNumTechList] = TARGET_TYPE_V;
     }
     else if(NFC_PROTOCOL_KOVIO == rfDetail.protocol)
     {
@@ -619,10 +621,10 @@ void NfcTag::discoverTechnologies (tNFA_DISC_RESULT& discoveryData)
             }
         }
     }
-    else if(NFC_PROTOCOL_15693 == discovery_ntf.protocol)
+    else if(NFC_PROTOCOL_T5T == discovery_ntf.protocol)
     {
         //is TagTechnology.NFC_V by Java API
-        mTechList [mNumTechList] = TARGET_TYPE_ISO15693;
+        mTechList [mNumTechList] = TARGET_TYPE_V;
     }
     else if (NFC_PROTOCOL_MIFARE == discovery_ntf.protocol)
     {
@@ -956,7 +958,7 @@ void NfcTag::fillNativeNfcTagMembers3 (JNIEnv* e, jclass tag_cls, jobject tag, t
             pollBytes.reset(e->NewByteArray(len));
             e->SetByteArrayRegion(pollBytes.get(), 0, len, (jbyte*) result);
         }
-        else if (NFC_DISCOVERY_TYPE_POLL_ISO15693 == mTechParams [i].mode
+        else if (NFC_DISCOVERY_TYPE_POLL_V == mTechParams [i].mode
               || NFC_DISCOVERY_TYPE_LISTEN_ISO15693 == mTechParams [i].mode)
         {
             ALOGV("%s: tech iso 15693", fn);
@@ -1118,7 +1120,7 @@ void NfcTag::fillNativeNfcTagMembers4 (JNIEnv* e, jclass tag_cls, jobject tag, t
                     actBytes.reset(e->NewByteArray(0));
                 }
         } //case NFC_PROTOCOL_ISO_DEP: //t4t
-        else if (NFC_PROTOCOL_15693 == mTechLibNfcTypes[i])
+        else if (NFC_PROTOCOL_T5T == mTechLibNfcTypes[i])
         {
             ALOGV("%s: tech iso 15693", fn);
             //iso 15693 response flags: 1 octet
@@ -1231,7 +1233,7 @@ void NfcTag::fillNativeNfcTagMembers5 (JNIEnv* e, jclass tag_cls, jobject tag, t
                 (jbyte*) &mTechParams [0].param.pf.nfcid2);
         ALOGV("%s: tech F", fn);
     }
-    else if (NFC_DISCOVERY_TYPE_POLL_ISO15693 == mTechParams [0].mode
+    else if (NFC_DISCOVERY_TYPE_POLL_V == mTechParams [0].mode
           || NFC_DISCOVERY_TYPE_LISTEN_ISO15693 == mTechParams [0].mode)
     {
             ALOGV("%s: tech iso 15693", fn);
@@ -1852,7 +1854,7 @@ void NfcTag::resetAllTransceiveTimeouts ()
     mTechnologyTimeoutsTable [TARGET_TYPE_ISO14443_3B] = 1000; //NfcB
     mTechnologyTimeoutsTable [TARGET_TYPE_ISO14443_4] = 618; //ISO-DEP
     mTechnologyTimeoutsTable [TARGET_TYPE_FELICA] = 255; //Felica
-    mTechnologyTimeoutsTable [TARGET_TYPE_ISO15693] = 1000;//NfcV
+    mTechnologyTimeoutsTable [TARGET_TYPE_V] = 1000;//NfcV
     mTechnologyTimeoutsTable [TARGET_TYPE_NDEF] = 1000;
     mTechnologyTimeoutsTable [TARGET_TYPE_NDEF_FORMATABLE] = 1000;
     mTechnologyTimeoutsTable [TARGET_TYPE_MIFARE_CLASSIC] = 618; //MifareClassic

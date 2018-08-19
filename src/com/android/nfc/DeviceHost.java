@@ -17,7 +17,7 @@
  *
  *  The original Work has been changed by NXP Semiconductors.
  *
- *  Copyright (C) 2015 NXP Semiconductors
+ *  Copyright (C) 2015-2018 NXP Semiconductors
  *
  *  Licensed under the Apache License, Version 2.0 (the "License");
  *  you may not use this file except in compliance with the License.
@@ -38,6 +38,7 @@ import android.annotation.Nullable;
 import android.nfc.NdefMessage;
 import android.os.Bundle;
 
+import java.io.FileDescriptor;
 import java.io.IOException;
 
 public interface DeviceHost {
@@ -272,6 +273,8 @@ public interface DeviceHost {
 
     public void doSelectSecureElement(int seID);
 
+    public void doActivateSecureElement(int seID);
+
     public void doSetSecureElementListenTechMask(int tech_mask);
     public int doGetSecureElementTechList();
 
@@ -376,7 +379,7 @@ public interface DeviceHost {
 
     void doSetNfcMode(int nfcMode);
 
-    String dump();
+    void dump(FileDescriptor fd);
 
     boolean enableScreenOffSuspend();
 
