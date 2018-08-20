@@ -1,4 +1,4 @@
-VOB_COMPONENTS := vendor/nxp/opensource/commonsys/external/libnfc-nci/src
+VOB_COMPONENTS := vendor/nxp/opensource/commonsys/external/libnfc-nci/SN100x/src
 LIBNFC_PATH := vendor/nxp/opensource/commonsys/external/libnfc-nci
 NFA := $(VOB_COMPONENTS)/nfa
 NFC := $(VOB_COMPONENTS)/nfc
@@ -50,8 +50,8 @@ LOCAL_C_INCLUDES += \
     $(VOB_COMPONENTS)/gki/ulinux \
     $(VOB_COMPONENTS)/gki/common \
     $(VOB_COMPONENTS) \
-    $(LIBNFC_PATH)/utils/include \
-    $(LIBNFC_PATH)/extns/impl
+    $(LIBNFC_PATH)/SN100x/utils/include \
+    $(LIBNFC_PATH)/SN100x/extns/impl
 
 ifeq ($(NFC_NXP_ESE),TRUE)
 LOCAL_C_INCLUDES += vendor/nxp/opensource/commonsys/external/libnfc-nci/p61-jcop-kit/include

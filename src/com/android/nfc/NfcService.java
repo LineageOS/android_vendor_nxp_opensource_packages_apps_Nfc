@@ -143,7 +143,7 @@ public class NfcService implements DeviceHostListener {
     private static final String PREF_CUR_SELECTED_UICC_ID = "current_selected_uicc_id";
 
     static final String PREF_NFC_ON = "nfc_on";
-    static final NFC_ON_DEFAULT = true;
+    static boolean NFC_ON_DEFAULT = true;
     static final String PREF_NDEF_PUSH_ON = "ndef_push_on";
     static final boolean NDEF_PUSH_ON_DEFAULT = true;
     static final String PREF_FIRST_BEAM = "first_beam";
