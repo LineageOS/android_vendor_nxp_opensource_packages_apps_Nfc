@@ -414,8 +414,8 @@ int CNxpNfcConfig::getconfiguration_id(char *config_file)
             break;
         }
     }
-    // if target is MTP platform then config id is assigned here
-    else if (0 == strncmp(target_type, MTP_HW_PLATFORM, MAX_SOC_INFO_NAME_LEN)) {
+    // if target is not QRD platform then default config id is assigned here
+    else {
         switch (idx)
         {
         case TARGET_GENERIC:
