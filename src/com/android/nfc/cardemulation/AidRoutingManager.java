@@ -18,7 +18,7 @@
  *
  *  The original Work has been changed by NXP Semiconductors.
  *
- *  Copyright (C) 2015 NXP Semiconductors
+ *  Copyright (C) 2015-2018 NXP Semiconductors
  *
  *  Licensed under the Apache License, Version 2.0 (the "License");
  *  you may not use this file except in compliance with the License.
@@ -35,6 +35,10 @@
  ******************************************************************************/
 package com.android.nfc.cardemulation;
 
+import android.app.ActivityManager;
+import android.app.ActivityManager.RunningTaskInfo;
+import android.app.ActivityThread;
+import android.content.Context;
 import android.util.Log;
 import android.util.SparseArray;
 
@@ -117,6 +121,8 @@ public class AidRoutingManager {
 
     final VzwRoutingCache mVzwRoutingCache;
 
+    final ActivityManager mActivityManager;
+
     public AidRoutingManager() {
         mDefaultRoute = doGetDefaultRouteDestination();
         mRoutingTableChanged = false;
@@ -129,6 +135,9 @@ public class AidRoutingManager {
         if (DBG) Log.d(TAG, "mAidTableSize=0x" + Integer.toHexString(mAidRoutingTableSize));
         mVzwRoutingCache = new VzwRoutingCache();
         mLastCommitStatus = true;
+
+        Context context = (Context) ActivityThread.currentApplication();
+        mActivityManager = (ActivityManager) context.getSystemService(Context.ACTIVITY_SERVICE);
     }
 
     public boolean supportsAidPrefixRouting() {
@@ -145,6 +154,40 @@ public class AidRoutingManager {
         return mRoutingTableChanged;
     }
     void clearNfcRoutingTableLocked() {
+        /*
+        for (Map.Entry<String, Integer> aidEntry : mRouteForAid.entrySet())  {
+            String aid = aidEntry.getKey();
+            if (aid.endsWith("*")) {
+                if (mAidMatchingSupport == AID_MATCHING_EXACT_ONLY) {
+                    Log.e(TAG, "Device does not support prefix AIDs but AID [" + aid
+                            + "] is registered");
+                } else if (mAidMatchingSupport == AID_MATCHING_PREFIX_ONLY) {
+                    if (DBG) Log.d(TAG, "Unrouting prefix AID " + aid);
+                    // Cut off '*' since controller anyway treats all AIDs as a prefix
+                    aid = aid.substring(0, aid.length() - 1);
+                } else if (mAidMatchingSupport == AID_MATCHING_EXACT_OR_PREFIX ||
+                    mAidMatchingSupport == AID_MATCHING_EXACT_OR_SUBSET_OR_PREFIX) {
+                    aid = aid.substring(0, aid.length() - 1);
+                    if (DBG) Log.d(TAG, "Unrouting prefix AID " + aid);
+                }
+            }  else if (aid.endsWith("#")) {
+                if (mAidMatchingSupport == AID_MATCHING_EXACT_ONLY) {
+                    Log.e(TAG, "Device does not support subset AIDs but AID [" + aid
+                            + "] is registered");
+                } else if (mAidMatchingSupport == AID_MATCHING_PREFIX_ONLY ||
+                    mAidMatchingSupport == AID_MATCHING_EXACT_OR_PREFIX) {
+                    Log.e(TAG, "Device does not support subset AIDs but AID [" + aid
+                            + "] is registered");
+                } else if (mAidMatchingSupport == AID_MATCHING_EXACT_OR_SUBSET_OR_PREFIX) {
+                    if (DBG) Log.d(TAG, "Unrouting subset AID " + aid);
+                    aid = aid.substring(0, aid.length() - 1);
+                }
+            } else {
+                if (DBG) Log.d(TAG, "Unrouting exact AID " + aid);
+            }
+            NfcService.getInstance().unrouteAids(aid);
+        }
+        */
         NfcService.getInstance().clearRouting();
         mRouteForAid.clear();
         mPowerForAid.clear();
@@ -199,7 +242,7 @@ public class AidRoutingManager {
 
         synchronized (mLock) {
             if (routeForAid.equals(mRouteForAid)) {
-                if (DBG) Log.d(TAG, "Routing table unchanged, but commit the routing");
+                if (DBG) Log.d(TAG, "Routing table unchanged");
                 if(mLastCommitStatus == false){
                     NfcService.getInstance().updateStatusOfServices(false);
                     NfcService.getInstance().notifyRoutingTableFull();
@@ -209,11 +252,15 @@ public class AidRoutingManager {
                 already resolved by previously installed services, service state of newly installed app needs to be updated*/
                     NfcService.getInstance().updateStatusOfServices(true);
                 }
-                NfcService.getInstance().commitRouting();
+                if (isProcessingTapAgain() || NfcService.getInstance().mIsRoutingTableDirty) {
+                    if (DBG) Log.d(TAG, "Routing table unchanged, but commit the routing");
+                    NfcService.getInstance().commitRouting();
+                } else {
+                    if (DBG) Log.d(TAG, "Routing table unchanged, not updating");
+                }
                 return false;
             }
 
-            mRoutingTableChanged = true;
             // Otherwise, update internal structures and commit new routing
             clearNfcRoutingTableLocked();
             mRouteForAid = routeForAid;
@@ -238,7 +285,7 @@ public class AidRoutingManager {
                  * default route at the top of the table, so they will be matched first.
                  */
                 Set<String> defaultRouteAids = mAidRoutingTable.get(mDefaultRoute);
-               if (defaultRouteAids != null) {
+                if (defaultRouteAids != null) {
                     for (String defaultRouteAid : defaultRouteAids) {
                         // Check whether there are any shorted AIDs routed to non-default
                         // TODO this is O(N^2) run-time complexity...
@@ -252,7 +299,7 @@ public class AidRoutingManager {
                                 AidElement elem = aidMap.get(defaultRouteAid);
                                 elem.setRouteLocation(mDefaultRoute);
                                 routeCache.put(defaultRouteAid, elem);
-//                                NfcService.getInstance().routeAids(defaultRouteAid, mDefaultRoute, mPowerForAid.get(defaultRouteAid),infoForAid.get(defaultRouteAid);
+                                //NfcService.getInstance().routeAids(defaultRouteAid, mDefaultRoute, mPowerForAid.get(defaultRouteAid),infoForAid.get(defaultRouteAid));
                             }
                         }
                     }
@@ -275,8 +322,8 @@ public class AidRoutingManager {
                                 AidElement elem = aidMap.get(aid);
                                 elem.setAid(aid.substring(0,aid.length() - 1));
                                 routeCache.put(aid, elem);
-//                                NfcService.getInstance().routeAids(aid.substring(0,
-//                                                aid.length() - 1), route, mPowerForAid.get(aid),infoForAid.get(aid));
+                                //NfcService.getInstance().routeAids(aid.substring(0,
+                                                //aid.length() - 1), route, mPowerForAid.get(aid),infoForAid.get(aid));
                             } else if (mAidMatchingSupport == AID_MATCHING_EXACT_OR_PREFIX
                               || mAidMatchingSupport == AID_MATCHING_EXACT_OR_SUBSET_OR_PREFIX) {
                                 Log.d(TAG, "Routing AID in AID_MATCHING_EXACT_OR_PREFIX");
@@ -284,7 +331,7 @@ public class AidRoutingManager {
                                         + Integer.toString(route));
                                 AidElement elem = aidMap.get(aid);
                                 routeCache.put(aid, elem);
-//                                NfcService.getInstance().routeAids(aid, route, (mPowerForAid.get(aid)),infoForAid.get(aid));
+                                //NfcService.getInstance().routeAids(aid, route, (mPowerForAid.get(aid)),infoForAid.get(aid));
                             }
                         } else if (aid.endsWith("#")) {
                             if (mAidMatchingSupport == AID_MATCHING_EXACT_ONLY) {
@@ -299,14 +346,14 @@ public class AidRoutingManager {
                                         + Integer.toString(route));
                                 AidElement elem = aidMap.get(aid);
                                 routeCache.put(aid, elem);
-//                                NfcService.getInstance().routeAids(aid, route, (mPowerForAid.get(aid)),infoForAid.get(aid));
+                                //NfcService.getInstance().routeAids(aid, route, (mPowerForAid.get(aid)),infoForAid.get(aid));
                             }
                         } else {
                             if (DBG) Log.d(TAG, "Routing exact AID " + aid + " to route "
                                     + Integer.toString(route));
                             AidElement elem = aidMap.get(aid);
                             routeCache.put(aid, elem);
-//                            NfcService.getInstance().routeAids(aid, route, mPowerForAid.get(aid),infoForAid.get(aid));
+                            //NfcService.getInstance().routeAids(aid, route, mPowerForAid.get(aid),infoForAid.get(aid));
                         }
                     }
                 }
@@ -343,6 +390,7 @@ public class AidRoutingManager {
         }
         // And finally commit the routing and update the status of commit for each service
         if(aidRouteResolved == true) {
+            mRoutingTableChanged = true;
             commit(routeCache);
             NfcService.getInstance().updateStatusOfServices(true);
             mLastCommitStatus = true;
@@ -552,5 +600,21 @@ public class AidRoutingManager {
            return 0xFF;
        }
 
+    }
+
+    // Returns true if AppChooserActivity is foreground to restart RF discovery so that
+    // TapAgainDialog is dismissed when an external reader detects the device.
+    private boolean isProcessingTapAgain() {
+        String appChooserActivityClassName = AppChooserActivity.class.getName();
+        return appChooserActivityClassName.equals(getTopClass());
+    }
+
+    private String getTopClass() {
+        String topClass = null;
+        List<RunningTaskInfo> tasks = mActivityManager.getRunningTasks(1);
+        if (tasks != null && tasks.size() > 0) {
+            topClass = tasks.get(0).topActivity.getClassName();
+        }
+        return topClass;
     }
 }

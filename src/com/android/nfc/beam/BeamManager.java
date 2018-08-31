@@ -15,6 +15,8 @@
 */
 package com.android.nfc.beam;
 
+import com.android.nfc.NfcService;
+import com.android.nfc.R;
 import com.android.nfc.handover.HandoverDataParser;
 
 import android.bluetooth.BluetoothDevice;
@@ -46,6 +48,8 @@ public class BeamManager implements Handler.Callback {
     private boolean mBeamInProgress;
     private final Handler mCallback;
 
+    private NfcService mNfcService;
+
     private static final class Singleton {
         public static final BeamManager INSTANCE = new BeamManager();
     }
@@ -54,6 +58,7 @@ public class BeamManager implements Handler.Callback {
         mLock = new Object();
         mBeamInProgress = false;
         mCallback = new Handler(Looper.getMainLooper(), this);
+        mNfcService = NfcService.getInstance();
     }
 
     public static BeamManager getInstance() {
@@ -119,6 +124,11 @@ public class BeamManager implements Handler.Callback {
             synchronized (mLock) {
                 mBeamInProgress = false;
             }
+
+            boolean success = msg.arg1 == 1;
+            if (success) {
+                mNfcService.playSound(NfcService.SOUND_END);
+            }
             return true;
         }
         return false;
@@ -127,7 +137,7 @@ public class BeamManager implements Handler.Callback {
     void whitelistOppDevice(Context context, BluetoothDevice device) {
         if (DBG) Log.d(TAG, "Whitelisting " + device + " for BT OPP");
         Intent intent = new Intent(ACTION_WHITELIST_DEVICE);
-        intent.setPackage(BLUETOOTH_PACKAGE);
+        intent.setPackage(context.getString(R.string.bluetooth_package));
         intent.putExtra(BluetoothDevice.EXTRA_DEVICE, device);
         context.sendBroadcastAsUser(intent, UserHandle.CURRENT);
     }
