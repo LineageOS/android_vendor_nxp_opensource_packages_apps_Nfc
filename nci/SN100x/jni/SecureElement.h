@@ -32,17 +32,27 @@
 #include "phNfcTypes.h"
 
 #define MAX_NFCEE 5
-#define WIRED_MODE_TRANSCEIVE_TIMEOUT 120000
+#define WIRED_MODE_TRANSCEIVE_TIMEOUT 2000
 #define CONNECTIVITY_PIPE_ID_UICC1 0x0A
 #define CONNECTIVITY_PIPE_ID_UICC2 0x23
 #define CONNECTIVITY_PIPE_ID_UICC3 0x31
 #define NFA_EE_TAG_HCI_HOST_ID 0xA0 /* HCI host ID */
 #define SMX_PIPE_ID 0x19
-
+#if (NXP_EXTNS == TRUE)
+typedef enum {
+  UICC_01_SELECTED_ENABLED = 0x01,
+  UICC_01_SELECTED_DISABLED,
+  UICC_01_REMOVED,
+  UICC_02_SELECTED_ENABLED,
+  UICC_02_SELECTED_DISABLED,
+  UICC_02_REMOVED,
+  UICC_STATUS_UNKNOWN
+}uicc_stat_t;
+#endif
 class SecureElement {
 public:
   tNFA_HANDLE  mActiveEeHandle;
-
+  static const int MAX_NUM_EE = NFA_EE_MAX_EE_SUPPORTED;    /*max number of EE's*/
   static const uint8_t UICC_ID = 0x02;
   static const uint8_t UICC2_ID = 0x04;
   static const uint8_t UICC3_ID = 0x08;
@@ -72,6 +82,8 @@ public:
   static const uint8_t EE_APP_HANLDE_UICC2 = 0xF8;
   static const uint8_t EE_APP_HANLDE_UICC3 = 0xF9;
   uint8_t muicc2_selected;    /* UICC2 or UICC3 selected from config file*/
+  SyncEvent       mApduPaternAddRemoveEvent;
+  SyncEvent   mAidAddRemoveEvent;
 /*******************************************************************************
 **
 ** Function:        getGenericEseId
@@ -88,6 +100,7 @@ jint getSETechnology(tNFA_HANDLE eeHandle);
 
 void getEeHandleList(tNFA_HANDLE *list, uint8_t* count);
 
+
  private:
   static SecureElement sSecElem;
   static const char* APP_NAME;
@@ -95,13 +108,12 @@ void getEeHandleList(tNFA_HANDLE *list, uint8_t* count);
   static const tNFA_HANDLE EE_HANDLE_UICC = 0x480;
   static const uint8_t NFCEE_ID_ESE = 0x01;
   static const uint8_t NFCEE_ID_UICC = 0x02;
-  static const int MAX_NUM_EE = NFA_EE_MAX_EE_SUPPORTED;    /*max number of EE's*/
+  
   static const unsigned int MAX_RESPONSE_SIZE = 0x8800;//1024; //34K
   static const uint8_t STATIC_PIPE_0x71 = 0x71; //Broadcom's proprietary static pipe
   static const uint8_t EVT_ABORT_MAX_RSP_LEN = 40;
   static const uint8_t EVT_ABORT = 0x11;  //ETSI12
   static const uint8_t STATIC_PIPE_UICC = 0x20; //UICC's proprietary static pipe
-  const uint16_t ACTIVE_SE_USE_ANY = 0xFFFF;
 
   nfc_jni_native_data* mNativeData;
   nfc_jni_native_data* mthreadnative;
@@ -111,7 +123,7 @@ void getEeHandleList(tNFA_HANDLE *list, uint8_t* count);
   bool    mTransceiveWaitOk;
   bool    mGetAtrRspwait;
   bool    mAbortEventWaitOk;
-  bool    mIsPiping;              //is a pipe connected to the controller?
+
   uint8_t mTransceiveStatus;      /* type to indicate the status of transceive sent*/
   tNFA_HCI_GET_GATE_PIPE_LIST mHciCfg;
   tNFA_STATUS mCommandStatus;     //completion status of the last command
@@ -139,7 +151,6 @@ void getEeHandleList(tNFA_HANDLE *list, uint8_t* count);
   uint8_t mNewSourceGate;
   uint8_t mActualNumEe;           // actual number of EE's reported by the stack
   uint8_t mAidForEmptySelect[NCI_MAX_AID_LEN+1];
-  uint8_t mDestinationGate;       //destination gate of the UICC
   uint8_t mAtrStatus;
   uint8_t mVerInfo [3];
   uint8_t mAtrInfo[40];
@@ -225,28 +236,17 @@ static SecureElement& getInstance();
 **
 *******************************************************************************/
 bool initialize(nfc_jni_native_data* native);
-
 /*******************************************************************************
 **
-** Function:        connectEE
+** Function:        isActivatedInListenMode
 **
-** Description:     Connect to the execution environment.
+** Description:     Can be used to determine if the SE is activated in listen
+*mode
 **
-** Returns:         True if ok.
-**
-*******************************************************************************/
-bool connectEE ();
-/*******************************************************************************
-**
-** Function:        disconnectEE
-**
-** Description:     Disconnect from the execution environment.
-**                  seID: ID of secure element.
-**
-** Returns:         True if ok.
+** Returns:         True if the SE is activated in listen mode
 **
 *******************************************************************************/
-bool disconnectEE (jint seID);
+bool isActivatedInListenMode();
 /*******************************************************************************
 **
 ** Function:        transceive
@@ -494,4 +494,25 @@ void finalize();
 **
 *******************************************************************************/
 void releasePendingTransceive();
+/**********************************************************************************
+**
+** Function:        getUiccStatus
+**
+** Description:     get the status of EE
+**
+** Returns:         EE status .
+**
+**********************************************************************************/
+uicc_stat_t getUiccStatus(uint8_t selected_uicc);
+/**********************************************************************************
+**
+** Function:        getEeStatus
+**
+** Description:     get the status of EE
+**
+** Returns:         EE status .
+**
+**********************************************************************************/
+uint16_t getEeStatus(uint16_t eehandle);
+
 };

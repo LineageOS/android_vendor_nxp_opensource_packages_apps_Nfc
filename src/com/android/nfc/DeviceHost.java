@@ -233,7 +233,9 @@ public interface DeviceHost {
 
     public int getAidTableSize();
 
-    public boolean setDefaultRoute(int defaultRouteEntry, int defaultProtoRouteEntry, int defaultTechRouteEntry);
+    public boolean setRoutingEntry(int type, int value, int route, int power);
+
+    public boolean clearRoutingEntry(int type);
 
     public int getDefaultAidRoute();
 
@@ -241,13 +243,19 @@ public interface DeviceHost {
 
     public int getDefaultMifareCLTRoute();
 
+    public int getDefaultFelicaCLTRoute();
+
     public int getDefaultAidPowerState();
 
     public int getDefaultDesfirePowerState();
 
     public int getDefaultMifareCLTPowerState();
-    
+
+    public int getDefaultFelicaCLTPowerState();
+
     public boolean commitRouting();
+
+    public void setEmptyAidRoute();
 
     public void registerT3tIdentifier(byte[] t3tIdentifier);
 
@@ -257,6 +265,8 @@ public interface DeviceHost {
 
     public int getLfT3tMax();
 
+    public boolean routeApduPattern(int route, int powerState, byte[] apduData, byte[] apduMask);
+
     public LlcpConnectionlessSocket createLlcpConnectionlessSocket(int nSap, String sn)
             throws LlcpException;
 
@@ -265,6 +275,8 @@ public interface DeviceHost {
 
     public LlcpSocket createLlcpSocket(int sap, int miu, int rw,
             int linearBufferLength) throws LlcpException;
+
+    public boolean unrouteApduPattern(byte[] apduData);
 
     public boolean doCheckLlcp();
 
@@ -333,4 +345,18 @@ public interface DeviceHost {
 /* NXP extension are here */
     public boolean doCheckJcopDlAtBoot();
     int JCOSDownload();
+
+    public void doChangeDiscoveryTech(int pollTech, int listenTech);
+    public int accessControlForCOSU (int mode);
+
+    public int getFWVersion();
+    public byte[] readerPassThruMode(byte status, byte modulationTyp);
+    public byte[] transceiveAppData(byte[] data);
+    boolean isNfccBusy();
+    int setTransitConfig(String configs);
+    public int getRemainingAidTableSize();
+    public int doselectUicc(int uiccSlot);
+    public int doGetSelectedUicc();
+    public int setPreferredSimSlot(int uiccSlot);
+
 }
