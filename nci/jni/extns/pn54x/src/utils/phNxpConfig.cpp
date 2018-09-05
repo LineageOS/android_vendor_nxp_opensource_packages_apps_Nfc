@@ -60,6 +60,7 @@
 #include <android-base/stringprintf.h>
 #include <base/logging.h>
 #include <phNxpLog.h>
+#include <cutils/properties.h>
 #include "sparse_crc32.h"
 
 using android::base::StringPrintf;
@@ -176,6 +177,7 @@ size_t readConfigFile(const char* fileName, uint8_t** p_data) {
 using namespace ::std;
 
 void readOptionalConfig(const char* optional);
+void findConfigFilePathFromTransportConfigPaths(const string& configName, string& filePath);
 
 class CNxpNfcParam : public string {
  public:

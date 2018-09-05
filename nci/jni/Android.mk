@@ -1,4 +1,5 @@
 VOB_COMPONENTS := vendor/nxp/opensource/commonsys/external/libnfc-nci/src
+LIBNFC_PATH := vendor/nxp/opensource/commonsys/external/libnfc-nci
 NFA := $(VOB_COMPONENTS)/nfa
 NFC := $(VOB_COMPONENTS)/nfc
 
@@ -46,8 +47,8 @@ LOCAL_C_INCLUDES += \
     $(VOB_COMPONENTS)/include \
     $(VOB_COMPONENTS)/gki/ulinux \
     $(VOB_COMPONENTS)/gki/common \
-    system/nfc/utils/include \
-    hardware/nxp/nfc/extns/impl
+    $(LIBNFC_PATH)/utils/include \
+    vendor/nxp/opensource/halimpl/extns/impl
 
 LOCAL_SHARED_LIBRARIES := \
     libicuuc \
@@ -60,7 +61,7 @@ LOCAL_SHARED_LIBRARIES := \
     libbase \
     android.hardware.nfc@1.0 \
     android.hardware.nfc@1.1 \
-    vendor.nxp.nxpnfc@1.0
+    vendor.nxp.hardware.nfc@1.0
 
 #LOCAL_STATIC_LIBRARIES := libxml2
 ifeq (true,$(TARGET_IS_64_BIT))

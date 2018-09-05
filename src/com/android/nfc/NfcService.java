@@ -900,7 +900,6 @@ public class NfcService implements DeviceHostListener {
         mNfcAdapter = new NfcAdapterService();
         mNxpNfcAdapter = new NxpNfcAdapterService();
         mExtrasService = new NfcAdapterExtrasService();
-        mNxpExtrasService = new NxpNfcAdapterExtrasService();
       //  mCardEmulationService = new CardEmulationService();
 
         try {

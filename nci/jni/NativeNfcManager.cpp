@@ -7522,15 +7522,15 @@ bool update_transaction_stat(const char * req_handle, transaction_state_t req_st
 
     memset(filename, 0, sizeof(filename));
     memset(filename2, 0, sizeof(filename2));
-    strcpy(filename2, "/data/vendor/nfc");
-    strncat(filename2, "/nxpStorage.bin",
+    strlcpy(filename2, "/data/vendor/nfc", sizeof(filename2));
+    strlcat(filename2, "/nxpStorage.bin",
             sizeof(filename2) - strlen(filename2) - 1);
 
     if (strlen(filename2) > 200) {
       LOG(ERROR) << StringPrintf("%s: filename too long", __func__);
       return;
     }
-    sprintf(filename, "%s%u", filename2, block);
+    snprintf(filename, 256, "%s%u", filename2, block);
     DLOG_IF(INFO, nfc_debug_enabled)
         << StringPrintf("%s: bytes=%u; file=%s slotnum=%d", __func__,
                         uiccContextLen, filename, slotnum);
@@ -7610,14 +7610,14 @@ bool update_transaction_stat(const char * req_handle, transaction_state_t req_st
 
     memset(filename, 0, sizeof(filename));
     memset(filename2, 0, sizeof(filename2));
-    strcpy(filename2, "/data/vendor/nfc");
-    strncat(filename2, "/nxpStorage.bin",
+    strlcpy(filename2, "/data/vendor/nfc", sizeof(filename2));
+    strlcat(filename2, "/nxpStorage.bin",
             sizeof(filename2) - strlen(filename2) - 1);
     if (strlen(filename2) > 200) {
       LOG(ERROR) << StringPrintf("%s: filename too long", __func__);
       return;
     }
-    sprintf(filename, "%s%u", filename2, block);
+    snprintf(filename, 256, "%s%u", filename2, block);
 
     DLOG_IF(INFO, nfc_debug_enabled)
         << StringPrintf("%s: buffer len=%u; file=%s, slotnum=%d", __func__,
