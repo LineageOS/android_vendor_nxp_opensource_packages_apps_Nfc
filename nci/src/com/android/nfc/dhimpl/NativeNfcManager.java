@@ -80,6 +80,12 @@ public class NativeNfcManager implements DeviceHost {
     public void checkFirmware() {
         doDownload();
     }
+    public native int doaccessControlForCOSU (int mode);
+
+    @Override
+    public int accessControlForCOSU (int mode) {
+        return doaccessControlForCOSU (mode);
+    }
 
     private native boolean doInitialize();
 
@@ -136,12 +142,29 @@ public class NativeNfcManager implements DeviceHost {
     @Override
     public native boolean sendRawFrame(byte[] data);
 
+    public native boolean doClearRoutingEntry(int type );
+
+    @Override
+    public boolean clearRoutingEntry( int type ) {
+        return(doClearRoutingEntry( type ));
+    }
+
+    public native boolean doSetRoutingEntry(int type, int value, int route, int power);
+    @Override
+    public boolean setRoutingEntry(int type, int value, int route, int power) {
+        return(doSetRoutingEntry(type, value, route, power));
+    }
+    
     @Override
     public native boolean routeAid(byte[] aid, int route, int aidInfo, int powerState);
+
 
     @Override
     public native boolean unrouteAid(byte[] aid);
 
+    @Override
+    public native boolean routeApduPattern(int route, int powerState, byte[] apduData, byte[] apduMask);
+    
     @Override
     public native int getAidTableSize();
 
@@ -155,6 +178,9 @@ public class NativeNfcManager implements DeviceHost {
     public native int   getDefaultMifareCLTRoute();
 
     @Override
+    public native int   getDefaultFelicaCLTRoute();
+
+    @Override
     public native int   getDefaultAidPowerState();
 
     @Override
@@ -164,11 +190,20 @@ public class NativeNfcManager implements DeviceHost {
     public native int   getDefaultMifareCLTPowerState();
 
     @Override
+    public native int   getDefaultFelicaCLTPowerState();
+
+    @Override
     public native boolean commitRouting();
 
     @Override
-    public native boolean setDefaultRoute(int defaultRouteEntry, int defaultProtoRouteEntry, int defaultTechRouteEntry);
-    
+    public native void doChangeDiscoveryTech(int pollTech, int listenTech);
+
+    @Override
+    public native void setEmptyAidRoute();
+
+    @Override
+    public native boolean unrouteApduPattern(byte[] apduData);
+
     @Override
     public native int[] doGetActiveSecureElementList();
 
@@ -558,4 +593,23 @@ public class NativeNfcManager implements DeviceHost {
     public native boolean doCheckJcopDlAtBoot();
     @Override
     public native int JCOSDownload();
+
+    @Override
+    public native int getFWVersion();
+    @Override
+    public native byte[] readerPassThruMode(byte status, byte modulationTyp);
+    @Override
+    public native byte[] transceiveAppData(byte[] data);
+    @Override
+    public native boolean isNfccBusy();
+    @Override
+    public native int setTransitConfig(String configs);
+    @Override
+    public native int getRemainingAidTableSize();
+    @Override
+    public native int doselectUicc(int uiccSlot);
+    @Override
+    public native int doGetSelectedUicc();
+    @Override
+    public native int setPreferredSimSlot(int uiccSlot);
 }
