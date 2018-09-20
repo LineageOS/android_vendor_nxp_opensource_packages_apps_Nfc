@@ -112,6 +112,7 @@ typedef enum
   TARGET_MSM8940                       = 313, /**< 8997 target */
   TARGET_SDM660                        = 317, /**< SDM660 target */
   TARGET_SDM670                        = 336, /**< SDM670 target */
+  TARGET_SM6150                        = 355, /**< SM6150 target */
   TARGET_SDM630                        = 318, /**< SDM630 target */
   TARGET_SDM845                        = 321, /**< SDM845 target */
   TARGET_SM8150                        = 339, /**< SM8150 target */
@@ -339,6 +340,7 @@ int CNxpNfcConfig::getconfiguration_id(char *config_file)
             strlcpy(config_file, config_name_qrd1, MAX_DATA_CONFIG_PATH_LEN);
             break;
         case TARGET_SM8150:
+        case TARGET_SM6150:
             config_id = QRD_TYPE_SN100;
             strlcpy(config_file, config_name_qrd_SN100, MAX_DATA_CONFIG_PATH_LEN);
             break;
@@ -372,8 +374,8 @@ int CNxpNfcConfig::getconfiguration_id(char *config_file)
             break;
         }
     }
-    // if target is MTP platform then config id is assigned here
-    else if (0 == strncmp(target_type, MTP_HW_PLATFORM, MAX_SOC_INFO_NAME_LEN)) {
+    // if target is not QRD platform then default config id is assigned here
+    else {
         switch (idx)
         {
         case TARGET_GENERIC:
@@ -393,6 +395,7 @@ int CNxpNfcConfig::getconfiguration_id(char *config_file)
             }
             break;
         case TARGET_SM8150:
+        case TARGET_SM6150:
             config_id = MTP_TYPE_SN100;
             strlcpy(config_file, config_name_mtp_SN100, MAX_DATA_CONFIG_PATH_LEN);
             break;
