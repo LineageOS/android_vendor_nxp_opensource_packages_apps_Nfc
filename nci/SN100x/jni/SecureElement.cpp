@@ -126,6 +126,10 @@ bool SecureElement::initialize(nfc_jni_native_data* native) {
         SmbTransceiveTimeOutVal = WIRED_MODE_TRANSCEIVE_TIMEOUT;
     }
     LOG(INFO) << StringPrintf("%s: SMB transceive timeout %d", fn, SmbTransceiveTimeOutVal);
+    if(SmbTransceiveTimeOutVal < WIRED_MODE_TRANSCEIVE_TIMEOUT)
+    {
+        SmbTransceiveTimeOutVal = WIRED_MODE_TRANSCEIVE_TIMEOUT;
+    }
     initializeEeHandle();
 
     // Get Fresh EE info.
@@ -903,7 +907,7 @@ jintArray SecureElement::getActiveSecureElementList (JNIEnv* e)
 
     jintArray list = e->NewIntArray (num_of_nfcee_present); //allocate array
 
-    for(i = 1; i<= num_of_nfcee_present ; i++)
+    for(i = 0; i< num_of_nfcee_present ; i++)
     {
         nfcee_handle[i] = mNfceeData_t.mNfceeHandle[i];
         nfcee_status[i] = mNfceeData_t.mNfceeStatus[i];

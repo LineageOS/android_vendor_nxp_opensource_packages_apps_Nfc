@@ -712,6 +712,16 @@ public class NfcService implements DeviceHostListener {
                 Log.e(TAG, "Failed to register VR mode state listener: " + e);
             }
         }
+        mSEService = ISecureElementService.Stub.asInterface(ServiceManager.getService(
+                Context.SECURE_ELEMENT_SERVICE));
+    }
+
+    private boolean isSEServiceAvailable() {
+        if (mSEService == null) {
+            mSEService = ISecureElementService.Stub.asInterface(ServiceManager.getService(
+                    Context.SECURE_ELEMENT_SERVICE));
+        }
+        return (mSEService != null);
     }
 
     void initSoundPool() {
@@ -966,7 +976,7 @@ public class NfcService implements DeviceHostListener {
 
             boolean result = mDeviceHost.deinitialize();
             if (DBG) Log.d(TAG, "mDeviceHost.deinitialize() = " + result);
-
+            isWiredOpen = false;
             watchDog.cancel();
 
             synchronized (NfcService.this) {
@@ -2356,31 +2366,7 @@ public class NfcService implements DeviceHostListener {
         }
         return mSecureElement.doGetAtr(mOpenEe.handle);
     }
-    private int _jcopOsDownload() throws IOException{
-        synchronized(NfcService.this){
-            int status = ErrorCodes.SUCCESS;
-            boolean mode;
-            mode = mDeviceHost.doCheckJcopDlAtBoot();
-            if(mode == false) {
-                Log.i(TAG, "Starting OSU download");
-                status = mDeviceHost.JCOSDownload();
-            } else {
-                status = ErrorCodes.ERROR_NOT_SUPPORTED;
-            }
-            return status;
-        }
-    }
-    @Override
-    public int jcopOsDownload(String pkg) throws RemoteException {
-        Bundle result;
-        int status = -1;
-        try{
-            status = _jcopOsDownload();
-        }catch (IOException e) {
-            result = writeEeException(EE_ERROR_IO, e.getMessage());
-        }
-        return status;
-    }
+
 }
 
     /** resources kept while secure element is open */
@@ -2602,7 +2588,7 @@ public class NfcService implements DeviceHostListener {
         }
         else {
           TechRoute = 0x03;
-          mDeviceHost.setRoutingEntry(TECH_ENTRY,0x07, TechSeId, techRoute & 0x3F);
+          mDeviceHost.setRoutingEntry(TECH_ENTRY,TechRoute, TechSeId, techRoute & 0x3F);
           TechRoute = 0x04;
           Log.d(TAG, "Set Routing Entry" + TechRoute +  "" + TechFSeId + "" + techfRoute);
           mDeviceHost.setRoutingEntry(TECH_ENTRY,TechRoute, TechFSeId, techfRoute & 0x3F);
@@ -2724,6 +2710,26 @@ public class NfcService implements DeviceHostListener {
         sendMessage(MSG_MOCK_NDEF, msg);
     }
 
+    public void notifyRoutingTableFull()
+    {
+        if(!mNxpNfcController.isGsmaCommitOffhostService()) {
+            ComponentName prevPaymentComponent = mAidCache.getPreviousPreferredPaymentService();
+
+            mNxpPrefsEditor = mNxpPrefs.edit();
+            mNxpPrefsEditor.putInt("PREF_SET_AID_ROUTING_TABLE_FULL",0x01);
+            mNxpPrefsEditor.commit();
+            //broadcast Aid Routing Table Full intent to the user
+            Intent aidTableFull = new Intent();
+            aidTableFull.putExtra(NfcConstants.EXTRA_GSMA_PREV_PAYMENT_COMPONENT,prevPaymentComponent);
+            aidTableFull.setAction(NfcConstants.ACTION_ROUTING_TABLE_FULL);
+            if (DBG) {
+                Log.d(TAG, "notify aid routing table full to the user");
+            }
+            mContext.sendBroadcastAsUser(aidTableFull, UserHandle.CURRENT);
+            mAidCache.setPreviousPreferredPaymentService(null);
+        }
+    }
+
     public void routeAids(String aid, int route, int aidInfo, int power) {
         Message msg = mHandler.obtainMessage();
         msg.what = MSG_ROUTE_AID;
@@ -2734,6 +2740,28 @@ public class NfcService implements DeviceHostListener {
         aidbundle.putInt("power",power);
         msg.setData(aidbundle);
         mHandler.sendMessage(msg);
+    }
+
+    public int getAidRoutingTableSize ()
+    {
+        //return 18;
+        return mDeviceHost.getAidTableSize();
+    }
+
+    /**
+     * set default  Aid route entry in case application does not configure this route entry
+     */
+    public void setDefaultAidRouteLoc( int routeLoc)
+    {
+        mNxpPrefsEditor = mNxpPrefs.edit();
+        Log.d(TAG, "writing to preferences setDefaultAidRouteLoc  :" + routeLoc);
+
+        int defaultAidRoute = ((mDeviceHost.getDefaultAidPowerState() & 0x3F) | (routeLoc << ROUTE_LOC_MASK));
+
+        mNxpPrefsEditor.putInt("PREF_SET_DEFAULT_ROUTE_ID", defaultAidRoute);
+        mNxpPrefsEditor.commit();
+        int defaultRoute=mNxpPrefs.getInt("PREF_SET_DEFAULT_ROUTE_ID",0xFF);
+        Log.d(TAG, "reading preferences from user  :" + defaultRoute);
     }
 
     public void unrouteAids(String aid) {
@@ -2753,8 +2781,10 @@ public class NfcService implements DeviceHostListener {
    }
 
     public void unrouteApduPattern(String apdu) {
-        //sendMessage(MSG_UNROUTE_APDU, apdu);
-        mDeviceHost.unrouteApduPattern(hexStringToBytes(apdu));
+        Message msg = mHandler.obtainMessage();
+        msg.what = MSG_UNROUTE_APDU;
+        msg.obj = apdu;
+        mHandler.sendMessage(msg);
     }
 
     public int getNciVersion() {
@@ -2804,7 +2834,15 @@ public class NfcService implements DeviceHostListener {
         Log.d(TAG, "Init wired Se");
         mHandler.sendEmptyMessage(MSG_INIT_WIREDSE);
     }
-
+    /**
+     * get default Aid route entry in case application does not configure this route entry
+     */
+    public int GetDefaultRouteLoc()
+    {
+        int defaultRouteLoc = mNxpPrefs.getInt("PREF_SET_DEFAULT_ROUTE_ID", GetDefaultRouteEntry()) >> ROUTE_LOC_MASK;
+        Log.d(TAG, "GetDefaultRouteLoc  :" + defaultRouteLoc);
+        return defaultRouteLoc ;
+    }
     /**
      * get default MifareDesfireRoute route entry in case application does not configure this route entry
      */
@@ -3023,7 +3061,8 @@ public class NfcService implements DeviceHostListener {
                     boolean commit = false;
                     Log.d(TAG, "commitRouting >>>");
                     synchronized (NfcService.this) {
-                        mDeviceHost.setEmptyAidRoute();
+                        int defaultRoute=mNxpPrefs.getInt("PREF_SET_DEFAULT_ROUTE_ID", GetDefaultRouteEntry());
+                        mDeviceHost.setEmptyAidRoute(defaultRoute >> ROUTE_LOC_MASK);
                         if (mCurrentDiscoveryParameters.shouldEnableDiscovery()) {
                             commit = true;
                         } else {
@@ -3365,7 +3404,7 @@ public class NfcService implements DeviceHostListener {
         }
 
         private void sendOffHostTransactionEvent(byte[] aid, byte[] data, byte[] readerByteArray) {
-            if (mSEService == null || mNfcEventInstalledPackages.isEmpty()) {
+            if (!isSEServiceAvailable() || mNfcEventInstalledPackages.isEmpty()) {
                 return;
             }
 
@@ -3405,7 +3444,7 @@ public class NfcService implements DeviceHostListener {
 
         /* Returns the list of packages that have access to NFC Events on any SE */
         private ArrayList<String> getSEAccessAllowedPackages() {
-            if (mSEService == null || mNfcEventInstalledPackages.isEmpty()) {
+            if (!isSEServiceAvailable() || mNfcEventInstalledPackages.isEmpty()) {
                 return null;
             }
             String[] readers = null;

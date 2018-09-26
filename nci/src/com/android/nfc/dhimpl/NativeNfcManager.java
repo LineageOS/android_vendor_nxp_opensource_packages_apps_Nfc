@@ -199,7 +199,7 @@ public class NativeNfcManager implements DeviceHost {
     public native void doChangeDiscoveryTech(int pollTech, int listenTech);
 
     @Override
-    public native void setEmptyAidRoute();
+    public native void setEmptyAidRoute(int deafultAidroute);
 
     @Override
     public native boolean unrouteApduPattern(byte[] apduData);
@@ -591,8 +591,6 @@ public class NativeNfcManager implements DeviceHost {
 /* NXP extension are here */
     @Override
     public native boolean doCheckJcopDlAtBoot();
-    @Override
-    public native int JCOSDownload();
 
     @Override
     public native int getFWVersion();

@@ -255,7 +255,7 @@ public interface DeviceHost {
 
     public boolean commitRouting();
 
-    public void setEmptyAidRoute();
+    public void setEmptyAidRoute(int defaultAidRoute);
 
     public void registerT3tIdentifier(byte[] t3tIdentifier);
 
@@ -344,7 +344,6 @@ public interface DeviceHost {
 
 /* NXP extension are here */
     public boolean doCheckJcopDlAtBoot();
-    int JCOSDownload();
 
     public void doChangeDiscoveryTech(int pollTech, int listenTech);
     public int accessControlForCOSU (int mode);
