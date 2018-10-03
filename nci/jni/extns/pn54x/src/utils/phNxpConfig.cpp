@@ -145,6 +145,7 @@ typedef enum
   TARGET_SDM439                        = 353, /**< SDM439 target */
   TARGET_SDM429                        = 354, /**< SDM429 target */
   TARGET_SDM450                        = 338, /**< SDM450 target */
+  TARGET_SDM455                        = 385, /**< SDM455 target */
   TARGET_SDM845                        = 321, /**< SDM845 target */
   TARGET_DEFAULT                       = TARGET_GENERIC, /**< new targets */
   TARGET_INVALID                       = 0xFF
@@ -427,6 +428,7 @@ int CNxpNfcConfig::getconfiguration_id(char *config_file)
         case TARGET_MSM8997:
         case TARGET_SDM660:
         case TARGET_SDM630:
+        case TARGET_SDM455:
             if ((!strncmp(nq_chipid, NQ220, PROPERTY_VALUE_MAX)) || (!strncmp(nq_chipid, NQ210, PROPERTY_VALUE_MAX))) {
                 // NQ210 or NQ220
                 config_id = QRD_TYPE_2;
@@ -485,6 +487,7 @@ int CNxpNfcConfig::getconfiguration_id(char *config_file)
         case TARGET_MSM8997:
         case TARGET_SDM660:
         case TARGET_SDM630:
+        case TARGET_SDM455:
             if ((!strncmp(nq_chipid, NQ220, PROPERTY_VALUE_MAX)) || (!strncmp(nq_chipid, NQ210, PROPERTY_VALUE_MAX))) {
                 // NQ210 or NQ220
                 config_id = MTP_TYPE_1;
