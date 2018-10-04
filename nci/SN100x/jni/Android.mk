@@ -64,7 +64,7 @@ LOCAL_SHARED_LIBRARIES := \
     libcutils \
     libutils \
     liblog \
-    libnqnfc-nci \
+    libsn100nfc-nci \
     libchrome \
     libbase \
 
@@ -79,7 +79,7 @@ else
 LOCAL_MULTILIB := 32
 endif
 
-LOCAL_MODULE := libnqnfc_nci_jni
+LOCAL_MODULE := libsn100nfc_nci_jni
 LOCAL_MODULE_TAGS := optional
 LOCAL_MODULE_OWNER := nxp
 
