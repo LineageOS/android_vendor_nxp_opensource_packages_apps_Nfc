@@ -1794,7 +1794,7 @@ void RoutingManager::dumpTables(int xx)
     {
     case 1://print only proto table
         LOG(ERROR) << StringPrintf("--------------------Proto Table Entries------------------" );
-        for(int xx=0;xx<AVAILABLE_PROTO_ENTRIES();xx++)
+        for(int xx=0;xx<MAX_PROTO_ENTRIES;xx++)
         {
             LOG(ERROR) << StringPrintf("|Index=%d|RouteLoc=0x%03X|Proto=0x%02X|Power=0x%02X|Enable=0x%01X|",
                     xx,mProtoTableEntries[xx].routeLoc,
@@ -1806,7 +1806,7 @@ void RoutingManager::dumpTables(int xx)
         break;
     case 2://print Lmrt proto table
         LOG(ERROR) << StringPrintf("----------------------------------------Lmrt Proto Entries------------------------------------" );
-        for(int xx=0;xx<AVAILABLE_PROTO_ENTRIES();xx++)
+        for(int xx=0;xx<MAX_ROUTE_LOC_ENTRIES;xx++)
         {
             LOG(ERROR) << StringPrintf("|Index=%d|nfceeID=0x%03X|SWTCH-ON=0x%02X|SWTCH-OFF=0x%02X|BAT-OFF=0x%02X|SCRN-LOCK=0x%02X|SCRN-OFF=0x%02X|SCRN-OFF_LOCK=0x%02X",
                     xx,

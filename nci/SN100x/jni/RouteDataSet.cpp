@@ -64,17 +64,19 @@ AidBuffer::AidBuffer(std::string& aid) : mBuffer(NULL), mBufferLen(0) {
   mBuffer = new uint8_t[aid.length()];
   while (true) {
     num = 0;
-    if (pos2 == std::string::npos) {
-      sscanf(aid.substr(pos1).c_str(), "%x", &num);
-      mBuffer[mBufferLen] = (uint8_t)num;
-      mBufferLen++;
-      break;
-    } else {
-      sscanf(aid.substr(pos1, pos2 - pos1 + 1).c_str(), "%x", &num);
-      mBuffer[mBufferLen] = (uint8_t)num;
-      mBufferLen++;
-      pos1 = pos2 + 1;
-      pos2 = aid.find_first_of(delimiter, pos1);
+    if (mBuffer != NULL) {
+      if (pos2 == std::string::npos) {
+        sscanf(aid.substr(pos1).c_str(), "%x", &num);
+        mBuffer[mBufferLen] = (uint8_t)num;
+        mBufferLen++;
+        break;
+      } else {
+        sscanf(aid.substr(pos1, pos2 - pos1 + 1).c_str(), "%x", &num);
+        mBuffer[mBufferLen] = (uint8_t)num;
+        mBufferLen++;
+        pos1 = pos2 + 1;
+        pos2 = aid.find_first_of(delimiter, pos1);
+      }
     }
   }
 }
