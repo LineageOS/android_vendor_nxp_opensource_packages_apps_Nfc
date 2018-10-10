@@ -18,25 +18,20 @@
  * limitations under the License.
  */
 
-
-
- /*include files*/
-#include <phNfcTypes.h>
-#include <phNfcStatus.h>
+/*include files*/
 #include <phNciNfcTypes.h>
+#include <phNfcStatus.h>
+#include <phNfcTypes.h>
 #include <time.h>
 
-typedef void (*TIMER_FUNC) (union sigval);
+typedef void (*TIMER_FUNC)(union sigval);
 
-typedef struct phFriNfc_MifareStdTimer
-{
-    timer_t mTimerId; // timer id which will be assigned by create timer
-    TIMER_FUNC mCb;   //callback function for timeout
-    uint32_t mtimeout; // timeout value in ms.
-}phFriNfc_MifareStdTimer_t;
+typedef struct phFriNfc_MifareStdTimer {
+  timer_t mTimerId;   // timer id which will be assigned by create timer
+  TIMER_FUNC mCb;     // callback function for timeout
+  uint32_t mtimeout;  // timeout value in ms.
+} phFriNfc_MifareStdTimer_t;
 
-NFCSTATUS  phFriNfc_MifareStd_StartTimer( phFriNfc_MifareStdTimer_t *timer );
+NFCSTATUS phFriNfc_MifareStd_StartTimer(phFriNfc_MifareStdTimer_t* timer);
 
-NFCSTATUS  phFriNfc_MifareStd_StopTimer( phFriNfc_MifareStdTimer_t *timer );
-
-NFCSTATUS  phFriNfc_MifareStd_CreateTimer( phFriNfc_MifareStdTimer_t *TimerInfo );
+NFCSTATUS phFriNfc_MifareStd_StopTimer(phFriNfc_MifareStdTimer_t* timer);
