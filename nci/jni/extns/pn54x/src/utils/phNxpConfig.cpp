@@ -52,50 +52,52 @@
 
 #include <phNxpConfig.h>
 #include <stdio.h>
+#include <sys/stat.h>
+#include <list>
 #include <string>
 #include <vector>
-#include <list>
-#include <sys/stat.h>
-#include <stdlib.h>
 
+#include <android-base/stringprintf.h>
+#include <base/logging.h>
 #include <phNxpLog.h>
-#include <cutils/log.h>
 #include <cutils/properties.h>
-#include <errno.h>
+#include "sparse_crc32.h"
+
+using android::base::StringPrintf;
+
+extern bool nfc_debug_enabled;
 
 #if GENERIC_TARGET
-const char alternative_config_path[] = "/data/nfc/";
+const char alternative_config_path[] = "/data/vendor/nfc/";
 #else
 const char alternative_config_path[] = "";
 #endif
 
 #if 1
 const char* transport_config_paths[] = {"/odm/etc/", "/vendor/etc/", "/etc/"};
-#if(NXP_EXTNS == TRUE)
-const char transit_config_path[] = "/data/nfc/";
-#endif
+const char transit_config_path[] = "/data/vendor/nfc/libnfc-nxpTransit.conf";
 #else
 const char* transport_config_paths[] = {"res/"};
 #endif
 const int transport_config_path_size =
-        (sizeof(transport_config_paths) / sizeof(transport_config_paths[0]));
-
-/**
- *  @brief defines the different config files used.
- */
-
-#define config_name             "libnfc-nxp.conf"
-#if(NXP_EXTNS == TRUE)
-#define extra_config_base       "libnfc-"
+    (sizeof(transport_config_paths) / sizeof(transport_config_paths[0]));
+#define config_name "libnfc-nxp.conf"
+#if (NXP_EXTNS == TRUE)
+#define extra_config_base "libnfc-"
 #else
-#define extra_config_base       "libnfc-nxp-"
+#define extra_config_base "libnfc-nxp-"
 #endif
+#define extra_config_ext ".conf"
+#define IsStringValue 0x80000000
 
-#define extra_config_ext        ".conf"
-#define IsStringValue           0x80000000
-
-const char config_timestamp_path[]    = "/data/nfc/libnfc-nxpConfigState.bin";
-const char default_nxp_config_path[]  = "/etc/libnfc-nxp.conf";
+const char rf_config_timestamp_path[] =
+    "/data/vendor/nfc/libnfc-nxpRFConfigState.bin";
+const char tr_config_timestamp_path[] =
+    "/data/vendor/nfc/libnfc-nxpTransitConfigState.bin";
+const char config_timestamp_path[] =
+    "/data/vendor/nfc/libnfc-nxpConfigState.bin";
+const char default_nxp_config_path[] = "/vendor/etc/libnfc-nxp.conf";
+const char nxp_rf_config_path[] = "/system/vendor/libnfc-nxp_RF.conf";
 
 /**
  *  @brief target platform ID values.
@@ -138,76 +140,104 @@ typedef enum
   TARGET_SDM660                        = 317, /**< SDM660 target */
   TARGET_SDM670                        = 336, /**< SDM670 target */
   TARGET_SDM710                        = 360, /**< SDM710 target */
+  TARGET_SDM712                        = 393, /**< SDM712 target */
   TARGET_SDM630                        = 318, /**< SDM630 target */
   TARGET_SDM632                        = 349, /**< SDM632 target */
   TARGET_SDM439                        = 353, /**< SDM439 target */
   TARGET_SDM429                        = 354, /**< SDM429 target */
   TARGET_SDM450                        = 338, /**< SDM450 target */
+  TARGET_SDM455                        = 385, /**< SDM455 target */
   TARGET_SDM845                        = 321, /**< SDM845 target */
   TARGET_DEFAULT                       = TARGET_GENERIC, /**< new targets */
   TARGET_INVALID                       = 0xFF
 } TARGETTYPE;
 
-using namespace::std;
+namespace {
 
+size_t readConfigFile(const char* fileName, uint8_t** p_data) {
+  FILE* fd = fopen(fileName, "rb");
+  if (fd == nullptr) return 0;
+
+  fseek(fd, 0L, SEEK_END);
+  const size_t file_size = ftell(fd);
+  rewind(fd);
+
+  uint8_t* buffer = new uint8_t[file_size];
+  size_t read = fread(buffer, file_size, 1, fd);
+  fclose(fd);
+
+  if (read == 1) {
+    *p_data = buffer;
+    return file_size;
+  }
+
+  return 0;
+}
+
+}  // namespace
+
+using namespace ::std;
+
+void readOptionalConfig(const char* optional);
 void findConfigFilePathFromTransportConfigPaths(const string& configName, string& filePath);
 
-class CNxpNfcParam : public string
-{
-public:
-    CNxpNfcParam ();
-    CNxpNfcParam (const char* name, const string& value);
-    CNxpNfcParam (const char* name, unsigned long value);
-    virtual ~CNxpNfcParam ();
-    unsigned long numValue () const {return m_numValue;}
-    const char* str_value () const {return m_str_value.c_str();}
-    size_t str_len () const {return m_str_value.length();}
-private:
-    string          m_str_value;
-    unsigned long   m_numValue;
+class CNxpNfcParam : public string {
+ public:
+  CNxpNfcParam();
+  CNxpNfcParam(const char* name, const string& value);
+  CNxpNfcParam(const char* name, unsigned long value);
+  virtual ~CNxpNfcParam();
+  unsigned long numValue() const { return m_numValue; }
+  const char* str_value() const { return m_str_value.c_str(); }
+  size_t str_len() const { return m_str_value.length(); }
+
+ private:
+  string m_str_value;
+  unsigned long m_numValue;
 };
 
-class CNxpNfcConfig : public vector<const CNxpNfcParam*>
-{
-public:
-    virtual ~CNxpNfcConfig ();
-    static CNxpNfcConfig& GetInstance ();
-    friend void readOptionalConfig (const char* optional);
-    int checkTimestamp ();
-    int updateTimestamp ();
+class CNxpNfcConfig : public vector<const CNxpNfcParam*> {
+ public:
+  virtual ~CNxpNfcConfig();
+  static CNxpNfcConfig& GetInstance();
+  friend void readOptionalConfig(const char* optional);
+  bool isModified();
+  bool isModified(const char* pName);
+  void resetModified();
 
-    bool    getValue (const char* name, char* pValue, size_t len) const;
-    bool    getValue (const char* name, unsigned long& rValue) const;
-    bool    getValue (const char* name, unsigned short & rValue) const;
-    bool    getValue (const char* name, char* pValue, long len, long* readlen) const;
-    const CNxpNfcParam* find (const char* p_name) const;
-#if(NXP_EXTNS == TRUE)
-    void    readNxpTransitConfig(const char* fileName) const;
-#endif
-    void  clean ();
-private:
-    CNxpNfcConfig ();
-    bool    readConfig (const char* name, bool bResetContent);
-    int     file_exist (const char* filename);
-    int     getconfiguration_id (char * config_file);
-    void    moveFromList ();
-    void    moveToList ();
-    void    add (const CNxpNfcParam* pParam);
-#if(NXP_EXTNS == TRUE)
-    void    dump();
-    bool    isAllowed(const char* name);
-    string  mCurrentFile;
-#endif
-    list<const CNxpNfcParam*> m_list;
-    bool    mValidFile;
-    bool    mDynamConfig;
-    unsigned long m_timeStamp;
+  bool getValue(const char* name, char* pValue, size_t len) const;
+  bool getValue(const char* name, unsigned long& rValue) const;
+  bool getValue(const char* name, unsigned short& rValue) const;
+  bool getValue(const char* name, char* pValue, long len, long* readlen) const;
+  const CNxpNfcParam* find(const char* p_name) const;
+  void readNxpTransitConfig(const char* fileName) const;
+  void readNxpRFConfig(const char* fileName) const;
+  void clean();
 
-    unsigned long state;
+ private:
+  CNxpNfcConfig();
+  bool readConfig(const char* name, bool bResetContent);
+  int file_exist (const char* filename);
+  int getconfiguration_id (char * config_file);
+  void moveFromList();
+  void moveToList();
+  void add(const CNxpNfcParam* pParam);
+  void dump();
+  bool isAllowed(const char* name);
+  list<const CNxpNfcParam*> m_list;
+  bool mValidFile;
+  bool mDynamConfig;
+  uint32_t config_crc32_;
+  uint32_t config_crc32_rf_;
+  uint32_t config_crc32_tr_;
 
-    inline bool Is (unsigned long f) {return (state & f) == f;}
-    inline void Set (unsigned long f) {state |= f;}
-    inline void Reset (unsigned long f) {state &= ~f;}
+  string mCurrentFile;
+
+  unsigned long state;
+
+  inline bool Is(unsigned long f) { return (state & f) == f; }
+  inline void Set(unsigned long f) { state |= f; }
+  inline void Reset(unsigned long f) { state &= ~f; }
 };
 
 /**
@@ -386,6 +416,7 @@ int CNxpNfcConfig::getconfiguration_id(char *config_file)
         case TARGET_SDM845:
         case TARGET_SDM670:
         case TARGET_SDM710:
+        case TARGET_SDM712:
             if (!strncmp(nq_fw_ver, FW_MAJOR_NUM_NQ4xx, FW_MAJOR_NUM_LENGTH)) {
                 config_id = QRD_TYPE_NQ4XX;
                 strlcpy(config_file, config_name_qrd_NQ4XX, MAX_DATA_CONFIG_PATH_LEN);
@@ -399,6 +430,7 @@ int CNxpNfcConfig::getconfiguration_id(char *config_file)
         case TARGET_MSM8997:
         case TARGET_SDM660:
         case TARGET_SDM630:
+        case TARGET_SDM455:
             if ((!strncmp(nq_chipid, NQ220, PROPERTY_VALUE_MAX)) || (!strncmp(nq_chipid, NQ210, PROPERTY_VALUE_MAX))) {
                 // NQ210 or NQ220
                 config_id = QRD_TYPE_2;
@@ -444,6 +476,7 @@ int CNxpNfcConfig::getconfiguration_id(char *config_file)
         case TARGET_SDM845:
         case TARGET_SDM670:
         case TARGET_SDM710:
+        case TARGET_SDM712:
             if (!strncmp(nq_fw_ver, FW_MAJOR_NUM_NQ4xx, FW_MAJOR_NUM_LENGTH)) {
                 config_id = MTP_TYPE_NQ4XX;
                 strlcpy(config_file, config_name_mtp_NQ4XX, MAX_DATA_CONFIG_PATH_LEN);
@@ -457,6 +490,7 @@ int CNxpNfcConfig::getconfiguration_id(char *config_file)
         case TARGET_MSM8997:
         case TARGET_SDM660:
         case TARGET_SDM630:
+        case TARGET_SDM455:
             if ((!strncmp(nq_chipid, NQ220, PROPERTY_VALUE_MAX)) || (!strncmp(nq_chipid, NQ210, PROPERTY_VALUE_MAX))) {
                 // NQ210 or NQ220
                 config_id = MTP_TYPE_1;
@@ -487,12 +521,9 @@ int CNxpNfcConfig::getconfiguration_id(char *config_file)
 ** Returns:     1, if printable, otherwise 0
 **
 *******************************************************************************/
-inline bool isPrintable (char c)
-{
-    return  (c >= 'A' && c <= 'Z') ||
-            (c >= 'a' && c <= 'z') ||
-            (c >= '0' && c <= '9') ||
-            c == '/' || c == '_' || c == '-' || c == '.';
+inline bool isPrintable(char c) {
+  return (c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') ||
+         (c >= '0' && c <= '9') || c == '/' || c == '_' || c == '-' || c == '.';
 }
 
 /*******************************************************************************
@@ -504,17 +535,12 @@ inline bool isPrintable (char c)
 ** Returns:     true, if numerical digit
 **
 *******************************************************************************/
-inline bool isDigit (char c, int base)
-{
-    if ('0' <= c && c <= '9')
-        return true;
-    if (base == 16)
-    {
-        if (('A' <= c && c <= 'F') ||
-            ('a' <= c && c <= 'f'))
-            return true;
-    }
-    return false;
+inline bool isDigit(char c, int base) {
+  if ('0' <= c && c <= '9') return true;
+  if (base == 16) {
+    if (('A' <= c && c <= 'F') || ('a' <= c && c <= 'f')) return true;
+  }
+  return false;
 }
 
 /*******************************************************************************
@@ -526,18 +552,15 @@ inline bool isDigit (char c, int base)
 ** Returns:     numerical value if decimal or hex char, otherwise 0
 **
 *******************************************************************************/
-inline int getDigitValue (char c, int base)
-{
-    if ('0' <= c && c <= '9')
-        return c - '0';
-    if (base == 16)
-    {
-        if ('A' <= c && c <= 'F')
-            return c - 'A' + 10;
-        else if ('a' <= c && c <= 'f')
-            return c - 'a' + 10;
-    }
-    return 0;
+inline int getDigitValue(char c, int base) {
+  if ('0' <= c && c <= '9') return c - '0';
+  if (base == 16) {
+    if ('A' <= c && c <= 'F')
+      return c - 'A' + 10;
+    else if ('a' <= c && c <= 'f')
+      return c - 'a' + 10;
+  }
+  return 0;
 }
 
 /*******************************************************************************
@@ -552,17 +575,16 @@ inline int getDigitValue (char c, int base)
 *******************************************************************************/
 void findConfigFilePathFromTransportConfigPaths(const string& configName,
                                                 string& filePath) {
-    for (int i = 0; i < transport_config_path_size - 1; i++) {
-        filePath.assign(transport_config_paths[i]);
-        filePath += configName;
-        struct stat file_stat;
-        if (stat(filePath.c_str(), &file_stat) == 0 &&
-            S_ISREG(file_stat.st_mode)) {
-            return;
-        }
-    }
-    filePath.assign(transport_config_paths[transport_config_path_size - 1]);
+  for (int i = 0; i < transport_config_path_size - 1; i++) {
+    filePath.assign(transport_config_paths[i]);
     filePath += configName;
+    struct stat file_stat;
+    if (stat(filePath.c_str(), &file_stat) == 0 && S_ISREG(file_stat.st_mode)) {
+      return;
+    }
+  }
+  filePath.assign(transport_config_paths[transport_config_path_size - 1]);
+  filePath += configName;
 }
 
 /*******************************************************************************
@@ -575,254 +597,192 @@ void findConfigFilePathFromTransportConfigPaths(const string& configName,
 ** Returns:     1, if there are any config data, 0 otherwise
 **
 *******************************************************************************/
-bool CNxpNfcConfig::readConfig (const char* name, bool bResetContent)
-{
-    enum {
-        BEGIN_LINE = 1,
-        TOKEN,
-        STR_VALUE,
-        NUM_VALUE,
-        BEGIN_HEX,
-        BEGIN_QUOTE,
-        END_LINE
-    };
+bool CNxpNfcConfig::readConfig(const char* name, bool bResetContent) {
+  enum {
+    BEGIN_LINE = 1,
+    TOKEN,
+    STR_VALUE,
+    NUM_VALUE,
+    BEGIN_HEX,
+    BEGIN_QUOTE,
+    END_LINE
+  };
 
-    FILE*   fd;
-    struct stat buf;
-    string  token;
-    string  strValue;
-    unsigned long    numValue = 0;
-    CNxpNfcParam* pParam = NULL;
-    int     i = 0;
-    int     base = 0;
-    char    c;
-    int     bflag = 0;
-#if(NXP_EXTNS == TRUE)
-    mCurrentFile = name;
-#endif
-    state = BEGIN_LINE;
-    /* open config file, read it into a buffer */
-    if ((fd = fopen (name, "rb")) == NULL)
-    {
-        ALOGE("%s Cannot open config file %s", __func__, name);
-        if (bResetContent)
-        {
-            ALOGE("%s Using default value for all settings", __func__);
-            mValidFile = false;
-        }
-        return false;
+  uint8_t* p_config = nullptr;
+  size_t config_size = readConfigFile(name, &p_config);
+  if (p_config == nullptr) {
+    LOG(ERROR) << StringPrintf("%s Cannot open config file %s\n", __func__,
+                               name);
+    if (bResetContent) {
+      LOG(ERROR) << StringPrintf("%s Using default value for all settings\n",
+                                 __func__);
+      mValidFile = false;
     }
-    ALOGV("%s Opened %s config %s\n", __func__, (bResetContent ? "base" : "optional"), name);
+    return false;
+  }
 
-    stat (name, &buf);
+  string token;
+  string strValue;
+  unsigned long numValue = 0;
+  CNxpNfcParam* pParam = NULL;
+  int i = 0;
+  int base = 0;
+  char c;
+  int bflag = 0;
+  state = BEGIN_LINE;
+  mCurrentFile = name;
 
-    if(mDynamConfig)
-        m_timeStamp = (unsigned long)buf.st_mtime;
+  if(mDynamConfig)
+    config_crc32_ = sparse_crc32(0,(const void *)p_config, config_size);
+  else {
+      if (strcmp(default_nxp_config_path, name) == 0) {
+        config_crc32_ = sparse_crc32(0,(const void *)p_config, config_size);
+      }
+  }
+  if (strcmp(nxp_rf_config_path, name) == 0) {
+    config_crc32_rf_ = sparse_crc32(0, (const void *)p_config, config_size);
+  }
+  if (strcmp(transit_config_path, name) == 0) {
+    config_crc32_tr_ = sparse_crc32(0, (const void *)p_config, config_size);
+  }
+  mValidFile = true;
+  if (size() > 0) {
+    if (bResetContent)
+      clean();
     else
-    {
-        if(strcmp(default_nxp_config_path, name) == 0)
-            m_timeStamp = (unsigned long)buf.st_mtime;
-    }
+      moveToList();
+  }
 
-    mValidFile = true;
-    if (size() > 0)
-    {
-        if (bResetContent)
-            clean ();
+  for (size_t offset = 0; offset != config_size; ++offset) {
+    c = p_config[offset];
+    switch (state & 0xff) {
+      case BEGIN_LINE:
+        if (c == '#')
+          state = END_LINE;
+        else if (isPrintable(c)) {
+          i = 0;
+          token.erase();
+          strValue.erase();
+          state = TOKEN;
+          token.push_back(c);
+        }
+        break;
+      case TOKEN:
+        if (c == '=') {
+          token.push_back('\0');
+          state = BEGIN_QUOTE;
+        } else if (isPrintable(c))
+          token.push_back(c);
         else
-            moveToList ();
-    }
-
-    for (;;)
-    {
-        if (feof(fd) || fread(&c, 1, 1, fd) != 1)
-        {
-            if (state == BEGIN_LINE)
-                break;
-            /**
-             * got to the EOF but not in BEGIN_LINE state so the file
-             * probably does not end with a newline, so the parser has
-             * not processed current line, simulate a newline in the file
-             */
-            c = '\n';
+          state = END_LINE;
+        break;
+      case BEGIN_QUOTE:
+        if (c == '"') {
+          state = STR_VALUE;
+          base = 0;
+        } else if (c == '0')
+          state = BEGIN_HEX;
+        else if (isDigit(c, 10)) {
+          state = NUM_VALUE;
+          base = 10;
+          numValue = getDigitValue(c, base);
+          i = 0;
+        } else if (c == '{') {
+          state = NUM_VALUE;
+          bflag = 1;
+          base = 16;
+          i = 0;
+          Set(IsStringValue);
+        } else
+          state = END_LINE;
+        break;
+      case BEGIN_HEX:
+        if (c == 'x' || c == 'X') {
+          state = NUM_VALUE;
+          base = 16;
+          numValue = 0;
+          i = 0;
+          break;
+        } else if (isDigit(c, 10)) {
+          state = NUM_VALUE;
+          base = 10;
+          numValue = getDigitValue(c, base);
+          break;
+        } else if (c != '\n' && c != '\r') {
+          state = END_LINE;
+          break;
         }
-        switch (state & 0xff)
-        {
-        case BEGIN_LINE:
-            if (c == '#')
-            {
-                state = END_LINE;
-            }
-            else if (isPrintable (c))
-            {
-                i = 0;
-                token.erase ();
-                strValue.erase ();
-                state = TOKEN;
-                token.push_back (c);
-            }
-            break;
-        case TOKEN:
-            if (c == '=')
-            {
-                token.push_back ('\0');
-                state = BEGIN_QUOTE;
-            }
-            else if (isPrintable (c))
-            {
-                token.push_back (c);
-            }
-            else
-            {
-                state = END_LINE;
-            }
-            break;
-        case BEGIN_QUOTE:
-            if (c == '"')
-            {
-                state = STR_VALUE;
-                base = 0;
-            }
-            else if (c == '0')
-            {
-                state = BEGIN_HEX;
-            }
-            else if (isDigit (c, 10))
-            {
-                state = NUM_VALUE;
-                base = 10;
-                numValue = getDigitValue (c, base);
-                i = 0;
-            }
-            else if (c == '{')
-            {
-                state = NUM_VALUE;
-                bflag = 1;
-                base = 16;
-                i = 0;
-                Set (IsStringValue);
-            }
-            else
-            {
-                state = END_LINE;
-            }
-            break;
-        case BEGIN_HEX:
-            if (c == 'x' || c == 'X')
-            {
-                state = NUM_VALUE;
-                base = 16;
-                numValue = 0;
-                i = 0;
-                break;
-            }
-            else if (isDigit (c, 10))
-            {
-                state = NUM_VALUE;
-                base = 10;
-                numValue = getDigitValue (c, base);
-                break;
-            }
-            else if (c != '\n' && c != '\r')
-            {
-                state = END_LINE;
-                break;
-            }
-            // fall through to numValue to handle numValue
+      // fall through to numValue to handle numValue
 
-        case NUM_VALUE:
-            if (isDigit (c, base))
-            {
-                numValue *= base;
-                numValue += getDigitValue (c, base);
-                ++i;
+      case NUM_VALUE:
+        if (isDigit(c, base)) {
+          numValue *= base;
+          numValue += getDigitValue(c, base);
+          ++i;
+        } else if (bflag == 1 &&
+                   (c == ' ' || c == '\r' || c == '\n' || c == '\t')) {
+          break;
+        } else if (base == 16 &&
+                   (c == ',' || c == ':' || c == '-' || c == ' ' || c == '}')) {
+          if (c == '}') {
+            bflag = 0;
+          }
+          if (i > 0) {
+            int n = (i + 1) / 2;
+            while (n-- > 0) {
+              numValue = numValue >> (n * 8);
+              unsigned char c = (numValue)&0xFF;
+              strValue.push_back(c);
             }
-            else if(bflag == 1 && (c == ' ' || c == '\r' || c=='\n' || c=='\t'))
-            {
-                break;
-            }
-            else if (base == 16 && (c== ','|| c == ':' || c == '-' || c == ' ' || c == '}'))
-            {
+          }
 
-                if( c=='}' )
-                {
-                    bflag = 0;
-                }
-                if (i > 0)
-                {
-                    int n = (i+1) / 2;
-                    while (n-- > 0)
-                    {
-                        numValue = numValue >> (n * 8);
-                        unsigned char c = (numValue) & 0xFF;
-                        strValue.push_back (c);
-                    }
-                }
-
-                Set (IsStringValue);
-                numValue = 0;
-                i = 0;
+          Set(IsStringValue);
+          numValue = 0;
+          i = 0;
+        } else {
+          if (c == '\n' || c == '\r') {
+            if (bflag == 0) {
+              state = BEGIN_LINE;
             }
-            else
-            {
-                if (c == '\n' || c == '\r')
-                {
-                    if (bflag == 0)
-                    {
-                        state = BEGIN_LINE;
-                    }
-                }
-                else
-                {
-                    if (bflag == 0)
-                    {
-                        state = END_LINE;
-                    }
-                }
-                if (Is (IsStringValue) && base == 16 && i > 0)
-                {
-                    int n = (i+1) / 2;
-                    while (n-- > 0)
-                        strValue.push_back (((numValue >> (n * 8)) & 0xFF));
-                }
-                if (strValue.length() > 0)
-                    pParam = new CNxpNfcParam (token.c_str (), strValue);
-                else
-                    pParam = new CNxpNfcParam (token.c_str (), numValue);
-
-                add (pParam);
-                strValue.erase ();
-                numValue = 0;
+          } else {
+            if (bflag == 0) {
+              state = END_LINE;
             }
-            break;
-        case STR_VALUE:
-            if (c == '"')
-            {
-                strValue.push_back('\0');
-                state = END_LINE;
-                pParam = new CNxpNfcParam(token.c_str(), strValue);
-                add(pParam);
-            }
-            else if (isPrintable(c))
-            {
-                strValue.push_back(c);
-            }
-            break;
-        case END_LINE:
-            if (c == '\n' || c == '\r')
-            {
-                state = BEGIN_LINE;
-            }
-            break;
-        default:
-            break;
+          }
+          if (Is(IsStringValue) && base == 16 && i > 0) {
+            int n = (i + 1) / 2;
+            while (n-- > 0) strValue.push_back(((numValue >> (n * 8)) & 0xFF));
+          }
+          if (strValue.length() > 0)
+            pParam = new CNxpNfcParam(token.c_str(), strValue);
+          else
+            pParam = new CNxpNfcParam(token.c_str(), numValue);
+          add(pParam);
+          strValue.erase();
+          numValue = 0;
         }
+        break;
+      case STR_VALUE:
+        if (c == '"') {
+          strValue.push_back('\0');
+          state = END_LINE;
+          pParam = new CNxpNfcParam(token.c_str(), strValue);
+          add(pParam);
+        } else if (isPrintable(c))
+          strValue.push_back(c);
+        break;
+      case END_LINE:
+        if (c == '\n' || c == '\r') state = BEGIN_LINE;
+        break;
+      default:
+        break;
     }
+  }
 
-    fclose (fd);
+  delete[] p_config;
 
-    moveFromList ();
-    return size () > 0;
+  moveFromList();
+  return size() > 0;
 }
 
 /*******************************************************************************
@@ -834,13 +794,7 @@ bool CNxpNfcConfig::readConfig (const char* name, bool bResetContent)
 ** Returns:     none
 **
 *******************************************************************************/
-CNxpNfcConfig::CNxpNfcConfig () :
-    mValidFile (true),
-    mDynamConfig(true),
-    m_timeStamp (0),
-    state (0)
-{
-}
+CNxpNfcConfig::CNxpNfcConfig() : mValidFile(true), mDynamConfig(true), state(0) {}
 
 /*******************************************************************************
 **
@@ -851,9 +805,7 @@ CNxpNfcConfig::CNxpNfcConfig () :
 ** Returns:     none
 **
 *******************************************************************************/
-CNxpNfcConfig::~CNxpNfcConfig ()
-{
-}
+CNxpNfcConfig::~CNxpNfcConfig() {}
 
 /**
  * @brief checks whether the given file exist.
@@ -886,47 +838,45 @@ CNxpNfcConfig& CNxpNfcConfig::GetInstance ()
     int gconfigpathid = 0;
     char config_name_generic[MAX_DATA_CONFIG_PATH_LEN] = {'\0'};
 
-    if (theInstance.size () == 0 && theInstance.mValidFile)
+  if (theInstance.size() == 0 && theInstance.mValidFile) {
+    string strPath;
+    if (alternative_config_path[0] != '\0') {
+      strPath.assign(alternative_config_path);
+      strPath += config_name;
+      theInstance.readConfig(strPath.c_str(), true);
+      if (!theInstance.empty()) {
+        return theInstance;
+      }
+    }
+    findConfigFilePathFromTransportConfigPaths(config_name, strPath);
+    //checks whether the default config file is present in th target
+    if (theInstance.file_exist(strPath.c_str()))
     {
-        string strPath;
-        if (alternative_config_path [0] != '\0')
-        {
-            strPath.assign (alternative_config_path);
-            strPath += config_name;
-            theInstance.readConfig (strPath.c_str (), true);
-            if (!theInstance.empty ())
-            {
-                return theInstance;
-            }
-        }
-        findConfigFilePathFromTransportConfigPaths(config_name, strPath);
-        //checks whether the default config file is present in th target
-        if (theInstance.file_exist(strPath.c_str()))
-        {
-            ALOGI("default config file exists = %s, dynamic selection disabled", strPath.c_str());
-            theInstance.mDynamConfig = false;
-            theInstance.readConfig(strPath.c_str(), true);
-            /*
-             * if libnfc-nxp.conf exists then dynamic selection will
-             * be turned off by default we will not have this file.
-             */
-            return theInstance;
-        }
-
-        gconfigpathid = theInstance.getconfiguration_id(config_name_generic);
-        findConfigFilePathFromTransportConfigPaths(config_name_generic, strPath);
-        if (!(theInstance.file_exist(strPath.c_str()))) {
-           ALOGI("no matching file found, using default file for stability\n");
-           findConfigFilePathFromTransportConfigPaths(config_name_default, strPath);
-        }
-        ALOGI("config file used = %s\n", strPath.c_str());
-        theInstance.readConfig (strPath.c_str (), true);
-#if(NXP_EXTNS == TRUE)
-        theInstance.readNxpTransitConfig("nxpTransit");
-#endif
+        ALOGI("default config file exists = %s, dynamic selection disabled", strPath.c_str());
+        theInstance.mDynamConfig = false;
+        theInstance.readConfig(strPath.c_str(), true);
+        /*
+         * if libnfc-nxp.conf exists then dynamic selection will
+         * be turned off by default we will not have this file.
+         */
+        return theInstance;
     }
 
-    return theInstance;
+    gconfigpathid = theInstance.getconfiguration_id(config_name_generic);
+    findConfigFilePathFromTransportConfigPaths(config_name_generic, strPath);
+    if (!(theInstance.file_exist(strPath.c_str()))) {
+       ALOGI("no matching file found, using default file for stability\n");
+       findConfigFilePathFromTransportConfigPaths(config_name_default, strPath);
+    }
+    ALOGI("config file used = %s\n", strPath.c_str());
+    theInstance.readConfig (strPath.c_str (), true);
+#if (NXP_EXTNS == TRUE)
+    readOptionalConfig("brcm");
+    theInstance.readNxpTransitConfig(transit_config_path);
+    theInstance.readNxpRFConfig(nxp_rf_config_path);
+#endif
+  }
+  return theInstance;
 }
 
 /*******************************************************************************
@@ -939,43 +889,35 @@ CNxpNfcConfig& CNxpNfcConfig::GetInstance ()
 **              false if setting does not exist
 **
 *******************************************************************************/
-bool CNxpNfcConfig::getValue (const char* name, char* pValue, size_t len) const
-{
-    const CNxpNfcParam* pParam = find (name);
-    if (pParam == NULL)
-        return false;
+bool CNxpNfcConfig::getValue(const char* name, char* pValue, size_t len) const {
+  const CNxpNfcParam* pParam = find(name);
+  if (pParam == NULL) return false;
 
-    if (pParam->str_len () > 0)
-    {
-        memset (pValue, 0, len);
-        memcpy (pValue, pParam->str_value (), pParam->str_len ());
-        return true;
-    }
-    return false;
+  if (pParam->str_len() > 0) {
+    memset(pValue, 0, len);
+    memcpy(pValue, pParam->str_value(), pParam->str_len());
+    return true;
+  }
+  return false;
 }
 
-bool CNxpNfcConfig::getValue (const char* name, char* pValue, long len,long* readlen) const
-{
-    const CNxpNfcParam* pParam = find (name);
-    if (pParam == NULL)
-        return false;
+bool CNxpNfcConfig::getValue(const char* name, char* pValue, long len,
+                             long* readlen) const {
+  const CNxpNfcParam* pParam = find(name);
+  if (pParam == NULL) return false;
 
-    if (pParam->str_len () > 0)
-    {
-        if(pParam->str_len () <= (unsigned long) len)
-        {
-            memset (pValue, 0, len);
-            memcpy (pValue, pParam->str_value (), pParam->str_len ());
-            *readlen = pParam->str_len ();
-        }
-        else
-        {
-            *readlen = -1;
-        }
-
-        return true;
+  if (pParam->str_len() > 0) {
+    if (pParam->str_len() <= (unsigned long)len) {
+      memset(pValue, 0, len);
+      memcpy(pValue, pParam->str_value(), pParam->str_len());
+      *readlen = pParam->str_len();
+    } else {
+      *readlen = -1;
     }
-    return false;
+
+    return true;
+  }
+  return false;
 }
 
 /*******************************************************************************
@@ -988,18 +930,15 @@ bool CNxpNfcConfig::getValue (const char* name, char* pValue, long len,long* rea
 **              false if setting does not exist
 **
 *******************************************************************************/
-bool CNxpNfcConfig::getValue (const char* name, unsigned long& rValue) const
-{
-    const CNxpNfcParam* pParam = find (name);
-    if (pParam == NULL)
-        return false;
+bool CNxpNfcConfig::getValue(const char* name, unsigned long& rValue) const {
+  const CNxpNfcParam* pParam = find(name);
+  if (pParam == NULL) return false;
 
-    if (pParam->str_len () == 0)
-    {
-        rValue = static_cast<unsigned long> (pParam->numValue ());
-        return true;
-    }
-    return false;
+  if (pParam->str_len() == 0) {
+    rValue = static_cast<unsigned long>(pParam->numValue());
+    return true;
+  }
+  return false;
 }
 
 /*******************************************************************************
@@ -1012,18 +951,15 @@ bool CNxpNfcConfig::getValue (const char* name, unsigned long& rValue) const
 **              false if setting does not exist
 **
 *******************************************************************************/
-bool CNxpNfcConfig::getValue (const char* name, unsigned short& rValue) const
-{
-    const CNxpNfcParam* pParam = find (name);
-    if (pParam == NULL)
-        return false;
+bool CNxpNfcConfig::getValue(const char* name, unsigned short& rValue) const {
+  const CNxpNfcParam* pParam = find(name);
+  if (pParam == NULL) return false;
 
-    if (pParam->str_len () == 0)
-    {
-        rValue = static_cast<unsigned short> (pParam->numValue ());
-        return true;
-    }
-    return false;
+  if (pParam->str_len() == 0) {
+    rValue = static_cast<unsigned short>(pParam->numValue());
+    return true;
+  }
+  return false;
 }
 
 /*******************************************************************************
@@ -1035,36 +971,29 @@ bool CNxpNfcConfig::getValue (const char* name, unsigned short& rValue) const
 ** Returns:     pointer to the setting object
 **
 *******************************************************************************/
-const CNxpNfcParam* CNxpNfcConfig::find (const char* p_name) const
-{
-    if (size () == 0)
-        return NULL;
+const CNxpNfcParam* CNxpNfcConfig::find(const char* p_name) const {
+  if (size() == 0) return NULL;
 
-    for (const_iterator it = begin (), itEnd = end (); it != itEnd; ++it)
-    {
-        if (**it < p_name)
-        {
-            continue;
-        }
-        else if (**it == p_name)
-        {
-            if ((*it)->str_len () > 0)
-            {
-                NXPLOG_EXTNS_D ("%s found %s=%s\n", __func__, p_name, (*it)->str_value());
-            }
-            else
-            {
-                NXPLOG_EXTNS_D ("%s found %s=(0x%lx)\n", __func__, p_name, (*it)->numValue());
-            }
-            return *it;
-        }
-        else
-            break;
-    }
-    return NULL;
+  for (const_iterator it = begin(), itEnd = end(); it != itEnd; ++it) {
+    if (**it < p_name) {
+      continue;
+    } else if (**it == p_name) {
+      if ((*it)->str_len() > 0) {
+        DLOG_IF(INFO, gLog_level.extns_log_level >= NXPLOG_LOG_DEBUG_LOGLEVEL)
+            << StringPrintf("%s found %s=%s\n", __func__, p_name,
+                            (*it)->str_value());
+      } else {
+        DLOG_IF(INFO, gLog_level.extns_log_level >= NXPLOG_LOG_DEBUG_LOGLEVEL)
+            << StringPrintf("%s found %s=(0x%lx)\n", __func__, p_name,
+                            (*it)->numValue());
+      }
+      return *it;
+    } else
+      break;
+  }
+  return NULL;
 }
 
-#if(NXP_EXTNS == TRUE)
 /*******************************************************************************
 **
 ** Function:    CNxpNfcConfig::readNxpTransitConfig()
@@ -1074,35 +1003,41 @@ const CNxpNfcParam* CNxpNfcConfig::find (const char* p_name) const
 ** Returns:     none
 **
 *******************************************************************************/
-void CNxpNfcConfig::readNxpTransitConfig(const char* fileName) const
-{
-    string strPath;
-    strPath.assign(transit_config_path);
-    strPath += extra_config_base;
-    strPath += fileName;
-    strPath += extra_config_ext;
-    CNxpNfcConfig::GetInstance().readConfig(strPath.c_str(), false);
+void CNxpNfcConfig::readNxpTransitConfig(const char* fileName) const {
+  DLOG_IF(INFO, nfc_debug_enabled)
+      << StringPrintf("readNxpTransitConfig-Enter..Reading %s", fileName);
+  CNxpNfcConfig::GetInstance().readConfig(fileName, false);
 }
-#endif
 
 /*******************************************************************************
 **
-** Function:    CNxpNfcConfig::clean()
+** Function:    CNxpNfcConfig::readNxpRFConfig()
+**
+** Description: read Config settings from RF conf file
+**
+** Returns:     none
+**
+*******************************************************************************/
+void CNxpNfcConfig::readNxpRFConfig(const char* fileName) const {
+  DLOG_IF(INFO, nfc_debug_enabled)
+      << StringPrintf("readNxpRFConfig-Enter..Reading %s", fileName);
+  CNxpNfcConfig::GetInstance().readConfig(fileName, false);
+}
+
+/*******************************************************************************
+**
+** Function:    CNfcConfig::clean()
 **
 ** Description: reset the setting array
 **
 ** Returns:     none
 **
 *******************************************************************************/
-void CNxpNfcConfig::clean ()
-{
-    if (size () == 0)
-        return;
+void CNxpNfcConfig::clean() {
+  if (size() == 0) return;
 
-    for (iterator it = begin (), itEnd = end (); it != itEnd; ++it)
-        delete *it;
-
-    clear ();
+  for (iterator it = begin(), itEnd = end(); it != itEnd; ++it) delete *it;
+  clear();
 }
 
 /*******************************************************************************
@@ -1114,39 +1049,30 @@ void CNxpNfcConfig::clean ()
 ** Returns:     none
 **
 *******************************************************************************/
-void CNxpNfcConfig::add (const CNxpNfcParam* pParam)
-{
-    if (m_list.size () == 0)
-    {
-        m_list.push_back (pParam);
-        return;
-    }
-#if(NXP_EXTNS == TRUE)
-    if((mCurrentFile.find("nxpTransit") != std::string::npos) && !isAllowed(pParam->c_str()))
-    {
-        ALOGV("%s Token restricted. Returning", __func__);
-        return;
-    }
-#endif
-    for (list<const CNxpNfcParam*>::iterator it = m_list.begin (), itEnd = m_list.end (); it != itEnd; ++it)
-    {
-        if (**it < pParam->c_str ())
-            continue;
+void CNxpNfcConfig::add(const CNxpNfcParam* pParam) {
+  if (m_list.size() == 0) {
+    m_list.push_back(pParam);
+    return;
+  }
+  if ((mCurrentFile.find("nxpTransit") != std::string::npos) &&
+      !isAllowed(pParam->c_str())) {
+    DLOG_IF(INFO, nfc_debug_enabled)
+        << StringPrintf("%s Token restricted. Returning", __func__);
+    return;
+  }
+  for (list<const CNxpNfcParam*>::iterator it = m_list.begin(),
+                                           itEnd = m_list.end();
+       it != itEnd; ++it) {
+    if (**it < pParam->c_str()) continue;
+    if (**it == pParam->c_str())
+      m_list.insert(m_list.erase(it), pParam);
+    else
+      m_list.insert(it, pParam);
 
-#if(NXP_EXTNS == TRUE)
-        if (**it == pParam->c_str())
-            m_list.insert(m_list.erase(it), pParam);
-        else
-            m_list.insert(it, pParam);
-#else
-        m_list.insert (it, pParam);
-#endif
-        return;
-    }
-    m_list.push_back (pParam);
+    return;
+  }
+  m_list.push_back(pParam);
 }
-
-#if(NXP_EXTNS == TRUE)
 /*******************************************************************************
 **
 ** Function:    CNxpNfcConfig::dump()
@@ -1156,19 +1082,20 @@ void CNxpNfcConfig::add (const CNxpNfcParam* pParam)
 ** Returns:     none
 **
 *******************************************************************************/
-void CNxpNfcConfig::dump()
-{
-    ALOGV("%s Enter", __func__);
+void CNxpNfcConfig::dump() {
+  DLOG_IF(INFO, nfc_debug_enabled) << StringPrintf("%s Enter", __func__);
 
-    for (list<const CNxpNfcParam*>::iterator it = m_list.begin(), itEnd = m_list.end(); it != itEnd; ++it)
-    {
-        if((*it)->str_len()>0)
-            ALOGV("%s %s \t= %s", __func__, (*it)->c_str(),(*it)->str_value());
-        else
-            ALOGV("%s %s \t= (0x%0lX)\n", __func__,(*it)->c_str(),(*it)->numValue());
-    }
+  for (list<const CNxpNfcParam*>::iterator it = m_list.begin(),
+                                           itEnd = m_list.end();
+       it != itEnd; ++it) {
+    if ((*it)->str_len() > 0)
+      DLOG_IF(INFO, nfc_debug_enabled) << StringPrintf(
+          "%s %s \t= %s", __func__, (*it)->c_str(), (*it)->str_value());
+    else
+      DLOG_IF(INFO, nfc_debug_enabled) << StringPrintf(
+          "%s %s \t= (0x%0lX)\n", __func__, (*it)->c_str(), (*it)->numValue());
+  }
 }
-
 /*******************************************************************************
 **
 ** Function:    CNfcConfig::isAllowed()
@@ -1178,24 +1105,24 @@ void CNxpNfcConfig::dump()
 ** Returns:     true if allowed else false
 **
 *******************************************************************************/
-bool CNxpNfcConfig::isAllowed(const char* name)
-{
-    string token(name);
-    bool stat = false;
-    if((token.find("P2P_LISTEN_TECH_MASK") != std::string::npos)        ||
-            (token.find("HOST_LISTEN_TECH_MASK") != std::string::npos)  ||
-            (token.find("UICC_LISTEN_TECH_MASK") != std::string::npos)  ||
-            (token.find("POLLING_TECH_MASK") != std::string::npos)      ||
-            (token.find("NXP_RF_CONF_BLK") != std::string::npos)        ||
-            (token.find("NXP_CN_TRANSIT_BLK_NUM_CHECK_ENABLE") != std::string::npos) ||
-            (token.find("NXP_FWD_FUNCTIONALITY_ENABLE") != std::string::npos))
+bool CNxpNfcConfig::isAllowed(const char* name) {
+  string token(name);
+  bool stat = false;
+  if ((token.find("P2P_LISTEN_TECH_MASK") != std::string::npos) ||
+      (token.find("HOST_LISTEN_TECH_MASK") != std::string::npos) ||
+      (token.find("UICC_LISTEN_TECH_MASK") != std::string::npos) ||
+      (token.find("NXP_ESE_LISTEN_TECH_MASK") != std::string::npos) ||
+      (token.find("POLLING_TECH_MASK") != std::string::npos) ||
+      (token.find("NXP_RF_CONF_BLK") != std::string::npos) ||
+      (token.find("NXP_CN_TRANSIT_BLK_NUM_CHECK_ENABLE") !=
+       std::string::npos) ||
+      (token.find("NXP_FWD_FUNCTIONALITY_ENABLE") != std::string::npos))
 
-    {
-        stat = true;
-    }
-    return stat;
+  {
+    stat = true;
+  }
+  return stat;
 }
-#endif
 /*******************************************************************************
 **
 ** Function:    CNxpNfcConfig::moveFromList()
@@ -1205,15 +1132,14 @@ bool CNxpNfcConfig::isAllowed(const char* name)
 ** Returns:     none
 **
 *******************************************************************************/
-void CNxpNfcConfig::moveFromList ()
-{
-    if (m_list.size () == 0)
-        return;
+void CNxpNfcConfig::moveFromList() {
+  if (m_list.size() == 0) return;
 
-    for (list<const CNxpNfcParam*>::iterator it = m_list.begin (), itEnd = m_list.end (); it != itEnd; ++it)
-        push_back (*it);
-
-    m_list.clear ();
+  for (list<const CNxpNfcParam*>::iterator it = m_list.begin(),
+                                           itEnd = m_list.end();
+       it != itEnd; ++it)
+    push_back(*it);
+  m_list.clear();
 }
 
 /*******************************************************************************
@@ -1225,62 +1151,94 @@ void CNxpNfcConfig::moveFromList ()
 ** Returns:     none
 **
 *******************************************************************************/
-void CNxpNfcConfig::moveToList ()
-{
-    if (m_list.size () != 0)
-        m_list.clear ();
+void CNxpNfcConfig::moveToList() {
+  if (m_list.size() != 0) m_list.clear();
 
-    for (iterator it = begin (), itEnd = end (); it != itEnd; ++it)
-        m_list.push_back (*it);
-
-    clear();
+  for (iterator it = begin(), itEnd = end(); it != itEnd; ++it)
+    m_list.push_back(*it);
+  clear();
 }
 
-/*******************************************************************************
-**
-** Function:    CNxpNfcConfig::checkTimestamp()
-**
-** Description: check if config file has modified
-**
-** Returns:     0 if not modified, 1 otherwise.
-**
-*******************************************************************************/
-int CNxpNfcConfig::checkTimestamp ()
-{
-    FILE* fd;
-    struct stat st;
-    unsigned long value = 0;
-    int ret = 0;
+bool CNxpNfcConfig::isModified() {
+  FILE* fd = fopen(config_timestamp_path, "r+");
+  if (fd == nullptr) {
+    LOG(ERROR) << StringPrintf(
+        "%s Unable to open file '%s' - assuming modified", __func__,
+        config_timestamp_path);
+    return true;
+  }
 
-    if (stat(config_timestamp_path, &st) != 0)
-    {
-        ALOGV("%s file %s not exist, creat it.", __func__, config_timestamp_path);
-        if ((fd = fopen (config_timestamp_path, "w+")) != NULL)
-        {
-            fwrite (&m_timeStamp, sizeof(unsigned long), 1, fd);
-            fclose (fd);
-        }
-        return 1;
-    }
-    else
-    {
-        fd = fopen (config_timestamp_path, "r+");
-        if (fd == NULL)
-        {
-            ALOGE("%s Cannot open file %s", __func__, config_timestamp_path);
-            return 1;
-        }
+  uint32_t stored_crc32 = 0;
+  uint32_t status = fread(&stored_crc32, sizeof(uint32_t), 1, fd);
+  if(!status) {
+    LOG(ERROR) << StringPrintf(
+        "%s Unable to read file '%s'", __func__,
+        config_timestamp_path);
+  }
+  fclose(fd);
 
-        fread (&value, sizeof(unsigned long), 1, fd);
-        ret = (value != m_timeStamp);
-        if (ret)
-        {
-            fseek (fd, 0, SEEK_SET);
-            fwrite (&m_timeStamp, sizeof(unsigned long), 1, fd);
-        }
-        fclose (fd);
-    }
-    return ret;
+  return stored_crc32 != config_crc32_;
+}
+
+bool CNxpNfcConfig::isModified(const char* pName) {
+  FILE* fd = nullptr;
+  bool isRfFile = false;
+  if (strcmp(nxp_rf_config_path, pName) == 0) {
+    isRfFile = true;
+    fd = fopen(rf_config_timestamp_path, "r+");
+  } else if (strcmp(transit_config_path, pName) == 0) {
+    fd = fopen(tr_config_timestamp_path, "r+");
+  }
+  if (fd == nullptr) {
+    LOG(ERROR) << StringPrintf(
+        "%s Unable to open file '%s' - assuming modified", __func__,
+        (isRfFile ? rf_config_timestamp_path : tr_config_timestamp_path));
+    return true;
+  }
+
+  uint32_t stored_crc32 = 0;
+  uint32_t status = fread(&stored_crc32, sizeof(uint32_t), 1, fd);
+  if(!status) {
+    LOG(ERROR) << StringPrintf(
+        "%s Unable to read file '%s'", __func__,
+        config_timestamp_path);
+  }
+ fclose(fd);
+
+  if (isRfFile)
+    return stored_crc32 != config_crc32_rf_;
+  else
+    return stored_crc32 != config_crc32_tr_;
+}
+
+void CNxpNfcConfig::resetModified() {
+  FILE* fd = nullptr;
+
+  fd = fopen(config_timestamp_path, "w+");
+  if (fd == nullptr) {
+    LOG(ERROR) << StringPrintf("%s Unable to open file '%s' for writing",
+                               __func__, config_timestamp_path);
+  } else {
+    fwrite(&config_crc32_, sizeof(uint32_t), 1, fd);
+    fclose(fd);
+  }
+  fd = fopen(rf_config_timestamp_path, "w+");
+  if (fd == nullptr) {
+    LOG(ERROR) << StringPrintf("%s Unable to open file '%s' for writing",
+                               __func__, rf_config_timestamp_path);
+  } else {
+    fwrite(&config_crc32_rf_, sizeof(uint32_t), 1, fd);
+    fclose(fd);
+  }
+
+  fd = fopen(tr_config_timestamp_path, "w+");
+  if (fd == nullptr) {
+    LOG(ERROR) << StringPrintf("%s Unable to open file '%s' for writing",
+                               __func__, tr_config_timestamp_path);
+  } else {
+    fwrite(&config_crc32_tr_, sizeof(uint32_t), 1, fd);
+    fclose(fd);
+  }
 }
 
 /*******************************************************************************
@@ -1292,10 +1250,7 @@ int CNxpNfcConfig::checkTimestamp ()
 ** Returns:     none
 **
 *******************************************************************************/
-CNxpNfcParam::CNxpNfcParam () :
-    m_numValue (0)
-{
-}
+CNxpNfcParam::CNxpNfcParam() : m_numValue(0) {}
 
 /*******************************************************************************
 **
@@ -1306,9 +1261,7 @@ CNxpNfcParam::CNxpNfcParam () :
 ** Returns:     none
 **
 *******************************************************************************/
-CNxpNfcParam::~CNxpNfcParam ()
-{
-}
+CNxpNfcParam::~CNxpNfcParam() {}
 
 /*******************************************************************************
 **
@@ -1319,12 +1272,8 @@ CNxpNfcParam::~CNxpNfcParam ()
 ** Returns:     none
 **
 *******************************************************************************/
-CNxpNfcParam::CNxpNfcParam (const char* name, const string& value) :
-    string (name),
-    m_str_value (value),
-    m_numValue (0)
-{
-}
+CNxpNfcParam::CNxpNfcParam(const char* name, const string& value)
+    : string(name), m_str_value(value), m_numValue(0) {}
 
 /*******************************************************************************
 **
@@ -1335,10 +1284,32 @@ CNxpNfcParam::CNxpNfcParam (const char* name, const string& value) :
 ** Returns:     none
 **
 *******************************************************************************/
-CNxpNfcParam::CNxpNfcParam (const char* name, unsigned long value) :
-    string (name),
-    m_numValue (value)
-{
+CNxpNfcParam::CNxpNfcParam(const char* name, unsigned long value)
+    : string(name), m_numValue(value) {}
+
+/*******************************************************************************
+**
+** Function:    readOptionalConfig()
+**
+** Description: read Config settings from an optional conf file
+**
+** Returns:     none
+**
+*******************************************************************************/
+void readOptionalConfig(const char* extra) {
+  string strPath;
+  string configName(extra_config_base);
+  configName += extra;
+  configName += extra_config_ext;
+
+  if (alternative_config_path[0] != '\0') {
+    strPath.assign(alternative_config_path);
+    strPath += configName;
+  } else {
+    findConfigFilePathFromTransportConfigPaths(configName, strPath);
+  }
+
+  CNxpNfcConfig::GetInstance().readConfig(strPath.c_str(), false);
 }
 
 /*******************************************************************************
@@ -1350,11 +1321,10 @@ CNxpNfcParam::CNxpNfcParam (const char* name, unsigned long value) :
 ** Returns:     True if found, otherwise False.
 **
 *******************************************************************************/
-extern "C" int GetNxpStrValue (const char* name, char* pValue, unsigned long len)
-{
-    CNxpNfcConfig& rConfig = CNxpNfcConfig::GetInstance ();
+int GetNxpStrValue(const char* name, char* pValue, unsigned long len) {
+  CNxpNfcConfig& rConfig = CNxpNfcConfig::GetInstance();
 
-    return rConfig.getValue (name, pValue, len);
+  return rConfig.getValue(name, pValue, len);
 }
 
 /*******************************************************************************
@@ -1367,69 +1337,65 @@ extern "C" int GetNxpStrValue (const char* name, char* pValue, unsigned long len
 **              name    - name of the config param to read.
 **              pValue  - pointer to input buffer.
 **              bufflen - input buffer length.
-**              len     - out parameter to return the number of bytes read from config file,
+**              len     - out parameter to return the number of bytes read from
+*config file,
 **                        return -1 in case bufflen is not enough.
 **
-** Returns:     true[1] if config param name is found in the config file, else false[0]
+** Returns:     true[1] if config param name is found in the config file, else
+*false[0]
 **
 *******************************************************************************/
-extern "C" int GetNxpByteArrayValue (const char* name, char* pValue, long bufflen, long *len)
-{
-    CNxpNfcConfig& rConfig = CNxpNfcConfig::GetInstance ();
+int GetNxpByteArrayValue(const char* name, char* pValue, long bufflen,
+                         long* len) {
+  CNxpNfcConfig& rConfig = CNxpNfcConfig::GetInstance();
 
-    return rConfig.getValue (name, pValue, bufflen,len);
+  return rConfig.getValue(name, pValue, bufflen, len);
 }
 
 /*******************************************************************************
 **
-** Function:    GetNumValue
+** Function:    GetNxpNumValue
 **
 ** Description: API function for getting a numerical value of a setting
 **
 ** Returns:     true, if successful
 **
 *******************************************************************************/
-extern "C" int GetNxpNumValue (const char* name, void* pValue, unsigned long len)
-{
-    if (!pValue)
-        return false;
+int GetNxpNumValue(const char* name, void* pValue, unsigned long len) {
+  if (!pValue) return false;
 
-    CNxpNfcConfig& rConfig = CNxpNfcConfig::GetInstance ();
-    const CNxpNfcParam* pParam = rConfig.find (name);
+  CNxpNfcConfig& rConfig = CNxpNfcConfig::GetInstance();
+  const CNxpNfcParam* pParam = rConfig.find(name);
 
-    if (pParam == NULL)
-        return false;
+  if (pParam == NULL) return false;
 
-    unsigned long v = pParam->numValue ();
-    if (v == 0 && pParam->str_len () > 0 && pParam->str_len () < 4)
-    {
-        const unsigned char* p = (const unsigned char*) pParam->str_value ();
-        for (unsigned int i = 0 ; i < pParam->str_len (); ++i)
-        {
-            v *= 256;
-            v += *p++;
-        }
+  unsigned long v = pParam->numValue();
+  if (v == 0 && pParam->str_len() > 0 && pParam->str_len() < 4) {
+    const unsigned char* p = (const unsigned char*)pParam->str_value();
+    for (unsigned int i = 0; i < pParam->str_len(); ++i) {
+      v *= 256;
+      v += *p++;
     }
-    switch (len)
-    {
+  }
+  switch (len) {
 #if(NFC_ARCH_TYPE == 64)
     case sizeof(unsigned long):
-        *(static_cast<unsigned long*>(pValue)) = (unsigned long) v;
-        break;
+      *(static_cast<unsigned long*>(pValue)) = (unsigned long)v;
+      break;
 #endif
     case sizeof(unsigned int):
-        *(static_cast<unsigned int*>(pValue)) = (unsigned int) v;
-        break;
+      *(static_cast<unsigned int*>(pValue)) = (unsigned int)v;
+      break;
     case sizeof(unsigned short):
-        *(static_cast<unsigned short*>(pValue)) = (unsigned short) v;
-        break;
+      *(static_cast<unsigned short*>(pValue)) = (unsigned short)v;
+      break;
     case sizeof(unsigned char):
-        *(static_cast<unsigned char*> (pValue)) = (unsigned char) v;
-        break;
+      *(static_cast<unsigned char*>(pValue)) = (unsigned char)v;
+      break;
     default:
-        return false;
-    }
-    return true;
+      return false;
+  }
+  return true;
 }
 
 /*******************************************************************************
@@ -1441,37 +1407,10 @@ extern "C" int GetNxpNumValue (const char* name, void* pValue, unsigned long len
 ** Returns:     none
 **
 *******************************************************************************/
-extern "C" void resetNxpConfig ()
-{
-    CNxpNfcConfig& rConfig = CNxpNfcConfig::GetInstance ();
+void resetNxpConfig() {
+  CNxpNfcConfig& rConfig = CNxpNfcConfig::GetInstance();
 
-    rConfig.clean ();
-}
-
-/*******************************************************************************
-**
-** Function:    readOptionalConfig()
-**
-** Description: read Config settings from an optional conf file
-**
-** Returns:     none
-**
-*******************************************************************************/
-void readOptionalConfig (const char* extra)
-{
-    string strPath;
-    string configName(extra_config_base);
-    configName += extra;
-    configName += extra_config_ext;
-
-    if (alternative_config_path [0] != '\0') {
-        strPath.assign (alternative_config_path);
-        strPath += configName;
-    } else {
-        findConfigFilePathFromTransportConfigPaths(configName, strPath);
-    }
-
-    CNxpNfcConfig::GetInstance ().readConfig (strPath.c_str (), false);
+  rConfig.clean();
 }
 
 /*******************************************************************************
@@ -1483,10 +1422,29 @@ void readOptionalConfig (const char* extra)
 ** Returns:     0 if not modified, 1 otherwise.
 **
 *******************************************************************************/
-extern "C" int isNxpConfigModified ()
-{
-    CNxpNfcConfig& rConfig = CNxpNfcConfig::GetInstance ();
-    return rConfig.checkTimestamp ();
+int isNxpConfigModified() {
+  CNxpNfcConfig& rConfig = CNxpNfcConfig::GetInstance();
+  return rConfig.isModified();
+}
+
+/*******************************************************************************
+**
+** Function:    isNxpRFConfigModified()
+**
+** Description: check if config file has modified
+**
+** Returns:     0 if not modified, 1 otherwise.
+**
+*******************************************************************************/
+int isNxpRFConfigModified() {
+  int retRF = 0, rettransit = 0, ret = 0;
+  CNxpNfcConfig& rConfig = CNxpNfcConfig::GetInstance();
+  retRF = rConfig.isModified(nxp_rf_config_path);
+  rettransit = rConfig.isModified(transit_config_path);
+  ret = retRF | rettransit;
+  DLOG_IF(INFO, nfc_debug_enabled)
+      << StringPrintf("ret RF or Transit value %d", ret);
+  return ret;
 }
 
 /*******************************************************************************
@@ -1498,55 +1456,8 @@ extern "C" int isNxpConfigModified ()
 ** Returns:     0 if not modified, 1 otherwise.
 **
 *******************************************************************************/
-extern "C" int updateNxpConfigTimestamp()
-{
-    CNxpNfcConfig& rConfig = CNxpNfcConfig::GetInstance();
-    return rConfig.updateTimestamp();
-}
-
-/*******************************************************************************
-**
-** Function:    CNxpNfcConfig::updateTimestamp()
-**
-** Description: update if config file has modified
-**
-** Returns:     0 if not modified, 1 otherwise.
-**
-*******************************************************************************/
-int CNxpNfcConfig::updateTimestamp()
-{
-    FILE*   fd;
-    struct stat st;
-    unsigned long value = 0;
-    int ret = 0;
-
-    if(stat(config_timestamp_path, &st) != 0)
-    {
-        ALOGV("%s file %s not exist, creat it.\n", __func__, config_timestamp_path);
-        if ((fd = fopen(config_timestamp_path, "w+")) != NULL)
-        {
-            fwrite(&m_timeStamp, sizeof(unsigned long), 1, fd);
-            fclose(fd);
-        }
-        return 1;
-    }
-    else
-    {
-        fd = fopen(config_timestamp_path, "r+");
-        if(fd == NULL)
-        {
-            ALOGE("%s Cannot open file %s\n", __func__, config_timestamp_path);
-            return 1;
-        }
-
-        fread(&value, sizeof(unsigned long), 1, fd);
-        ret = (value != m_timeStamp);
-        if(ret)
-        {
-            fseek(fd, 0, SEEK_SET);
-            fwrite(&m_timeStamp, sizeof(unsigned long), 1, fd);
-        }
-        fclose(fd);
-    }
-    return ret;
+int updateNxpConfigTimestamp() {
+  CNxpNfcConfig& rConfig = CNxpNfcConfig::GetInstance();
+  rConfig.resetModified();
+  return 0;
 }

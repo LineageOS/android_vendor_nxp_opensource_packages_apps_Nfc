@@ -2,7 +2,7 @@
  * Copyright (c) 2015-2016, The Linux Foundation. All rights reserved.
  * Not a Contribution.
  *
- * Copyright (C) 2015 NXP Semiconductors
+ * Copyright (C) 2015-2018 NXP Semiconductors
  * The original Work has been changed by NXP Semiconductors.
  * Copyright (C) 2014 The Android Open Source Project
  *
@@ -168,10 +168,10 @@ public class CardEmulationManager implements RegisteredServicesCache.Callback,
     }
 
     public void onUserSwitched(int userId) {
-        // for HCE
+        //For HCE
         mServiceCache.invalidateCache(userId);
         mPreferredServices.onUserSwitched(userId);
-        // for HCE-F
+        //For HCE-F
         mHostNfcFEmulationManager.onUserSwitched();
         mT3tIdentifiersCache.onUserSwitched();
         mEnabledNfcFServices.onUserSwitched(userId);
@@ -194,14 +194,12 @@ public class CardEmulationManager implements RegisteredServicesCache.Callback,
     }
 
     public void onNfcEnabled() {
-        // for HCE
         mAidCache.onNfcEnabled();
         // for HCE-F
         mT3tIdentifiersCache.onNfcEnabled();
     }
 
     public void onNfcDisabled() {
-        // for HCE
         mAidCache.onNfcDisabled();
         // for HCE-F
         mHostNfcFEmulationManager.onNfcDisabled();
@@ -243,49 +241,7 @@ public class CardEmulationManager implements RegisteredServicesCache.Callback,
         ComponentName defaultPaymentService =
                 getDefaultServiceForCategory(userId, CardEmulation.CATEGORY_PAYMENT, false);
         if (DBG) Log.d(TAG, "Current default: " + defaultPaymentService);
-        if (defaultPaymentService != null) {
-            // Validate the default is still installed and handling payment
-            NQApduServiceInfo serviceInfo = mServiceCache.getService(userId, defaultPaymentService);
-            if (serviceInfo == null || !serviceInfo.hasCategory(CardEmulation.CATEGORY_PAYMENT)) {
-                if (serviceInfo == null) {
-                    Log.e(TAG, "Default payment service unexpectedly removed.");
-                } else if (!serviceInfo.hasCategory(CardEmulation.CATEGORY_PAYMENT)) {
-                    if (DBG) Log.d(TAG, "Default payment service had payment category removed");
-                }
-                int numPaymentServices = 0;
-                ComponentName lastFoundPaymentService = null;
-                for (NQApduServiceInfo service : services) {
-                    if (service.hasCategory(CardEmulation.CATEGORY_PAYMENT))  {
-                        numPaymentServices++;
-                        lastFoundPaymentService = service.getComponent();
-                    }
-                }
-                if (DBG) Log.d(TAG, "Number of payment services is " +
-                        Integer.toString(numPaymentServices));
-                if (numPaymentServices == 0) {
-                    if (DBG) Log.d(TAG, "Default removed, no services left.");
-                    // No payment services left, unset default and don't ask the user
-                    setDefaultServiceForCategoryChecked(userId, null, CardEmulation.CATEGORY_PAYMENT);
-                } else if (numPaymentServices == 1) {
-                    // Only one left, automatically make it the default
-                    if (DBG) Log.d(TAG, "Default removed, making remaining service default.");
-                    setDefaultServiceForCategoryChecked(userId, lastFoundPaymentService,
-                            CardEmulation.CATEGORY_PAYMENT);
-                } else if (numPaymentServices > 1) {
-                    // More than one left, unset default and ask the user if he wants
-                    // to set a new one
-                    if (DBG) Log.d(TAG, "Default removed, asking user to pick.");
-                    setDefaultServiceForCategoryChecked(userId, null,
-                            CardEmulation.CATEGORY_PAYMENT);
-                    Intent intent = new Intent(mContext, DefaultRemovedActivity.class);
-                    intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TASK);
-                    mContext.startActivityAsUser(intent, UserHandle.CURRENT);
-                }
-            } else {
-                // Default still exists and handles the category, nothing do
-                if (DBG) Log.d(TAG, "Default payment service still ok.");
-            }
-        } else {
+        if (defaultPaymentService == null) {
             // A payment service may have been removed, leaving only one;
             // in that case, automatically set that app as default.
             int numPaymentServices = 0;
@@ -381,7 +337,7 @@ public class CardEmulationManager implements RegisteredServicesCache.Callback,
     }
 
 
-    /**
+   /**
      * Returns whether a service in this package is preferred,
      * either because it's the default payment app or it's running
      * in the foreground.
@@ -392,8 +348,10 @@ public class CardEmulationManager implements RegisteredServicesCache.Callback,
 
 
     /**
-     * This class implements the application-facing APIs and are called
-     * from binder. All calls must be permission-checked.
+     * This class implements the application-facing APIs
+     * and are called from binder. All calls must be
+     * permission-checked.
+     *
      */
     final class CardEmulationInterface extends INfcCardEmulation.Stub {
         @Override
