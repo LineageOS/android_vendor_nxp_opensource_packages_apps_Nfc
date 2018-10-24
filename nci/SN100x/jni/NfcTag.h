@@ -60,6 +60,7 @@ class NfcTag {
   int mPrevNumTechList;
   int mPrevTechLibNfcTypes [MAX_NUM_TECHNOLOGY]; //array of detailed tag types according to NFC service
   bool mIsMultiProtocolTag;
+  bool mCashbeeDetected;
 #endif
 
   /*******************************************************************************
@@ -232,6 +233,17 @@ class NfcTag {
   **
   *******************************************************************************/
   int checkNextValidProtocol(void );
+
+  /*******************************************************************************
+  **
+  ** Function:        isCashBeeActivated
+  **
+  ** Description:     checks if cashbee tag is detected
+  **
+  ** Returns:         True if tag is activated.
+  **
+  *******************************************************************************/
+  bool isCashBeeActivated();
 #endif
 
   /*******************************************************************************

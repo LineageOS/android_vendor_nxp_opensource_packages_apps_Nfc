@@ -42,6 +42,7 @@ using android::base::StringPrintf;
 SecureElement SecureElement::sSecElem;
 const char* SecureElement::APP_NAME = "nfc_jni";
 extern bool nfc_debug_enabled;
+extern bool isDynamicUiccEnabled;
 
 namespace android
 {
@@ -1586,7 +1587,7 @@ void SecureElement::releasePendingTransceive()
 uicc_stat_t SecureElement::getUiccStatus(uint8_t selected_uicc) {
   uint16_t ee_stat = NFA_EE_STATUS_REMOVED;
 
-  if (!nfcFL.nfccFL._NFCC_DYNAMIC_DUAL_UICC) {
+  if(!isDynamicUiccEnabled) {
     if (selected_uicc == 0x01)
       ee_stat = getEeStatus(EE_HANDLE_0xF4);
     else if (selected_uicc == 0x02)
@@ -1638,7 +1639,7 @@ uint16_t SecureElement::getEeStatus(uint16_t eehandle) {
   DLOG_IF(INFO, nfc_debug_enabled) << StringPrintf(
       "%s  num_nfcee_present = %d", __func__, mNfceeData_t.mNfceePresent);
 
-  for (i = 1; i <= mNfceeData_t.mNfceePresent; i++) {
+  for (i = 0; i <= mNfceeData_t.mNfceePresent; i++) {
     if (mNfceeData_t.mNfceeHandle[i] == eehandle) {
       ee_status = mNfceeData_t.mNfceeStatus[i];
       DLOG_IF(INFO, nfc_debug_enabled)
