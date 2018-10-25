@@ -3,7 +3,7 @@
  *  Copyright (c) 2016, The Linux Foundation. All rights reserved.
  *  Not a Contribution.
  *
- *  Copyright (C) 2015 NXP Semiconductors
+ *  Copyright (C) 2015-2018 NXP Semiconductors
  *  The original Work has been changed by NXP Semiconductors.
  *
  *  Copyright (C) 2012 The Android Open Source Project
@@ -21,7 +21,6 @@
  *  limitations under the License.
  *
  ******************************************************************************/
-
 #include <semaphore.h>
 #include <errno.h>
 #include <time.h>
@@ -37,6 +36,7 @@
 #include <ScopedLocalRef.h>
 #include <ScopedPrimitiveArray.h>
 #include <string>
+#include "TransactionController.h"
 
 extern "C"
 {
@@ -71,8 +71,8 @@ namespace android
     bool    gGotDeact2IdleNtf = false;
 #endif
     bool    fNeedToSwitchBack = false;
-    void    acquireRfInterfaceMutexLock();
-    void    releaseRfInterfaceMutexLock();
+    void    nativeNfcTag_acquireRfInterfaceMutexLock();
+    void    nativeNfcTag_releaseRfInterfaceMutexLock();
 }
 
 
@@ -415,7 +415,7 @@ static jbyteArray nativeNfcTag_doRead (JNIEnv* e, jobject o)
         if (sReadStatus == NFA_STATUS_TIMEOUT)
             setNdefDetectionTimeout();
         else if (sReadStatus == NFA_STATUS_FAILED)
-            (void)setNdefDetectionTimeoutIfTagAbsent(e, o, NFA_PROTOCOL_ISO15693);
+            (void)setNdefDetectionTimeoutIfTagAbsent(e, o, NFA_PROTOCOL_T5T);
     }
     else
     {
@@ -1721,7 +1721,7 @@ static jint nativeNfcTag_doGetNdefType (JNIEnv*, jobject, jint libnfcType, jint 
     }
     else
     {
-        /* NFA_PROTOCOL_ISO15693 and others */
+        /* NFA_PROTOCOL_T5T and others */
         ndefType = NDEF_UNKNOWN_TYPE;
     }
 
@@ -1936,7 +1936,7 @@ static jint nativeNfcTag_doCheckNdef (JNIEnv* e, jobject o, jintArray ndefInfo)
             ndef[1] = NDEF_MODE_READ_WRITE;
         e->ReleaseIntArrayElements (ndefInfo, ndef, 0);
         status = NFA_STATUS_FAILED;
-        if (setNdefDetectionTimeoutIfTagAbsent(e, o, NFA_PROTOCOL_T3T | NFA_PROTOCOL_ISO15693))
+        if (setNdefDetectionTimeoutIfTagAbsent(e, o, NFA_PROTOCOL_T3T | NFA_PROTOCOL_T5T))
             status = STATUS_CODE_TARGET_LOST;
     }
     else if ((sCheckNdefStatus == NFA_STATUS_TIMEOUT) && (NfcTag::getInstance ().getProtocol() == NFC_PROTOCOL_ISO_DEP))
@@ -2023,6 +2023,7 @@ static jboolean nativeNfcTag_doPresenceCheck (JNIEnv*, jobject)
     jboolean isPresent = JNI_FALSE;
     uint8_t* uid;
     uint32_t uid_len;
+    bool result;
     NfcTag::getInstance ().getTypeATagUID(&uid,&uid_len);
     int handle = sCurrentConnectedHandle;
 
@@ -2106,32 +2107,58 @@ static jboolean nativeNfcTag_doPresenceCheck (JNIEnv*, jobject)
             ALOGV("%s: Reconnecting Tag", __func__);
             return JNI_TRUE;
         }
+        if(!pTransactionController->transactionAttempt(TRANSACTION_REQUESTOR(TAG_PRESENCE_CHECK), TRANSACTION_ATTEMPT_FOR_SECONDS(5)))
+        {
+            ALOGE("%s: Transaction in progress. Can not perform presence check", __func__);
+            return JNI_FALSE;
+        }
+
         ALOGV("%s: presence check for TypeB / TypeA random uid", __func__);
         sPresenceCheckTimer.set(500, presenceCheckTimerProc);
 
         tNFC_STATUS stat = NFA_RegVSCback (true,nfaVSCNtfCallback); //Register CallBack for VS NTF
         if(NFA_STATUS_OK != stat)
         {
+            ALOGE("%s: Kill presence check timer", __func__);
+            sPresenceCheckTimer.kill();
             goto TheEnd;
         }
-
-        SyncEventGuard guard (sNfaVSCResponseEvent);
-        stat = NFA_SendVsCommand (0x11,0x00,NULL,nfaVSCCallback);
-        if(NFA_STATUS_OK == stat)
         {
-            ALOGV("%s: presence check for TypeB - wait for NFA VS RSP to come", __func__);
-            sNfaVSCResponseEvent.wait(); //wait for NFA VS command to finish
-            ALOGV("%s: presence check for TypeB - GOT NFA VS RSP", __func__);
+            SyncEventGuard guard (sNfaVSCResponseEvent);
+            stat = NFA_SendVsCommand (0x11,0x00,NULL,nfaVSCCallback);
+            if(NFA_STATUS_OK == stat)
+            {
+                /*Considering the FWI=14 for slowest tag, wait time is kept 5000*/
+                result = sNfaVSCResponseEvent.wait(5000); //wait for NFA VS command to finish
+                if(result == FALSE)
+                {
+                    ALOGV("%s: Timedout while waiting for presence check rsp", __func__);
+                    pTransactionController->transactionEnd(TRANSACTION_REQUESTOR(TAG_PRESENCE_CHECK));
+                    return JNI_FALSE;
+                }
+                ALOGV("%s: presence check for TypeB - GOT NFA VS RSP", __func__);
+            }
+            else
+            {
+                ALOGE("%s: Kill presence check timer, command failed", __func__);
+                sPresenceCheckTimer.kill();
+            }
         }
+        pTransactionController->transactionEnd(TRANSACTION_REQUESTOR(TAG_PRESENCE_CHECK));
 
         if(true == sVSCRsp)
         {
             {
                 SyncEventGuard guard (sNfaVSCNotificationEvent);
                 ALOGV("%s: presence check for TypeB - wait for NFA VS NTF to come", __func__);
-                sNfaVSCNotificationEvent.wait(); //wait for NFA VS NTF to come
-                ALOGV("%s: presence check for TypeB - GOT NFA VS NTF", __func__);
+                result = sNfaVSCNotificationEvent.wait(5000); //wait for NFA VS NTF to come
                 sPresenceCheckTimer.kill();
+                if(result == FALSE)
+                {
+                     ALOGV("%s: Timedout while waiting for presence check Ntf", __func__);
+                     return JNI_FALSE;
+                }
+                ALOGV("%s: presence check for TypeB - GOT NFA VS NTF", __func__);
             }
 
             if(false == sIsTagInField)
@@ -2232,7 +2259,7 @@ static jboolean nativeNfcTag_doIsNdefFormatable (JNIEnv* e,
     jboolean isFormattable = JNI_FALSE;
 
     tNFC_PROTOCOL protocol = NfcTag::getInstance().getProtocol();
-    if (NFA_PROTOCOL_T1T == protocol || NFA_PROTOCOL_ISO15693 == protocol
+    if (NFA_PROTOCOL_T1T == protocol || NFA_PROTOCOL_T5T == protocol
             || NFA_PROTOCOL_MIFARE == protocol)
     {
         isFormattable = JNI_TRUE;
@@ -2673,14 +2700,14 @@ static void sReconnectTimerProc (union sigval)
 
 /*******************************************************************************
 **
-** Function:        acquireRfInterfaceMutexLock
+** Function:        nativeNfcTag_acquireRfInterfaceMutexLock
 **
 ** Description:     acquire lock
 **
 ** Returns:         None
 **
 *******************************************************************************/
-void acquireRfInterfaceMutexLock()
+void nativeNfcTag_acquireRfInterfaceMutexLock()
 {
     ALOGV("%s: try to acquire lock", __func__);
     sRfInterfaceMutex.lock();
@@ -2689,14 +2716,14 @@ void acquireRfInterfaceMutexLock()
 
 /*******************************************************************************
 **
-** Function:       releaseRfInterfaceMutexLock
+** Function:       nativeNfcTag_releaseRfInterfaceMutexLock
 **
 ** Description:    release the lock
 **
 ** Returns:        None
 **
 *******************************************************************************/
-void releaseRfInterfaceMutexLock()
+void nativeNfcTag_releaseRfInterfaceMutexLock()
 {
     sRfInterfaceMutex.unlock();
     ALOGV("%s: sRfInterfaceMutex unlock", __func__);
