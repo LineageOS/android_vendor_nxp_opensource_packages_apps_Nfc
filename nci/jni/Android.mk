@@ -32,6 +32,7 @@ endif
 
 LOCAL_CFLAGS += -DNXP_LDR_SVC_VER_2=TRUE
 
+EXCLUDE = JcopManager.cpp
 LOCAL_SRC_FILES := $(call all-subdir-cpp-files) $(call all-subdir-c-files)
 
 LOCAL_C_INCLUDES += \
@@ -48,7 +49,7 @@ LOCAL_C_INCLUDES += \
     $(VOB_COMPONENTS)/gki/ulinux \
     $(VOB_COMPONENTS)/gki/common \
     $(LIBNFC_PATH)/utils/include \
-    vendor/nxp/opensource/halimpl/extns/impl
+    vendor/nxp/opensource/halimpl/SN100x/extns/impl
 
 LOCAL_SHARED_LIBRARIES := \
     libicuuc \
