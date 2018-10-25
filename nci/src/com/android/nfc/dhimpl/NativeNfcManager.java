@@ -2,7 +2,7 @@
  * Copyright (c) 2015-2016, The Linux Foundation. All rights reserved.
  * Not a Contribution.
  *
- * Copyright (C) 2015 NXP Semiconductors
+ * Copyright (C) 2015-2018 NXP Semiconductors
  * The original Work has been changed by NXP Semiconductors.
  * Copyright (C) 2010 The Android Open Source Project
  *
@@ -30,10 +30,13 @@ import android.nfc.tech.TagTechnology;
 import android.util.Log;
 import java.io.File;
 
+import java.util.HashMap;
+import java.util.Map;
 import com.android.nfc.DeviceHost;
 import com.android.nfc.LlcpException;
 import com.android.nfc.NfcDiscoveryParameters;
 
+import java.io.FileDescriptor;
 import java.util.Arrays;
 import java.util.Iterator;
 import java.util.HashMap;
@@ -338,6 +341,9 @@ public class NativeNfcManager implements DeviceHost {
     public native void doSelectSecureElement(int seID);
 
     @Override
+    public native void doActivateSecureElement(int seID);
+
+    @Override
     public native void doDeselectSecureElement(int seID);
 
     @Override
@@ -569,10 +575,10 @@ public class NativeNfcManager implements DeviceHost {
         return DEFAULT_LLCP_RWSIZE;
     }
 
-    private native String doDump();
+    private native void doDump(FileDescriptor fd);
     @Override
-    public String dump() {
-        return doDump();
+    public void dump(FileDescriptor fd) {
+        doDump(fd);
     }
 
     private native void doEnableScreenOffSuspend();

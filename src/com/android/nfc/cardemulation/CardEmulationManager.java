@@ -2,7 +2,7 @@
  * Copyright (c) 2015-2016, The Linux Foundation. All rights reserved.
  * Not a Contribution.
  *
- * Copyright (C) 2015 NXP Semiconductors
+ * Copyright (C) 2015-2018 NXP Semiconductors
  * The original Work has been changed by NXP Semiconductors.
  * Copyright (C) 2014 The Android Open Source Project
  *
@@ -94,7 +94,7 @@ public class CardEmulationManager implements RegisteredServicesCache.Callback,
         mContext = context;
         mCardEmulationInterface = new CardEmulationInterface();
         mNfcFCardEmulationInterface = new NfcFCardEmulationInterface();
-        mAidCache = new RegisteredAidCache(context, aidRoutingManager);
+        mAidCache = new RegisteredAidCache(context);
         mT3tIdentifiersCache = new RegisteredT3tIdentifiersCache(context);
         mServiceCache = new RegisteredServicesCache(context, this);
         mNfcFServicesCache = new RegisteredNfcFServicesCache(context, this);
@@ -168,15 +168,16 @@ public class CardEmulationManager implements RegisteredServicesCache.Callback,
     }
 
     public void onUserSwitched(int userId) {
-        // for HCE
+        //For HCE
         mServiceCache.invalidateCache(userId);
         mPreferredServices.onUserSwitched(userId);
-        // for HCE-F
+        //For HCE-F
         mHostNfcFEmulationManager.onUserSwitched();
         mT3tIdentifiersCache.onUserSwitched();
         mEnabledNfcFServices.onUserSwitched(userId);
         mNfcFServicesCache.onUserSwitched();
         mNfcFServicesCache.invalidateCache(userId);
+
     }
 
     public void onT3tConfigure()
@@ -380,7 +381,7 @@ public class CardEmulationManager implements RegisteredServicesCache.Callback,
     }
 
 
-    /**
+   /**
      * Returns whether a service in this package is preferred,
      * either because it's the default payment app or it's running
      * in the foreground.
@@ -391,8 +392,10 @@ public class CardEmulationManager implements RegisteredServicesCache.Callback,
 
 
     /**
-     * This class implements the application-facing APIs and are called
-     * from binder. All calls must be permission-checked.
+     * This class implements the application-facing APIs
+     * and are called from binder. All calls must be
+     * permission-checked.
+     *
      */
     final class CardEmulationInterface extends INfcCardEmulation.Stub {
         @Override
@@ -509,8 +512,8 @@ public class CardEmulationManager implements RegisteredServicesCache.Callback,
             NfcPermissions.enforceUserPermissions(mContext);
             return mPreferredServices.unregisteredPreferredForegroundService(
                     Binder.getCallingUid());
-        }
 
+        }
         @Override
         public boolean supportsAidPrefixRegistration() throws RemoteException {
             return mAidCache.supportsAidPrefixRegistration();
