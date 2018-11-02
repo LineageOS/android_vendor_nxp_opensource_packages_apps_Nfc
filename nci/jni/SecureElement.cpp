@@ -3331,7 +3331,8 @@ void SecureElement::eSE_ClearAllPipe_handler(uint8_t host) {
   pthread_attr_init(&attr);
   pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_DETACHED);
   uint8_t* host_id = (uint8_t*)malloc(sizeof(uint8_t));
-  *host_id = host;
+  if (host_id)
+    *host_id = host;
   LOG(ERROR) << StringPrintf("%s; Enter", fn);
   if (pthread_create(&thread, &attr, &eSE_ClearAllPipe_thread_handler,
                      (void*)host_id) < 0) {
