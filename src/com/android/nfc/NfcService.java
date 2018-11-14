@@ -2913,6 +2913,7 @@ public class NfcService implements DeviceHostListener {
                     Log.d(TAG, "computeRoutingParameters >>>");
                     synchronized (NfcService.this) {
                     computeAndSetRoutingParameters();
+                    break;
                     }
                 case MSG_MOCK_NDEF: {
                     NdefMessage ndefMsg = (NdefMessage) msg.obj;
