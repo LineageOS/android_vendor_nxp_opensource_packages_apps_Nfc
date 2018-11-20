@@ -2120,7 +2120,7 @@ static jboolean nfcManager_clearRoutingEntry (JNIEnv*, jobject, jint type)
 **
 *******************************************************************************/
 
-static void nfcManager_setEmptyAidRoute (JNIEnv*, jobject)
+static void nfcManager_setEmptyAidRoute (JNIEnv*, jobject, jint route)
 {
     RoutingManager::getInstance().setEmptyAidEntry();
     return;
@@ -2225,7 +2225,48 @@ static void nfcManager_setEmptyAidRoute (JNIEnv*, jobject)
     RoutingManager::getInstance().commitRouting();
     DLOG_IF(INFO, nfc_debug_enabled) << StringPrintf("%s: exit", __func__);
   }
+  /******************************************************************************
+  **
+  ** Function:        nfcManager_getDefaultFelicaCLTPowerState
+  **
+  ** Description:     Get the default mifare CLT Power States.
+  **                  e: JVM environment.
+  **                  o: Java object.
+  **
+  ** Returns:         Power State
+  **
+  *******************************************************************************/
 
+   static jint nfcManager_getDefaultFelicaCLTPowerState (JNIEnv* e, jobject o)
+   {
+    unsigned long num = 0;
+
+    GetNxpNumValue(NAME_DEFAULT_FELICA_CLT_PWR_STATE, &num, sizeof(num));
+    return num;
+   }
+
+
+  /******************************************************************************
+  **
+  ** Function:        nfcManager_getDefaultFelicaCLTRoute
+  **
+  ** Description:     Get the default mifare CLT Route Entry.
+  **                  e: JVM environment.
+  **                  o: Java object.
+  **                  mode: Not used.
+  **
+  ** Returns:         None
+  **
+  *******************************************************************************/
+
+  static jint nfcManager_getDefaultFelicaCLTRoute (JNIEnv* e, jobject o)
+  {
+    unsigned long num = 0;
+
+    GetNxpNumValue(NAME_DEFAULT_FELICA_CLT_ROUTE, &num, sizeof(num));
+
+    return num;
+  }
   /*******************************************************************************
   **
   ** Function:        nfcManager_getLfT3tMax
@@ -4589,7 +4630,7 @@ __attribute__((unused)) static int nfcManager_getNfcInitTimeout(JNIEnv * e, jobj
     {"doClearRoutingEntry", "(I)Z",
             (void*)nfcManager_clearRoutingEntry},
 
-    {"setEmptyAidRoute", "()V", (void*)nfcManager_setEmptyAidRoute},
+    {"setEmptyAidRoute", "(I)V", (void*)nfcManager_setEmptyAidRoute},
 
     {"getAidTableSize", "()I", (void*)nfcManager_getAidTableSize},
 
@@ -4605,11 +4646,17 @@ __attribute__((unused)) static int nfcManager_getNfcInitTimeout(JNIEnv * e, jobj
     {"readerPassThruMode", "(BB)[B", (void*)nfcManager_readerPassThruMode},
     {"transceiveAppData", "([B)[B", (void*)nfcManager_transceiveAppData},
 #if (NXP_EXTNS == TRUE)
+     {"getDefaultFelicaCLTPowerState", "()I",
+            (void*) nfcManager_getDefaultFelicaCLTPowerState},
+
     {"getDefaultAidPowerState", "()I",
      (void*)nfcManager_getDefaultAidPowerState},
 
     {"getDefaultDesfirePowerState", "()I",
      (void*)nfcManager_getDefaultDesfirePowerState},
+
+    {"getDefaultFelicaCLTRoute", "()I",
+            (void*) nfcManager_getDefaultFelicaCLTRoute},
 
     {"getDefaultMifareCLTPowerState", "()I",
      (void*)nfcManager_getDefaultMifareCLTPowerState},
@@ -4665,8 +4712,6 @@ __attribute__((unused)) static int nfcManager_getNfcInitTimeout(JNIEnv * e, jobj
 
     {"doDump", "(Ljava/io/FileDescriptor;)V", (void*)nfcManager_doDump},
 
-    {"JCOSDownload", "()I", (void*)nfcManager_doJcosDownload},
-
     {"commitRouting", "()Z", (void*)nfcManager_doCommitRouting},
 #if (NXP_EXTNS == TRUE)
     {"setTransitConfig", "(Ljava/lang/String;)I",
@@ -4683,7 +4728,6 @@ __attribute__((unused)) static int nfcManager_getNfcInitTimeout(JNIEnv * e, jobj
     {"isNfccBusy", "()Z", (void*)nfcManager_isNfccBusy},
 #endif
     // Factory Test Code
-    {"doCheckJcopDlAtBoot", "()Z", (void*)nfcManager_doCheckJcopDlAtBoot},
     {"doEnableDtaMode", "()V", (void*)nfcManager_doEnableDtaMode},
     {"doDisableDtaMode", "()V", (void*)nfcManager_doDisableDtaMode},
     {"doFactoryReset", "()V", (void*)nfcManager_doFactoryReset},
@@ -4697,7 +4741,6 @@ __attribute__((unused)) static int nfcManager_getNfcInitTimeout(JNIEnv * e, jobj
     {"setPreferredSimSlot", "(I)I", (void*)nfcManager_setPreferredSimSlot},
     {"routeApduPattern", "(II[B[B)Z", (void*)nfcManager_routeApduPattern},
     {"unrouteApduPattern", "([B)Z", (void*)nfcManager_unrouteApduPattern},
-    {"doNfcSelfTest", "(I)I", (void*)nfcManager_nfcSelfTest}
 #endif
   };
 

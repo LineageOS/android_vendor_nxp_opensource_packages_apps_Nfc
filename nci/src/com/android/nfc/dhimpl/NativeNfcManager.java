@@ -34,6 +34,7 @@ import java.io.FileDescriptor;
 import java.util.Arrays;
 import java.util.Iterator;
 import java.util.HashMap;
+import android.os.SystemProperties;
 
 
 /**
@@ -47,9 +48,14 @@ public class NativeNfcManager implements DeviceHost {
     static final int DEFAULT_LLCP_RWSIZE = 2;
 
     static final String DRIVER_NAME = "android-nci";
+    private static final String chip_id = SystemProperties.get("vendor.qti.nfc.chipid", "");
 
     static {
-        System.loadLibrary("sn100nfc_nci_jni");
+        //SN100 chip-ID can be A3 or A4
+        if (chip_id.equals("0xa3") || chip_id.equals("0xa4"))
+          System.loadLibrary("sn100nfc_nci_jni");
+        else
+          System.loadLibrary("nqnfc_nci_jni");
     }
 
     /* Native structure */
