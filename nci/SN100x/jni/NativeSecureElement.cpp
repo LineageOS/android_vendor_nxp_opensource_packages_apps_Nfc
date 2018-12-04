@@ -59,6 +59,7 @@ static jint nativeNfcSecureElement_doOpenSecureElementConnection (JNIEnv*, jobje
     jint secElemHandle = EE_ERROR_INIT;
     NFCSTATUS status = NFCSTATUS_FAILED;
     SecureElement &se = SecureElement::getInstance();
+    se.mModeSetNtfstatus = NFA_STATUS_FAILED;
 
     /* Tell the controller to power up to get ready for sec elem operations */
     PowerSwitch::getInstance ().setLevel (PowerSwitch::FULL_POWER);
@@ -74,15 +75,30 @@ static jint nativeNfcSecureElement_doOpenSecureElementConnection (JNIEnv*, jobje
     }
     if(status != NFA_STATUS_OK)
     {
-         LOG(INFO) << StringPrintf("%s: power link command failed", __func__);
-         stat =false;
+      LOG(INFO) << StringPrintf("%s: power link command failed", __func__);
+      stat =false;
     }
     else
     {
        stat = se.SecEle_Modeset(se.NFCEE_ENABLE);
-       se.mIsWiredModeOpen = true;
+       if(se.mModeSetNtfstatus != NFA_STATUS_OK)
+       {
+         stat = false;
+         LOG(INFO) << StringPrintf("%s: Mode set ntf STATUS_FAILED", __func__);
+
+         SyncEventGuard guard (se.mEERecoveryComplete);
+         {
+           se.mEERecoveryComplete.wait();
+           LOG(INFO) << StringPrintf("%s: Recovery complete", __func__);
+         }
+         if(se.mErrorRecovery)
+         {
+           stat = true;
+         }
+       }
        if(stat == true)
        {
+         se.mIsWiredModeOpen = true;
          stat = se.apduGateReset(se.mActiveEeHandle, recvBuffer, &recvBufferActualSize);
         if (stat)
         {
