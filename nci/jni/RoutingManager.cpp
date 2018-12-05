@@ -37,6 +37,7 @@
 #include "nfa_api.h"
 #include "nfc_api.h"
 #include "phNxpConfig.h"
+#include "nfc_config.h"
 
 using android::base::StringPrintf;
 
@@ -238,23 +239,26 @@ bool RoutingManager::initialize(nfc_jni_native_data* native) {
       mDefaultTechFSeID = getUiccRoute(sCurrentSelectedUICCSlot);
     }
 
-    if (GetNxpNumValue(NAME_DEFAULT_FELICA_CLT_PWR_STATE, (void*)&num,
-                       sizeof(num)))
+    if (NfcConfig::hasKey(NAME_DEFAULT_FELICA_CLT_PWR_STATE)) {
+      num = NfcConfig::getUnsigned(NAME_DEFAULT_FELICA_CLT_PWR_STATE);
       mDefaultTechFPowerstate = num;
-    else
+    } else {
       mDefaultTechFPowerstate = 0x3F;
+    }
   } else {
     mDefaultTechFSeID = SecureElement::getInstance().EE_HANDLE_0xF4;
     mDefaultTechFPowerstate = 0x3F;
   }
-  if (GetNxpNumValue(NAME_NXP_HCEF_CMD_RSP_TIMEOUT_VALUE, (void*)&num,
-                     sizeof(num))) {
+
+  if (NfcConfig::hasKey(NAME_NXP_HCEF_CMD_RSP_TIMEOUT_VALUE)) {
+    num = NfcConfig::getUnsigned(NAME_NXP_HCEF_CMD_RSP_TIMEOUT_VALUE);
     if (num > 0) {
       mDefaultHCEFRspTimeout = num;
     }
   }
 #endif
-  if ((GetNxpNumValue(NAME_NXP_NFC_CHIP, &num, sizeof(num)))) {
+  if (NfcConfig::hasKey(NAME_NXP_NFC_CHIP)) {
+    num = NfcConfig::getUnsigned(NAME_NXP_NFC_CHIP);
     mChipId = num;
   }
 
@@ -916,9 +920,9 @@ void RoutingManager::checkProtoSeID(void) {
 
   DLOG_IF(INFO, nfc_debug_enabled) << StringPrintf("%s: enter", fn);
 
-  if (GetNxpNumValue(NAME_CHECK_DEFAULT_PROTO_SE_ID,
-                     &check_default_proto_se_id_req,
-                     sizeof(check_default_proto_se_id_req))) {
+  if (NfcConfig::hasKey(NAME_CHECK_DEFAULT_PROTO_SE_ID)) {
+    check_default_proto_se_id_req =
+        NfcConfig::getUnsigned(NAME_CHECK_DEFAULT_PROTO_SE_ID);
     DLOG_IF(INFO, nfc_debug_enabled)
         << StringPrintf("%s: CHECK_DEFAULT_PROTO_SE_ID - 0x%2lX ", fn,
                         check_default_proto_se_id_req);
@@ -985,14 +989,9 @@ void RoutingManager::configureOffHostNfceeTechMask(void) {
   if (mDefaultEe & SecureElement::ESE_ID)  // eSE
   {
     preferredHandle = ROUTE_LOC_ESE_ID;
-  } else if (mDefaultEe & SecureElement::UICC_ID)  // UICC
+  } else if ((mDefaultEe & SecureElement::UICC_ID) || (mDefaultEe & SecureElement::UICC2_ID)) //UICC
   {
-    preferredHandle = SecureElement::getInstance().EE_HANDLE_0xF4;
-  } else if (nfcFL.nfccFL._NFCC_DYNAMIC_DUAL_UICC &&
-             nfcFL.nfccFL._NFC_NXP_STAT_DUAL_UICC_WO_EXT_SWITCH &&
-             (mDefaultEe & SecureElement::UICC2_ID))  // UICC
-  {
-    preferredHandle = ROUTE_LOC_UICC2_ID;
+    preferredHandle = ((sCurrentSelectedUICCSlot == 2) ? ROUTE_LOC_UICC2_ID : SecureElement::getInstance().EE_HANDLE_0xF4);
   }
 
   SecureElement::getInstance().getEeHandleList(ee_handleList, &count);
@@ -1010,22 +1009,42 @@ void RoutingManager::configureOffHostNfceeTechMask(void) {
   }
 
   if ((defaultHandle != NFA_HANDLE_INVALID) && (0 != mUiccListnTechMask)) {
-    {
-      SyncEventGuard guard(SecureElement::getInstance().mUiccListenEvent);
-      nfaStat = NFA_CeConfigureUiccListenTech(defaultHandle, 0x00);
-      if (nfaStat == NFA_STATUS_OK) {
-        SecureElement::getInstance().mUiccListenEvent.wait();
-      } else
-        LOG(ERROR) << StringPrintf("fail to start UICC listen");
-    }
-    {
-      SyncEventGuard guard(SecureElement::getInstance().mUiccListenEvent);
-      nfaStat = NFA_CeConfigureUiccListenTech(defaultHandle,
-                                              (mUiccListnTechMask & 0x07));
-      if (nfaStat == NFA_STATUS_OK) {
-        SecureElement::getInstance().mUiccListenEvent.wait();
-      } else
-        LOG(ERROR) << StringPrintf("fail to start UICC listen");
+    if(defaultHandle == SecureElement::EE_HANDLE_0xF3) {
+      {
+        SyncEventGuard guard(SecureElement::getInstance().mEseListenEvent);
+        nfaStat = NFA_CeConfigureEseListenTech(defaultHandle, 0x00);
+        if (nfaStat == NFA_STATUS_OK) {
+          SecureElement::getInstance().mEseListenEvent.wait();
+        } else
+          LOG(ERROR) << StringPrintf("fail to start eSE listen");
+      }
+      {
+        SyncEventGuard guard(SecureElement::getInstance().mEseListenEvent);
+        nfaStat = NFA_CeConfigureEseListenTech(defaultHandle,
+                                                (mUiccListnTechMask & 0x07));
+        if (nfaStat == NFA_STATUS_OK) {
+          SecureElement::getInstance().mEseListenEvent.wait();
+        } else
+          LOG(ERROR) << StringPrintf("fail to start eSE listen");
+      }
+    } else {
+      {
+        SyncEventGuard guard(SecureElement::getInstance().mUiccListenEvent);
+        nfaStat = NFA_CeConfigureUiccListenTech(defaultHandle, 0x00);
+        if (nfaStat == NFA_STATUS_OK) {
+          SecureElement::getInstance().mUiccListenEvent.wait();
+        } else
+          LOG(ERROR) << StringPrintf("fail to start UICC listen");
+      }
+      {
+        SyncEventGuard guard(SecureElement::getInstance().mUiccListenEvent);
+        nfaStat = NFA_CeConfigureUiccListenTech(defaultHandle,
+                                                (mUiccListnTechMask & 0x07));
+        if (nfaStat == NFA_STATUS_OK) {
+          SecureElement::getInstance().mUiccListenEvent.wait();
+        } else
+          LOG(ERROR) << StringPrintf("fail to start UICC listen");
+      }
     }
   }
 
@@ -1346,7 +1365,8 @@ void RoutingManager::compileTechEntries(void) {
       mDefaultTechFSeID = getUiccRoute(sCurrentSelectedUICCSlot);
     }
   } else {
-    mDefaultTechFSeID = SecureElement::getInstance().EE_HANDLE_0xF4;
+    mDefaultTechFSeID = (sCurrentSelectedUICCSlot==0x2)?SecureElement::getInstance().EE_HANDLE_0xF8:
+                          SecureElement::getInstance().EE_HANDLE_0xF4;
   }
 
   /*Check technologies supported by EE selected in conf file - For TypeF*/
@@ -2478,7 +2498,6 @@ void RoutingManager::nfaEeCallback(tNFA_EE_EVT event,
   return;
   }
   routingManager.mCbEventData = *eventData;
-  tNFA_EE_DISCOVER_REQ info;
 
   switch (event) {
     case NFA_EE_REGISTER_EVT: {
@@ -2681,14 +2700,15 @@ void RoutingManager::nfaEeCallback(tNFA_EE_EVT event,
       }
     } break;
 
-    case NFA_EE_DISCOVER_REQ_EVT:
-      info = eventData->discover_req;
+    case NFA_EE_DISCOVER_REQ_EVT: {
+      tNFA_EE_DISCOVER_REQ info = eventData->discover_req;
       DLOG_IF(INFO, nfc_debug_enabled) << StringPrintf(
           "%s: NFA_EE_DISCOVER_REQ_EVT; status=0x%X; num ee=%u", __func__,
           eventData->discover_req.status, eventData->discover_req.num_ee);
       if (nfcFL.nfcNxpEse && nfcFL.eseFL._ESE_ETSI_READER_ENABLE) {
         MposManager::getInstance().hanldeEtsiReaderReqEvent(&info);
       }
+    }
       break;
 
     case NFA_EE_NO_CB_ERR_EVT:

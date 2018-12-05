@@ -19,7 +19,6 @@ package com.android.nfc;
 import android.Manifest;
 import android.bluetooth.BluetoothAdapter;
 import android.os.UserManager;
-
 import com.android.nfc.RegisteredComponentCache.ComponentInfo;
 import com.android.nfc.handover.HandoverDataParser;
 import com.android.nfc.handover.PeripheralHandoverService;
@@ -224,8 +223,7 @@ class NfcDispatcher {
 
         public boolean isWebIntent() {
             if (ndefUri == null) return false;
-            if(ndefUri.normalizeScheme().getScheme() == null)
-                return false;
+            if (ndefUri.normalizeScheme().getScheme() == null) return false;
             return ndefUri != null && ndefUri.normalizeScheme().getScheme().startsWith("http");
         }
 
@@ -429,7 +427,7 @@ class NfcDispatcher {
         // All tags of NfcBarcode technology and Kovio type have lengths of a multiple of 16 bytes
         if (tagId.length >= 4
                 && (tagId[1] == URI_PREFIX_HTTP_WWW || tagId[1] == URI_PREFIX_HTTPS_WWW
-                    || tagId[1] == URI_PREFIX_HTTP || tagId[1] == URI_PREFIX_HTTPS)) {
+                || tagId[1] == URI_PREFIX_HTTP || tagId[1] == URI_PREFIX_HTTPS)) {
             // Look for optional URI terminator (0xfe), used to indicate the end of a URI prior to
             // the end of the full NfcBarcode payload. No terminator means that the URI occupies the
             // entire length of the payload field. Exclude checking the CRC in the final two bytes
@@ -684,7 +682,6 @@ class NfcDispatcher {
 
         return true;
     }
-
 
     /**
      * Tells the ActivityManager to resume allowing app switches.
