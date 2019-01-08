@@ -163,6 +163,10 @@ size_t readConfigFile(const char* fileName, uint8_t** p_data) {
   rewind(fd);
 
   uint8_t* buffer = new uint8_t[file_size];
+  if(buffer == NULL)
+  {
+    return 0;
+  }
   size_t read = fread(buffer, file_size, 1, fd);
   fclose(fd);
 

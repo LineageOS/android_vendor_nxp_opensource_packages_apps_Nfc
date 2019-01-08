@@ -673,6 +673,7 @@ void RoutingManager::stackCallback(uint8_t event,
     } break;
   }
 }
+
 /*******************************************************************************
 **
 ** Function:        nfaEeCallback
@@ -710,6 +711,7 @@ void RoutingManager::nfaEeCallback(tNFA_EE_EVT event,
           eventData->mode_set.status, eventData->mode_set.ee_handle);
       routingManager.mEeSetModeEvent.notifyOne();
 #if (NXP_EXTNS == TRUE)
+      se.mModeSetNtfstatus = eventData->mode_set.status;
       se.notifyModeSet(eventData->mode_set.ee_handle, !(eventData->mode_set.status),eventData->mode_set.ee_status );
 #endif
     } break;

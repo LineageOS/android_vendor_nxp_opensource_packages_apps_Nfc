@@ -115,6 +115,7 @@ extern tNFA_STATUS NxpPropCmd_send(uint8_t * pData4Tx, uint8_t dataLen,
 /***P2P-Prio Logic for Multiprotocol***/
 static uint8_t multiprotocol_flag = 1;
 static uint8_t multiprotocol_detected = 0;
+static Mutex sP2pPrioMultiProtoMutex;
 void *p2p_prio_logic_multiprotocol(void *arg);
 static IntervalTimer multiprotocol_timer;
 pthread_t multiprotocol_thread;
@@ -394,7 +395,11 @@ void *p2p_prio_logic_multiprotocol(void *arg) {
   tNFA_STATUS status             = NFA_STATUS_FAILED;
   tNFA_TECHNOLOGY_MASK tech_mask = 0x00;
 
-  DLOG_IF(INFO, nfc_debug_enabled) << StringPrintf("%s: enter", __FUNCTION__);
+  DLOG_IF(INFO, nfc_debug_enabled)
+    << StringPrintf("%s: enter Try to acquire lock", __FUNCTION__);
+  sP2pPrioMultiProtoMutex.lock();
+  DLOG_IF(INFO, nfc_debug_enabled)
+      << StringPrintf("%s: Acquired sP2pPrioMultiProtoMutex lock", __FUNCTION__);
   /* Do not need if it is already in screen off state */
   if ((prevScreenState != (NFA_SCREEN_STATE_OFF_LOCKED || NFA_SCREEN_STATE_OFF_UNLOCKED))) {
     /* Stop polling */
@@ -439,7 +444,9 @@ void *p2p_prio_logic_multiprotocol(void *arg) {
       startRfDiscovery(true);
     }
   }
-  DLOG_IF(INFO, nfc_debug_enabled) << StringPrintf("%s: exit", __FUNCTION__);
+  sP2pPrioMultiProtoMutex.unlock();
+  DLOG_IF(INFO, nfc_debug_enabled)
+    << StringPrintf("%s: Released sP2pPrioMultiProtoMutex, exit", __FUNCTION__);
   return NULL;
 }
 
@@ -823,6 +830,13 @@ static void nfaConnectionCallback(uint8_t connEvent,
           << StringPrintf("%s: NFC_RW_INTF_ERROR_EVT", __func__);
       nativeNfcTag_notifyRfTimeout();
       nativeNfcTag_doReadCompleted(NFA_STATUS_TIMEOUT);
+#if (NXP_EXTNS == TRUE)
+      if(NFA_STATUS_TIMEOUT == eventData->status){
+        nativeNfcTag_abortWaits();
+        /*RFDEACTIVATE_DISCOVERY*/
+        NFA_Deactivate(FALSE);
+      }
+#endif
       break;
     case NFA_SELECT_CPLT_EVT:  // Select completed
       status = eventData->status;
@@ -1200,10 +1214,25 @@ static jintArray nfcManager_getActiveSecureElementList(JNIEnv *e, jobject o)
 **
 *******************************************************************************/
 static jboolean nfcManager_sendRawFrame(JNIEnv* e, jobject, jbyteArray data) {
+#if (NXP_EXTNS == TRUE)
+  DLOG_IF(INFO, nfc_debug_enabled)
+      << StringPrintf("%s: nfcManager_sendRawFrame", __func__);
+  size_t bufLen;
+  uint8_t* buf = NULL;
+  if (data !=NULL) {
+    ScopedByteArrayRO bytes(e, data);
+    buf = const_cast<uint8_t*>(reinterpret_cast<const uint8_t*>(&bytes[0]));
+    bufLen = bytes.size();
+  } else {
+    /*Fix for Felica on Host for Empty NCI packet handling*/
+    bufLen = 0x00;
+  }
+#else
   ScopedByteArrayRO bytes(e, data);
   uint8_t* buf =
       const_cast<uint8_t*>(reinterpret_cast<const uint8_t*>(&bytes[0]));
   size_t bufLen = bytes.size();
+#endif
   tNFA_STATUS status = NFA_SendRawFrame(buf, bufLen, 0);
 
   return (status == NFA_STATUS_OK);
