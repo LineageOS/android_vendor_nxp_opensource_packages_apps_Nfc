@@ -175,13 +175,10 @@ public class NfcService implements DeviceHostListener {
     private static final String PREF_MIFARE_DESFIRE_PROTO_ROUTE_ID = "mifare_desfire_proto_route";
     private static final String PREF_SET_DEFAULT_ROUTE_ID ="set_default_route";
     private static final String PREF_MIFARE_CLT_ROUTE_ID= "mifare_clt_route";
-    private static final String LS_BACKUP_PATH = "/data/vendor/nfc/ls_backup.txt";
-    private static final String LS_UPDATE_BACKUP_PATH = "/data/vendor/nfc/loaderservice_updater.txt";
-    private static final String LS_UPDATE_BACKUP_OUT_PATH = "/data/vendor/nfc/loaderservice_updater_out.txt";
 
-    private static final String[] path = {"/data/vendor/nfc/JcopOs_Update1.apdu",
-                                          "/data/vendor/nfc/JcopOs_Update2.apdu",
-                                          "/data/vendor/nfc/JcopOs_Update3.apdu"};
+    private static final String[] path = {"/data/nfc/JcopOs_Update1.apdu",
+                                          "/data/nfc/JcopOs_Update2.apdu",
+                                          "/data/nfc/JcopOs_Update3.apdu"};
 
     private static final String[] PREF_JCOP_MODTIME = {"jcop file1 modtime",
                                                        "jcop file2 modtime",
@@ -1133,7 +1130,11 @@ public class NfcService implements DeviceHostListener {
         synchronized (this) {
             mNfcEventInstalledPackages.clear();
             for (int i = 0; i < packagesNfcEvents.size(); i++) {
-                mNfcEventInstalledPackages.add(packagesNfcEvents.get(i).packageName);
+                int hasPerm = pm.checkPermission(android.Manifest.permission.NFC,
+                                                 packagesNfcEvents.get(i).packageName);
+                if (hasPerm == PackageManager.PERMISSION_GRANTED){
+                      mNfcEventInstalledPackages.add(packagesNfcEvents.get(i).packageName);
+                }
             }
         }
     }
@@ -1494,6 +1495,7 @@ public class NfcService implements DeviceHostListener {
                     if (!mDeviceHost.initialize()) {
                         Log.w(TAG, "Error enabling NFC");
                         updateState(NfcAdapter.STATE_OFF);
+                        watchDog.cancel();
                         return false;
                     }
                 } finally {
@@ -1769,7 +1771,7 @@ public class NfcService implements DeviceHostListener {
     final class NfcAdapterService extends INfcAdapter.Stub {
         @Override
         public boolean enable() throws RemoteException {
-
+            NfcPermissions.enforceAdminPermissions(mContext);
             if (mNxpNfcState != NXP_NFC_STATE_OFF) {
                 return true;
             } else {
@@ -1780,7 +1782,6 @@ public class NfcService implements DeviceHostListener {
                 mNxpNfcState = NXP_NFC_STATE_TURNING_ON;
             }
 
-            NfcPermissions.enforceAdminPermissions(mContext);
             int val =  mDeviceHost.GetDefaultSE();
             Log.i(TAG, "getDefaultSE " + val);
 
@@ -1793,7 +1794,7 @@ public class NfcService implements DeviceHostListener {
 
         @Override
         public boolean disable(boolean saveState) throws RemoteException {
-
+            NfcPermissions.enforceAdminPermissions(mContext);
             if (mNxpNfcState != NXP_NFC_STATE_ON) {
                 return true;
             } else {
@@ -1804,7 +1805,6 @@ public class NfcService implements DeviceHostListener {
                 mNxpNfcState = NXP_NFC_STATE_TURNING_OFF;
             }
 
-            NfcPermissions.enforceAdminPermissions(mContext);
             Log.d(TAG,"Disabling Nfc.");
 
             //Check if this a device shutdown or Nfc only Nfc disable.
