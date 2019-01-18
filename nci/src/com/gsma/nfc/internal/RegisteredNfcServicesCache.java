@@ -69,6 +69,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicReference;
 import com.android.nfc.cardemulation.RegisteredServicesCache;
+import com.nxp.nfc.NfcConstants;
 
 public class RegisteredNfcServicesCache {
     static final String TAG = "RegisteredNfcServicesCache";
@@ -374,8 +375,22 @@ public class RegisteredNfcServicesCache {
                             resolveInfo.serviceInfo.name = currentComponent.getClassName();
                             NfcApduServiceInfo.ESeInfo mEseInfo = new NfcApduServiceInfo.ESeInfo(seId,powerstate);
                             ArrayList<android.nfc.cardemulation.NfcAidGroup> staticNfcAidGroups = null;
-                            apduService = new NfcApduServiceInfo(resolveInfo,onHost,description,staticNfcAidGroups, dynamicNfcAidGroup,
-                                                               requiresUnlock,bannerId,userId, "Fixme: NXP:<Activity Name>", mEseInfo, modifiable);
+                            String offHostName, staticOffHostName;
+                            if(seId == NfcConstants.UICC_ID_TYPE) {
+                                offHostName = "SIM1";
+                            } else if (seId == NfcConstants.UICC2_ID_TYPE) {
+                                offHostName = "SIM2";
+                            } else if (seId == NfcConstants.UICC2_ID_TYPE) {
+                                offHostName = "eSE1";
+                            } else {
+                                offHostName = null;
+                                Log.e(TAG,"Invalid seId");
+                            }
+                            staticOffHostName = offHostName;
+
+                            apduService = new NfcApduServiceInfo(resolveInfo,description,staticNfcAidGroups, dynamicNfcAidGroup,
+                                                               requiresUnlock,bannerId,userId, "Fixme: NXP:<Activity Name>", mEseInfo, modifiable,
+                                                               offHostName, staticOffHostName);
                             mApduServices.put(currentComponent, apduService);
                             Log.d(TAG,"mApduServices size= "+ mApduServices.size());
                             dynamicNfcAidGroup.clear();
