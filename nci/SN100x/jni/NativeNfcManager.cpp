@@ -401,7 +401,8 @@ void *p2p_prio_logic_multiprotocol(void *arg) {
   DLOG_IF(INFO, nfc_debug_enabled)
       << StringPrintf("%s: Acquired sP2pPrioMultiProtoMutex lock", __FUNCTION__);
   /* Do not need if it is already in screen off state */
-  if ((prevScreenState != (NFA_SCREEN_STATE_OFF_LOCKED || NFA_SCREEN_STATE_OFF_UNLOCKED))) {
+  if ((prevScreenState != NFA_SCREEN_STATE_OFF_LOCKED) ||
+         (prevScreenState != NFA_SCREEN_STATE_OFF_UNLOCKED)) {
     /* Stop polling */
     if (sRfEnabled) {
       startRfDiscovery(false);
