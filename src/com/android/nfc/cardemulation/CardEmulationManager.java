@@ -457,6 +457,28 @@ public class CardEmulationManager implements RegisteredServicesCache.Callback,
         public boolean supportsAidPrefixRegistration() throws RemoteException {
             return mAidCache.supportsAidPrefixRegistration();
         }
+
+        @Override
+        public boolean setOffHostForService(int userId, ComponentName service, String offHostSE) {
+            NfcPermissions.validateUserId(userId);
+            NfcPermissions.enforceUserPermissions(mContext);
+            if (!isServiceRegistered(userId, service)) {
+                return false;
+            }
+            //TODO Implementation need to be done. Returning true as a temporary fix.
+            return true;
+        }
+
+        @Override
+        public boolean unsetOffHostForService(int userId, ComponentName service) {
+            NfcPermissions.validateUserId(userId);
+            NfcPermissions.enforceUserPermissions(mContext);
+            if (!isServiceRegistered(userId, service)) {
+                return false;
+            }
+            //TODO Implementation need to be done. Returning true as a temporary fix.
+            return true;
+        }
     }
 
     /**
