@@ -578,7 +578,7 @@ int nfcManager_getLoaderServiceConfVersion(JNIEnv* /* e */, jobject /* o */)
  ** Description:     JNI functions
  **
  *****************************************************************************/
-static JNINativeMethod gMethods[] = {
+ __attribute__((unused)) static JNINativeMethod gMethods[] = {
     {"doLsExecuteScript", "(Ljava/lang/String;Ljava/lang/String;[B)[B",
      (void*)nfcManager_lsExecuteScript},
     {"doLsGetVersion", "()[B", (void*)nfcManager_lsGetVersion},
@@ -607,7 +607,6 @@ static JNINativeMethod gMethods[] = {
  **
  *******************************************************************************/
 int register_com_android_nfc_NativeNfcAla(JNIEnv* e) {
-  return jniRegisterNativeMethods(e, gNativeNfcAlaClassName, gMethods,
-                                  NELEM(gMethods));
+  return 0;
 }
 } /*namespace android*/

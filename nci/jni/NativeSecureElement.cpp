@@ -55,8 +55,6 @@ static SyncEvent sNfaVSCResponseEvent;
 // These must match the EE_ERROR_ types in NfcService.java
 static const int EE_ERROR_IO = -1;
 static const int EE_ERROR_INIT = -3;
-static const int EE_ERROR_LISTEN_MODE = -4;
-static const int EE_ERROR_EXT_FIELD = -5;
 
 /*******************************************************************************
 **
@@ -69,14 +67,8 @@ static const int EE_ERROR_EXT_FIELD = -5;
 ** Returns:         Handle of secure element.  values < 0 represent failure.
 **
 *******************************************************************************/
-#if (NXP_EXTNS == TRUE)
-static jint nativeNfcSecureElement_doOpenSecureElementConnection(JNIEnv*,
-                                                                 jobject,
-                                                                 jint seId)
-#else
 static jint nativeNfcSecureElement_doOpenSecureElementConnection(JNIEnv*,
                                                                  jobject)
-#endif
 {
   DLOG_IF(INFO, nfc_debug_enabled) << StringPrintf("%s: enter", __func__);
   bool stat = false;
@@ -92,118 +84,6 @@ static jint nativeNfcSecureElement_doOpenSecureElementConnection(JNIEnv*,
       goto TheEnd;
     }
     se.mIsExclusiveWiredMode = false;  // to ctlr exclusive wired mode
-    if (seId == 0xF4) {
-      if (se.mIsWiredModeOpen) {
-        goto TheEnd;
-      }
-      if (nfcFL.eseFL._ESE_UICC_EXCLUSIVE_WIRED_MODE) {
-        se.mIsExclusiveWiredMode = true;
-      }
-      stat = se.checkForWiredModeAccess();
-      if (stat == false) {
-        DLOG_IF(INFO, nfc_debug_enabled)
-            << StringPrintf("Denying SE open due to SE listen mode active");
-        secElemHandle = EE_ERROR_LISTEN_MODE;
-        goto TheEnd;
-      }
-
-      DLOG_IF(INFO, nfc_debug_enabled) << StringPrintf(
-          "%s: Activating UICC Wired Mode=0x%X", __func__, seId);
-      stat = se.activate(seId);
-      DLOG_IF(INFO, nfc_debug_enabled) << StringPrintf(
-          "%s: Check UICC activation status stat=%X", __func__, stat);
-      if (stat) {
-        // establish a pipe to UICC
-        DLOG_IF(INFO, nfc_debug_enabled)
-            << StringPrintf("%s: Creatting a pipe to UICC!", __func__);
-        stat = se.connectEE();
-        if (stat) {
-          secElemHandle = se.mActiveEeHandle;
-        } else {
-          se.deactivate(0);
-        }
-      }
-      if ((!stat) &&
-          (!PowerSwitch::getInstance().setModeOff(PowerSwitch::SE_CONNECTED))) {
-        PowerSwitch::getInstance().setLevel(PowerSwitch::LOW_POWER);
-      }
-      se.mIsWiredModeOpen = true;
-      if (nfcFL.eseFL._ESE_UICC_EXCLUSIVE_WIRED_MODE) {
-        if (isDiscoveryStarted()) {
-          // Stop RF Discovery if we were polling
-          startRfDiscovery(false);
-          status = NFA_DisableListening();
-          if (status == NFCSTATUS_OK) {
-            startRfDiscovery(true);
-          }
-        } else {
-          status = NFA_DisableListening();
-        }
-        se.mlistenDisabled = true;
-      }
-      goto TheEnd;
-      if (nfcFL.eseFL._ESE_WIRED_MODE_PRIO) {
-        if (se.mIsWiredModeOpen &&
-            ((se.mActiveEeHandle == se.EE_HANDLE_0xF4) ||
-             (se.mActiveEeHandle == SecureElement::EE_HANDLE_0xF8))) {
-          stat = SecureElement::getInstance().disconnectEE(se.mActiveEeHandle);
-          se.mActiveEeHandle = NFA_HANDLE_INVALID;
-          se.mIsWiredModeOpen = false;
-        }
-      }
-
-      if (nfcFL.chipType != pn547C2) {
-        if (nfcFL.nfccFL._NFCEE_REMOVED_NTF_RECOVERY &&
-            (RoutingManager::getInstance().is_ee_recovery_ongoing())) {
-          SyncEventGuard guard(se.mEEdatapacketEvent);
-          if (se.mEEdatapacketEvent.wait(android::gMaxEERecoveryTimeout) ==
-              false) {
-            goto TheEnd;
-          }
-        }
-        if (nfcFL.eseFL._ESE_DUAL_MODE_PRIO_SCHEME ==
-            nfcFL.eseFL._ESE_UICC_EXCLUSIVE_WIRED_MODE) {
-          se.mIsExclusiveWiredMode = true;
-        }
-        stat = se.checkForWiredModeAccess();
-        if (stat == false) {
-          DLOG_IF(INFO, nfc_debug_enabled)
-              << StringPrintf("Denying SE open due to SE listen mode active");
-          secElemHandle = EE_ERROR_LISTEN_MODE;
-          goto TheEnd;
-        }
-      } else {
-        if (se.isActivatedInListenMode()) {
-          DLOG_IF(INFO, nfc_debug_enabled)
-              << StringPrintf("Denying SE open due to SE listen mode active");
-          secElemHandle = EE_ERROR_LISTEN_MODE;
-          goto TheEnd;
-        }
-
-        if (se.isRfFieldOn()) {
-          DLOG_IF(INFO, nfc_debug_enabled)
-              << StringPrintf("Denying SE open due to SE in active RF field");
-          secElemHandle = EE_ERROR_EXT_FIELD;
-          goto TheEnd;
-        }
-      }
-
-      ret_val = NFC_GetP61Status((void*)&p61_current_state);
-      if (ret_val < 0) {
-        DLOG_IF(INFO, nfc_debug_enabled)
-            << StringPrintf("NFC_GetP61Status failed");
-        goto TheEnd;
-      }
-      DLOG_IF(INFO, nfc_debug_enabled)
-          << StringPrintf("P61 Status is: %x", p61_current_state);
-
-      if (nfcFL.eseFL._ESE_JCOP_DWNLD_PROTECTION &&
-          (p61_current_state & P61_STATE_JCP_DWNLD))
-        DLOG_IF(INFO, nfc_debug_enabled) << StringPrintf(
-            "Denying SE open due to JCOP OS Download is in progress");
-      secElemHandle = EE_ERROR_IO;
-      goto TheEnd;
-    }
   }
 
   if (((nfcFL.eseFL._NXP_ESE_VER == JCOP_VER_3_1) &&
@@ -567,7 +447,7 @@ static jboolean nativeNfcSecureElement_doResetSecureElement(JNIEnv*, jobject,
  ** Returns:         True if ok.
  **
  *******************************************************************************/
-static jboolean nativeNfcSecureElement_doeSEChipResetSecureElement(JNIEnv*,
+__attribute__((unused)) static jboolean nativeNfcSecureElement_doeSEChipResetSecureElement(JNIEnv*,
                                                                    jobject) {
   bool stat = false;
   NFCSTATUS status = NFCSTATUS_FAILED;
@@ -690,19 +570,12 @@ static jbyteArray nativeNfcSecureElement_doTransceive(JNIEnv* e, jobject,
 **
 *****************************************************************************/
 static JNINativeMethod gMethods[] = {
-#if (NXP_EXTNS == TRUE)
-    {"doNativeOpenSecureElementConnection", "(I)I",
-     (void*)nativeNfcSecureElement_doOpenSecureElementConnection},
-#else
     {"doNativeOpenSecureElementConnection", "()I",
      (void*)nativeNfcSecureElement_doOpenSecureElementConnection},
-#endif
     {"doNativeDisconnectSecureElementConnection", "(I)Z",
      (void*)nativeNfcSecureElement_doDisconnectSecureElementConnection},
     {"doNativeResetSecureElement", "(I)Z",
      (void*)nativeNfcSecureElement_doResetSecureElement},
-    {"doNativeeSEChipResetSecureElement", "()Z",
-     (void*)nativeNfcSecureElement_doeSEChipResetSecureElement},
     {"doTransceive", "(I[B)[B", (void*)nativeNfcSecureElement_doTransceive},
     {"doNativeGetAtr", "(I)[B", (void*)nativeNfcSecureElement_doGetAtr},
 };

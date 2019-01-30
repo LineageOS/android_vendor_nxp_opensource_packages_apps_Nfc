@@ -126,6 +126,8 @@ int32_t gSelfTestType = TEST_TYPE_NONE;
 bool nfcManager_getTransanctionRequest(int t3thandle, bool registerRequest);
 extern bool createSPIEvtHandlerThread();
 extern void releaseSPIEvtHandlerThread();
+jint nfcManager_getUiccId(jint uicc_slot);
+jint nfcManager_getUiccRoute(jint uicc_slot);
 #endif
 namespace android {
 extern bool gIsTagDeactivating;
@@ -241,7 +243,6 @@ const char* gNativeNfcManagerClassName =
     "com/android/nfc/dhimpl/NativeNfcManager";
 const char* gNativeNfcSecureElementClassName =
     "com/android/nfc/dhimpl/NativeNfcSecureElement";
-const char* gNativeNfcAlaClassName = "com/android/nfc/dhimpl/NativeNfcAla";
 const char* gNativeNfcMposManagerClassName =
     "com/android/nfc/dhimpl/NativeNfcMposManager";
 void doStartupConfig();
@@ -270,10 +271,6 @@ static void activatedNtf_Cb();
 *****************************************************************************/
 namespace android {
 static jint sLastError = ERROR_BUFFER_TOO_SMALL;
-static jmethodID sCachedNfcManagerNotifySeApduReceived;
-static jmethodID sCachedNfcManagerNotifySeMifareAccess;
-static jmethodID sCachedNfcManagerNotifySeEmvCardRemoval;
-static jmethodID sCachedNfcManagerNotifyTargetDeselected;
 static SyncEvent sNfaEnableEvent;         // event for NFA_Enable()
 static SyncEvent sNfaDisableEvent;        // event for NFA_Disable()
 static SyncEvent sNfaTransitConfigEvent;  // event for NFA_SetTransitConfig()
@@ -353,15 +350,11 @@ static tNFA_STATUS stopPolling_rfDiscoveryDisabled();
 static tNFA_STATUS startPolling_rfDiscoveryDisabled(
     tNFA_TECHNOLOGY_MASK tech_mask);
 
-static int nfcManager_getChipVer(JNIEnv* e, jobject o);
 static jbyteArray nfcManager_getFwFileName(JNIEnv* e, jobject o);
 static std::string ConvertJavaStrToStdString(JNIEnv* env, jstring s);
 static int nfcManager_getNfcInitTimeout(JNIEnv* e, jobject o);
 static int nfcManager_doJcosDownload(JNIEnv* e, jobject o);
-static void nfcManager_doCommitRouting(JNIEnv* e, jobject o);
-static jint nfcManager_getSecureElementTechList(JNIEnv* e, jobject o);
-static void nfcManager_setSecureElementListenTechMask(JNIEnv* e, jobject o,
-                                                      jint tech_mask);
+static jboolean nfcManager_doCommitRouting(JNIEnv* e, jobject o);
 static void notifyPollingEventwhileNfcOff();
 
 static uint8_t getJCOPOS_UpdaterState();
@@ -443,7 +436,6 @@ static SyncEvent sNfaNxpNtfEvent;
 static SyncEvent sNfaSetPowerSubState;  // event for power substate
 static void nfaNxpSelfTestNtfTimerCb(union sigval);
 static int nfcManager_setPreferredSimSlot(JNIEnv* e, jobject o, jint uiccSlot);
-static void nfcManager_doSetEEPROM(JNIEnv* e, jobject o, jbyteArray val);
 static jint nfcManager_getFwVersion(JNIEnv* e, jobject o);
 static jint nfcManager_SWPSelfTest(JNIEnv* e, jobject o, jint ch);
 static void nfcManager_doPrbsOff(JNIEnv* e, jobject o);
@@ -471,8 +463,6 @@ static int nfcManager_staticDualUicc_Precondition(int uiccSlot);
 void checkforESERemoval();
 bool nfcManager_sendEmptyDataMsg();
 bool gIsEmptyRspSentByHceFApk = false;
-
-static int nfcManager_doGetSeInterface(JNIEnv* e, jobject o, jint type);
 
 extern bool scoreGenericNtf;
 tNFC_FW_VERSION get_fw_version();
@@ -564,6 +554,7 @@ static void nfcManager_enableDiscovery(JNIEnv* e, jobject o,
                                        jint technologies_mask,
                                        jboolean enable_lptd,
                                        jboolean reader_mode,
+                                       jboolean enable_host_routing,
                                        jboolean enable_p2p, jboolean restart);
 void nfcManager_disableDiscovery(JNIEnv*, jobject);
 static char get_last_request(void);
@@ -1536,10 +1527,6 @@ static void nfaConnectionCallback(uint8_t connEvent,
     gCachedNfcManagerNotifyNdefMessageListeners =
         e->GetMethodID(cls.get(), "notifyNdefMessageListeners",
                        "(Lcom/android/nfc/dhimpl/NativeNfcTag;)V");
-    gCachedNfcManagerNotifyConnectivityListeners =
-        e->GetMethodID(cls.get(), "notifyConnectivityListeners", "(I)V");
-    gCachedNfcManagerNotifyEmvcoMultiCardDetectedListeners = e->GetMethodID(
-        cls.get(), "notifyEmvcoMultiCardDetectedListeners", "()V");
     gCachedNfcManagerNotifyLlcpLinkActivation =
         e->GetMethodID(cls.get(), "notifyLlcpLinkActivation",
                        "(Lcom/android/nfc/dhimpl/NativeP2pDevice;)V");
@@ -1549,12 +1536,6 @@ static void nfaConnectionCallback(uint8_t connEvent,
     gCachedNfcManagerNotifyLlcpFirstPacketReceived =
         e->GetMethodID(cls.get(), "notifyLlcpLinkFirstPacketReceived",
                        "(Lcom/android/nfc/dhimpl/NativeP2pDevice;)V");
-    sCachedNfcManagerNotifyTargetDeselected =
-        e->GetMethodID(cls.get(), "notifyTargetDeselected", "()V");
-    gCachedNfcManagerNotifySeFieldActivated =
-        e->GetMethodID(cls.get(), "notifySeFieldActivated", "()V");
-    gCachedNfcManagerNotifySeFieldDeactivated =
-        e->GetMethodID(cls.get(), "notifySeFieldDeactivated", "()V");
     gCachedNfcManagerNotifySeListenActivated =
         e->GetMethodID(cls.get(), "notifySeListenActivated", "()V");
     gCachedNfcManagerNotifySeListenDeactivated =
@@ -1563,8 +1544,6 @@ static void nfaConnectionCallback(uint8_t connEvent,
     gCachedNfcManagerNotifyHostEmuActivated =
         e->GetMethodID(cls.get(), "notifyHostEmuActivated", "(I)V");
 
-    gCachedNfcManagerNotifyAidRoutingTableFull =
-        e->GetMethodID(cls.get(), "notifyAidRoutingTableFull", "()V");
 
     gCachedNfcManagerNotifyHostEmuData =
         e->GetMethodID(cls.get(), "notifyHostEmuData", "(I[B)V");
@@ -1577,34 +1556,13 @@ static void nfaConnectionCallback(uint8_t connEvent,
     gCachedNfcManagerNotifyRfFieldDeactivated =
         e->GetMethodID(cls.get(), "notifyRfFieldDeactivated", "()V");
 
-    sCachedNfcManagerNotifySeApduReceived =
-        e->GetMethodID(cls.get(), "notifySeApduReceived", "([B)V");
-
-    sCachedNfcManagerNotifySeMifareAccess =
-        e->GetMethodID(cls.get(), "notifySeMifareAccess", "([B)V");
-
-    sCachedNfcManagerNotifySeEmvCardRemoval =
-        e->GetMethodID(cls.get(), "notifySeEmvCardRemoval", "()V");
-
     gCachedNfcManagerNotifyTransactionListeners = e->GetMethodID(
         cls.get(), "notifyTransactionListeners", "([B[BLjava/lang/String;)V");
 
 #if (NXP_EXTNS == TRUE)
-    gCachedNfcManagerNotifyReRoutingEntry =
-        e->GetMethodID(cls.get(), "notifyReRoutingEntry", "()V");
-
-    gCachedNfcManagerNotifyUiccStatusEvent =
-        e->GetMethodID(cls.get(), "notifyUiccStatusEvent", "(I)V");
 
 #if (NXP_NFCC_HCE_F == TRUE)
-    gCachedNfcManagerNotifyT3tConfigure =
-        e->GetMethodID(cls.get(), "notifyT3tConfigure", "()V");
 #endif
-    gCachedNfcManagerNotifyJcosDownloadInProgress =
-        e->GetMethodID(cls.get(), "notifyJcosDownloadInProgress", "(I)V");
-
-    gCachedNfcManagerNotifyFwDwnldRequested =
-        e->GetMethodID(cls.get(), "notifyFwDwnldRequested", "()V");
 
 #endif
     if (nfc_jni_cache_object(e, gNativeNfcTagClassName,
@@ -2123,83 +2081,52 @@ static void nfaConnectionCallback(uint8_t connEvent,
   **                  power: power state for the routing entry
   *******************************************************************************/
 
-  static jboolean nfcManager_setRoutingEntry(
-      JNIEnv*, jobject, jint type, jint value, jint route, jint power) {
+static jboolean nfcManager_setRoutingEntry (JNIEnv*, jobject, jint type, jint value, jint route, jint power)
+{
     jboolean result = false;
 
-    result = RoutingManager::getInstance().setRoutingEntry(type, value, route,
-                                                           power);
+    result = RoutingManager::getInstance().setRoutingEntry(type, value, route, power);
+    gsRouteUpdated = true;
     return result;
-  }
-  /*******************************************************************************
-  **
-  ** Function:        nfcManager_clearRoutingEntry
-  **
-  ** Description:     Set the routing entry in routing table
-  **                  e: JVM environment.
-  **                  o: Java object.
-  **                  type:technology/protocol/aid clear routing
-  **
-  *******************************************************************************/
+}
 
-  static jboolean nfcManager_clearRoutingEntry(JNIEnv*, jobject, jint type) {
+/*******************************************************************************
+**
+** Function:        nfcManager_clearRoutingEntry
+**
+** Description:     Set the routing entry in routing table
+**                  e: JVM environment.
+**                  o: Java object.
+**                  type:technology/protocol/aid clear routing
+**
+*******************************************************************************/
+
+static jboolean nfcManager_clearRoutingEntry (JNIEnv*, jobject, jint type)
+{
     jboolean result = false;
-
+    //checkRecreatePipe(); TODO
     result = RoutingManager::getInstance().clearRoutingEntry(type);
     return result;
-  }
-#endif
+}
 
-  /*******************************************************************************
-  **
-  ** Function:        nfcManager_setDefaultRoute
-  **
-  ** Description:     Set the default route in routing table
-  **                  e: JVM environment.
-  **                  o: Java object.
-  **
-  *******************************************************************************/
+/*******************************************************************************
+**
+** Function:        nfcManager_setEmptyAidRoute
+**
+** Description:     Set the routing entry in routing table
+**                  e: JVM environment.
+**                  o: Java object.
+**                  type:technology/protocol/aid clear routing
+**
+*******************************************************************************/
 
-  static jboolean nfcManager_setDefaultRoute(
-      JNIEnv*, jobject, jint defaultRouteEntry, jint defaultProtoRouteEntry,
-      jint defaultTechRouteEntry) {
-    jboolean result = false;
-    DLOG_IF(INFO, nfc_debug_enabled) << StringPrintf("%s : enter", __func__);
-#if (NXP_EXTNS == TRUE)
-    if (!pTransactionController->transactionAttempt(
-            TRANSACTION_REQUESTOR(setDefaultRoute))) {
-      LOG(ERROR) << StringPrintf(
-          "%s : Transaction in progress, Store the request", __FUNCTION__);
-      set_last_request(RE_ROUTING, NULL);
-      return result;
-    }
-#endif
-    if (sRfEnabled) {
-      // Stop RF discovery to reconfigure
-      startRfDiscovery(false);
-    }
+static void nfcManager_setEmptyAidRoute (JNIEnv*, jobject, jint route)
+{
+    RoutingManager::getInstance().setEmptyAidEntry();
+    return;
+}
 
-#if (NXP_EXTNS == TRUE)
-    result = RoutingManager::getInstance().setDefaultRoute(
-        defaultRouteEntry, defaultProtoRouteEntry, defaultTechRouteEntry);
-    if (result)
-      result = RoutingManager::getInstance().commitRouting();
-    else
-      DLOG_IF(INFO, nfc_debug_enabled)
-          << StringPrintf("%s : Commit routing failed ", __func__);
-    gsRouteUpdated = true;
-#else
-  result = RoutingManager::getInstance().setDefaultRouting();
 #endif
-
-    startRfDiscovery(true);
-#if (NXP_EXTNS == TRUE)
-    pTransactionController->transactionEnd(
-        TRANSACTION_REQUESTOR(setDefaultRoute));
-#endif
-    DLOG_IF(INFO, nfc_debug_enabled) << StringPrintf("%s : exit", __func__);
-    return result;
-  }
 
   /*******************************************************************************
   **
@@ -2235,7 +2162,7 @@ static void nfaConnectionCallback(uint8_t connEvent,
   **                  o: Java object.
   **
   *******************************************************************************/
-  static bool nfcManager_clearAidTable(JNIEnv*, jobject) {
+ __attribute__((unused)) static bool nfcManager_clearAidTable (JNIEnv*, jobject) {
 #if (NXP_EXTNS == TRUE)
     /*In case of 66T/67T field on is observed as last field event once reader
      is removed from proximity, which will hold the transaction lock
@@ -2298,7 +2225,48 @@ static void nfaConnectionCallback(uint8_t connEvent,
     RoutingManager::getInstance().commitRouting();
     DLOG_IF(INFO, nfc_debug_enabled) << StringPrintf("%s: exit", __func__);
   }
+  /******************************************************************************
+  **
+  ** Function:        nfcManager_getDefaultFelicaCLTPowerState
+  **
+  ** Description:     Get the default mifare CLT Power States.
+  **                  e: JVM environment.
+  **                  o: Java object.
+  **
+  ** Returns:         Power State
+  **
+  *******************************************************************************/
 
+   static jint nfcManager_getDefaultFelicaCLTPowerState (JNIEnv* e, jobject o)
+   {
+    unsigned long num = 0;
+
+    GetNxpNumValue(NAME_DEFAULT_FELICA_CLT_PWR_STATE, &num, sizeof(num));
+    return num;
+   }
+
+
+  /******************************************************************************
+  **
+  ** Function:        nfcManager_getDefaultFelicaCLTRoute
+  **
+  ** Description:     Get the default mifare CLT Route Entry.
+  **                  e: JVM environment.
+  **                  o: Java object.
+  **                  mode: Not used.
+  **
+  ** Returns:         None
+  **
+  *******************************************************************************/
+
+  static jint nfcManager_getDefaultFelicaCLTRoute (JNIEnv* e, jobject o)
+  {
+    unsigned long num = 0;
+
+    GetNxpNumValue(NAME_DEFAULT_FELICA_CLT_ROUTE, &num, sizeof(num));
+
+    return num;
+  }
   /*******************************************************************************
   **
   ** Function:        nfcManager_getLfT3tMax
@@ -2857,6 +2825,7 @@ static void nfcManager_doFactoryReset(JNIEnv*, jobject) {
     DLOG_IF(INFO, nfc_debug_enabled) << StringPrintf("%s: enter", __FUNCTION__);
     nfcManager_enableDiscovery(NULL, NULL, mDiscParams.technologies_mask,
                                mDiscParams.enable_lptd, mDiscParams.reader_mode,
+                               0x00,
                                mDiscParams.enable_p2p, mDiscParams.restart);
   }
 
@@ -2890,7 +2859,9 @@ static void nfcManager_doFactoryReset(JNIEnv*, jobject) {
   *******************************************************************************/
   static void nfcManager_enableDiscovery(
       JNIEnv * e, jobject o, jint technologies_mask, jboolean enable_lptd,
-      jboolean reader_mode, jboolean enable_p2p, jboolean restart) {
+      jboolean reader_mode,
+      __attribute__((unused)) jboolean enable_host_routing, jboolean enable_p2p,
+      jboolean restart) {
     tNFA_STATUS status = NFA_STATUS_OK;
     tNFA_STATUS stat = NFA_STATUS_OK;
     tNFA_TECHNOLOGY_MASK tech_mask = DEFAULT_TECH_MASK;
@@ -3782,7 +3753,7 @@ static void nfcManager_doFactoryReset(JNIEnv*, jobject) {
   ** Returns:         List of secure element handles.
   **
   *******************************************************************************/
-  static jintArray nfcManager_doGetSecureElementList(JNIEnv * e, jobject) {
+   __attribute__((unused)) static jintArray nfcManager_doGetSecureElementList(JNIEnv * e, jobject) {
     DLOG_IF(INFO, nfc_debug_enabled) << StringPrintf("%s", __func__);
     return SecureElement::getInstance().getListOfEeHandles(e);
   }
@@ -3798,7 +3769,7 @@ static void nfcManager_doFactoryReset(JNIEnv*, jobject) {
   ** Returns:         None
   **
   *******************************************************************************/
-  static void nfcManager_doSelectSecureElement(JNIEnv * e, jobject o,
+   __attribute__((unused)) static void nfcManager_doSelectSecureElement(JNIEnv * e, jobject o,
                                                jint seId) {
     (void)e;
     (void)o;
@@ -3843,7 +3814,7 @@ static void nfcManager_doFactoryReset(JNIEnv*, jobject) {
   ** Returns:         None
   **
   *******************************************************************************/
-  static void nfcManager_activateSecureElement(JNIEnv * e, jobject o,
+   __attribute__((unused)) static void nfcManager_activateSecureElement(JNIEnv * e, jobject o,
                                                jint seId) {
     (void)e;
     (void)o;
@@ -3863,273 +3834,11 @@ static void nfcManager_doFactoryReset(JNIEnv*, jobject) {
     DLOG_IF(INFO, nfc_debug_enabled) << StringPrintf("%s: exit", __func__);
   }
 
-  /*******************************************************************************
-  **
-  ** Function:        nfcManager_doSetSEPowerOffState
-  **
-  ** Description:     NFC controller enable/disabe card emulation in power off
-  **                  state from EE.
-  **                  e: JVM environment.
-  **                  o: Java object.
-  **
-  ** Returns:         None
-  **
-  *******************************************************************************/
-  static void nfcManager_doSetSEPowerOffState(JNIEnv * e, jobject o, jint seId,
-                                              jboolean enable) {
-    (void)e;
-    (void)o;
-    tNFA_HANDLE ee_handle;
-    uint8_t power_state_mask = ~NFA_EE_PWR_STATE_SWITCH_OFF;
-
-    if (enable == true) {
-      power_state_mask = NFA_EE_PWR_STATE_SWITCH_OFF;
-    }
-
-    ee_handle = SecureElement::getInstance().getEseHandleFromGenericId(seId);
-
-    if (sRfEnabled) {
-      // Stop RF Discovery if we were polling
-      startRfDiscovery(false);
-    }
-
-    tNFA_STATUS status = NFA_AddEePowerState(ee_handle, power_state_mask);
-
-    // Commit the routing configuration
-    status |= NFA_EeUpdateNow();
-
-    if (status != NFA_STATUS_OK)
-      LOG(ERROR) << StringPrintf("Failed to commit routing configuration");
-
-    startRfDiscovery(true);
-
-    //    TheEnd:                   /*commented to eliminate warning label
-    //    defined but not used*/
-    DLOG_IF(INFO, nfc_debug_enabled) << StringPrintf("%s: exit", __func__);
-  }
-
-  /*******************************************************************************
-  **
-  ** Function:        nfcManager_GetDefaultSE
-  **
-  ** Description:     Get default Secure Element.
-  **
-  **
-  ** Returns:         Returns 0.
-  **
-  *******************************************************************************/
-  static jint nfcManager_GetDefaultSE(JNIEnv * e, jobject o) {
-    (void)e;
-    (void)o;
-    unsigned long num;
-    GetNxpNumValue(NAME_NXP_DEFAULT_SE, (void*)&num, sizeof(num));
-    DLOG_IF(INFO, nfc_debug_enabled)
-        << StringPrintf("%lu: nfcManager_GetDefaultSE", num);
-    return num;
-  }
-
-  static jint nfcManager_getSecureElementTechList(JNIEnv * e, jobject o) {
-    (void)e;
-    (void)o;
-    uint8_t sak;
-    jint tech = 0x00;
-    DLOG_IF(INFO, nfc_debug_enabled)
-        << StringPrintf("nfcManager_getSecureElementTechList -Enter");
-    sak = HciRFParams::getInstance().getESeSak();
-    bool isTypeBPresent = HciRFParams::getInstance().isTypeBSupported();
-
-    DLOG_IF(INFO, nfc_debug_enabled) << StringPrintf(
-        "nfcManager_getSecureElementTechList - sak is %0x", sak);
-
-    if (sak & 0x08) {
-      tech |= TARGET_TYPE_MIFARE_CLASSIC;
-    }
-
-    if (sak & 0x20) {
-      tech |= NFA_TECHNOLOGY_MASK_A;
-    }
-
-    if (isTypeBPresent == true) {
-      tech |= NFA_TECHNOLOGY_MASK_B;
-    }
-    DLOG_IF(INFO, nfc_debug_enabled) << StringPrintf(
-        "nfcManager_getSecureElementTechList - tech is %0x", tech);
-    return tech;
-  }
-
   static jintArray nfcManager_getActiveSecureElementList(JNIEnv * e,
                                                          jobject o) {
     (void)e;
     (void)o;
     return SecureElement::getInstance().getActiveSecureElementList(e);
-  }
-
-  static void nfcManager_setSecureElementListenTechMask(JNIEnv * e, jobject o,
-                                                        jint tech_mask) {
-    (void)e;
-    (void)o;
-    DLOG_IF(INFO, nfc_debug_enabled) << StringPrintf("%s: ENTER", __func__);
-    //    tNFA_STATUS status;                   /*commented to eliminate unused
-    //    variable warning*/
-
-    if (sRfEnabled) {
-      // Stop RF Discovery if we were polling
-      startRfDiscovery(false);
-    }
-    SecureElement::getInstance().setEseListenTechMask(tech_mask);
-
-    startRfDiscovery(true);
-
-    DLOG_IF(INFO, nfc_debug_enabled) << StringPrintf("%s: EXIT", __func__);
-  }
-
-  static jbyteArray nfcManager_getSecureElementUid(JNIEnv * e, jobject /* o */) {
-    jbyteArray jbuff = NULL;
-    uint8_t bufflen = 0;
-    uint8_t buf[16] = {
-        0,
-    };
-
-    DLOG_IF(INFO, nfc_debug_enabled)
-        << StringPrintf("nfcManager_getSecureElementUid -Enter");
-    HciRFParams::getInstance().getESeUid(&buf[0], &bufflen);
-    if (bufflen > 0) {
-      jbuff = e->NewByteArray(bufflen);
-      e->SetByteArrayRegion(jbuff, 0, bufflen, (jbyte*)buf);
-    }
-    return jbuff;
-  }
-
-  static tNFA_STATUS nfcManager_setEmvCoPollProfile(
-      JNIEnv * /* e */, jobject /* o */, jboolean enable, jint route) {
-    tNFA_STATUS status = NFA_STATUS_FAILED;
-    tNFA_TECHNOLOGY_MASK tech_mask = 0;
-
-    LOG(ERROR) << StringPrintf(
-        "In nfcManager_setEmvCoPollProfile enable = 0x%x route = 0x%x", enable,
-        route);
-    /* Stop polling */
-    if (isDiscoveryStarted()) {
-      // Stop RF discovery to reconfigure
-      startRfDiscovery(false);
-    }
-
-    status = EmvCo_dosetPoll(enable);
-    if (status != NFA_STATUS_OK) {
-      LOG(ERROR) << StringPrintf("%s: fail enable polling; error=0x%X",
-                                 __func__, status);
-      goto TheEnd;
-    }
-
-    if (enable) {
-      if (route == 0x00) {
-        /* DH enable polling for A and B*/
-        tech_mask = NFA_TECHNOLOGY_MASK_A | NFA_TECHNOLOGY_MASK_B;
-      } else if (route == 0x01) {
-        /* UICC is end-point at present not supported by FW */
-        /* TBD : Get eeinfo (use handle appropirately, depending up
-         * on it enable the polling */
-      } else if (route == 0x02) {
-        /* ESE is end-point at present not supported by FW */
-        /* TBD : Get eeinfo (use handle appropirately, depending up
-         * on it enable the polling */
-      } else {
-      }
-    } else {
-      if (NfcConfig::hasKey(NAME_POLLING_TECH_MASK)) {
-        tech_mask = NfcConfig::getUnsigned(NAME_POLLING_TECH_MASK);
-      }
-    }
-
-    DLOG_IF(INFO, nfc_debug_enabled)
-        << StringPrintf("%s: enable polling", __func__);
-    {
-      SyncEventGuard guard(sNfaEnableDisablePollingEvent);
-      status = NFA_EnablePolling(tech_mask);
-      if (status == NFA_STATUS_OK) {
-        DLOG_IF(INFO, nfc_debug_enabled)
-            << StringPrintf("%s: wait for enable event", __func__);
-        sNfaEnableDisablePollingEvent.wait();  // wait for NFA_POLL_ENABLED_EVT
-      } else {
-        LOG(ERROR) << StringPrintf("%s: fail enable polling; error=0x%X",
-                                   __func__, status);
-      }
-    }
-
-  TheEnd:
-    /* start polling */
-    if (!isDiscoveryStarted()) {
-      // Start RF discovery to reconfigure
-      startRfDiscovery(true);
-    }
-    return status;
-  }
-
-  /*******************************************************************************
-  **
-  ** Function:        nfcManager_doDeselectSecureElement
-  **
-  ** Description:     NFC controller stops routing data in listen mode.
-  **                  e: JVM environment.
-  **                  o: Java object.
-  **
-  ** Returns:         None
-  **
-  *******************************************************************************/
-  static void nfcManager_doDeselectSecureElement(JNIEnv * e, jobject o,
-                                                 jint seId) {
-    (void)e;
-    (void)o;
-    DLOG_IF(INFO, nfc_debug_enabled) << StringPrintf("%s: enter", __func__);
-    bool stat = false;
-    bool bRestartDiscovery = false;
-
-    if (!sIsSecElemSelected) {
-      LOG(ERROR) << StringPrintf("%s: already deselected", __func__);
-      goto TheEnd2;
-    }
-
-    if (PowerSwitch::getInstance().getLevel() == PowerSwitch::LOW_POWER) {
-      DLOG_IF(INFO, nfc_debug_enabled)
-          << StringPrintf("%s: do not deselect while power is OFF", __func__);
-      //        sIsSecElemSelected = false;
-      sIsSecElemSelected--;
-      goto TheEnd;
-    }
-
-    if (sRfEnabled) {
-      // Stop RF Discovery if we were polling
-      startRfDiscovery(false);
-      bRestartDiscovery = true;
-    }
-    // sIsSecElemSelected = false;
-    // sIsSecElemSelected--;
-
-    // if controller is not routing to sec elems AND there is no pipe connected,
-    // then turn off the sec elems
-    if (SecureElement::getInstance().isBusy() == false) {
-      // SecureElement::getInstance().deactivate (0xABCDEF);
-      stat = SecureElement::getInstance().deactivate(seId);
-      if (stat) {
-        sIsSecElemSelected--;
-        //            RoutingManager::getInstance().commitRouting();
-      }
-    }
-
-  TheEnd:
-    /*
-     * conditional check is added to avoid multiple dicovery cmds
-     * at the time of NFC OFF in progress
-     */
-    if ((gGeneralPowershutDown != NFC_MODE_OFF) && bRestartDiscovery)
-      startRfDiscovery(true);
-
-    // if nothing is active after this, then tell the controller to power down
-    if (!PowerSwitch::getInstance().setModeOff(PowerSwitch::SE_ROUTING))
-      PowerSwitch::getInstance().setLevel(PowerSwitch::LOW_POWER);
-
-  TheEnd2:
-    DLOG_IF(INFO, nfc_debug_enabled) << StringPrintf("%s: exit", __func__);
   }
 
   /*******************************************************************************
@@ -4243,71 +3952,6 @@ static void nfcManager_doFactoryReset(JNIEnv*, jobject) {
     GetNxpNumValue(NAME_DEFAULT_OFFHOST_PWR_STATE, &num, sizeof(num));
     return num;
   }
-  /*******************************************************************************
-  **
-  ** Function:        nfcManager_setDefaultTechRoute
-  **
-  ** Description:     Setting Default Technology Routing
-  **                  e:  JVM environment.
-  **                  o:  Java object.
-  **                  seId:  SecureElement Id
-  **                  tech_swithon:  technology switch_on
-  **                  tech_switchoff:  technology switch_off
-  **
-  ** Returns:         None
-  **
-  *******************************************************************************/
-  static void nfcManager_setDefaultTechRoute(JNIEnv * e, jobject o, jint seId,
-                                             jint tech_switchon,
-                                             jint tech_switchoff) {
-    (void)e;
-    (void)o;
-    DLOG_IF(INFO, nfc_debug_enabled) << StringPrintf("%s: ENTER", __func__);
-    //    tNFA_STATUS status;                   /*commented to eliminate unused
-    //    variable warning*/
-
-    if (sRfEnabled) {
-      // Stop RF Discovery if we were polling
-      startRfDiscovery(false);
-    }
-    RoutingManager::getInstance().setDefaultTechRouting(seId, tech_switchon,
-                                                        tech_switchoff);
-    // start discovery.
-    startRfDiscovery(true);
-  }
-
-  /*******************************************************************************
-  **
-  ** Function:        nfcManager_setDefaultProtoRoute
-  **
-  ** Description:     Setting Default Protocol Routing
-  **
-  **                  e:  JVM environment.
-  **                  o:  Java object.
-  **                  seId:  SecureElement Id
-  **                  proto_swithon:  Protocol switch_on
-  **                  proto_switchoff:  Protocol switch_off
-  **
-  ** Returns:         None
-  **
-  *******************************************************************************/
-  static void nfcManager_setDefaultProtoRoute(JNIEnv * e, jobject o, jint seId,
-                                              jint proto_switchon,
-                                              jint proto_switchoff) {
-    (void)e;
-    (void)o;
-    DLOG_IF(INFO, nfc_debug_enabled) << StringPrintf("%s: ENTER", __func__);
-    //    tNFA_STATUS status;                   /*commented to eliminate unused
-    //    variable warning*/
-    //    if (sRfEnabled) {
-    //        // Stop RF Discovery if we were polling
-    //        startRfDiscovery (false);
-    //    }
-    RoutingManager::getInstance().setDefaultProtoRouting(seId, proto_switchon,
-                                                         proto_switchoff);
-    // start discovery.
-    //    startRfDiscovery (true);
-  }
 
   /*******************************************************************************
    **
@@ -4336,30 +3980,6 @@ static void nfcManager_doFactoryReset(JNIEnv*, jobject) {
     return status;
   }
 
-  /*******************************************************************************
-  **
-  ** Function:        nfcManager_isVzwFeatureEnabled
-  **
-  ** Description:     Check vzw feature is enabled or not
-  **
-  ** Returns:         True if the VZW_FEATURE_ENABLE is set.
-  **
-  *******************************************************************************/
-  static bool nfcManager_isVzwFeatureEnabled(JNIEnv * /* e */, jobject /* o */) {
-    unsigned int num = 0;
-    bool mStat = false;
-
-    if (GetNxpNumValue("VZW_FEATURE_ENABLE", &num, sizeof(num))) {
-      if (num == 0x01) {
-        mStat = true;
-      } else {
-        mStat = false;
-      }
-    } else {
-      mStat = false;
-    }
-    return mStat;
-  }
   /*******************************************************************************
   **
   ** Function:        nfcManager_isNfccBusy
@@ -4623,37 +4243,6 @@ static void nfcManager_doFactoryReset(JNIEnv*, jobject) {
 #if (NXP_EXTNS == TRUE)
   /*******************************************************************************
   **
-  ** Function:        nfcManager_getRouting
-  **
-  ** Description:     Get Routing Table information.
-  **                  e: JVM environment.
-  **                  o: Java object.
-  **
-  ** Returns:         Current routing Settings.
-  **
-  *******************************************************************************/
-  static jbyteArray nfcManager_getRouting(JNIEnv * e, jobject /* o */) {
-    DLOG_IF(INFO, nfc_debug_enabled) << StringPrintf("%s : Enter", __func__);
-    jbyteArray jbuff = NULL;
-    if (sRfEnabled) {
-      // Stop RF Discovery if we were polling
-      startRfDiscovery(false);
-    }
-    SyncEventGuard guard(sNfaGetRoutingEvent);
-    sRoutingBuffLen = 0;
-    RoutingManager::getInstance().getRouting();
-    sNfaGetRoutingEvent.wait();
-    if (sRoutingBuffLen > 0) {
-      jbuff = e->NewByteArray(sRoutingBuffLen);
-      e->SetByteArrayRegion(jbuff, 0, sRoutingBuffLen, (jbyte*)sRoutingBuff);
-    }
-
-    startRfDiscovery(true);
-    return jbuff;
-  }
-
-  /*******************************************************************************
-  **
   ** Function:        nfcManager_getNfcInitTimeout
   **
   ** Description:     Gets the chip version.
@@ -4663,7 +4252,7 @@ static void nfcManager_doFactoryReset(JNIEnv*, jobject) {
   ** Returns:         timeout in seconds
   **
   *******************************************************************************/
-  static int nfcManager_getNfcInitTimeout(JNIEnv * e, jobject o) {
+__attribute__((unused)) static int nfcManager_getNfcInitTimeout(JNIEnv * e, jobject o) {
     (void)e;
     (void)o;
     DLOG_IF(INFO, nfc_debug_enabled) << StringPrintf("%s: enter", __func__);
@@ -4735,35 +4324,6 @@ static void nfcManager_doFactoryReset(JNIEnv*, jobject) {
         PowerSwitch::POWER_STATE_OFF);
   }
 #if (NXP_EXTNS == TRUE)
-  /*******************************************************************************
-  **
-  ** Function:        nfcManager_doUpdateScreenState
-  **
-  ** Description:     Update If any Pending screen state is present
-  **                  e: JVM environment.
-  **                  o: Java object.
-  **
-  ** Returns:         None.
-  **
-  *******************************************************************************/
-  static void nfcManager_doUpdateScreenState(JNIEnv * /* e */, jobject /* o */) {
-    DLOG_IF(INFO, nfc_debug_enabled) << StringPrintf("%s: Enter ", __func__);
-    if (nfcFL.nfcNxpEse && nfcFL.eseFL._ESE_ETSI_READER_ENABLE) {
-      eScreenState_t last_screen_state_request;
-
-      if (pendingScreenState == true) {
-        DLOG_IF(INFO, nfc_debug_enabled)
-            << StringPrintf("%s: pendingScreenState = true ", __func__);
-        pendingScreenState = false;
-        last_screen_state_request = get_lastScreenStateRequest();
-        nfcManager_doSetScreenState(NULL, NULL, last_screen_state_request);
-      } else {
-        DLOG_IF(INFO, nfc_debug_enabled)
-            << StringPrintf("%s: pendingScreenState = false ", __func__);
-      }
-    }
-  }
-
   /*******************************************************************************
    **
    ** Function:        nfcManager_doSelectUicc()
@@ -5060,17 +4620,17 @@ static void nfcManager_doFactoryReset(JNIEnv*, jobject) {
 
     {"sendRawFrame", "([B)Z", (void*)nfcManager_sendRawFrame},
 
-    {"doRouteAid", "([BIII)Z", (void*)nfcManager_routeAid},
+    {"routeAid", "([BIII)Z", (void*)nfcManager_routeAid},
 
-    {"doUnrouteAid", "([B)Z", (void*)nfcManager_unrouteAid},
+    {"unrouteAid", "([B)Z", (void*)nfcManager_unrouteAid},
 
-    {"doSetRoutingEntry", "(IIII)Z", (void*)nfcManager_setRoutingEntry},
+    {"doSetRoutingEntry", "(IIII)Z",
+            (void*)nfcManager_setRoutingEntry},
 
-    {"doClearRoutingEntry", "(I)Z", (void*)nfcManager_clearRoutingEntry},
+    {"doClearRoutingEntry", "(I)Z",
+            (void*)nfcManager_clearRoutingEntry},
 
-    {"clearAidTable", "()Z", (void*)nfcManager_clearAidTable},
-
-    {"setDefaultRoute", "(III)Z", (void*)nfcManager_setDefaultRoute},
+    {"setEmptyAidRoute", "(I)V", (void*)nfcManager_setEmptyAidRoute},
 
     {"getAidTableSize", "()I", (void*)nfcManager_getAidTableSize},
 
@@ -5086,11 +4646,17 @@ static void nfcManager_doFactoryReset(JNIEnv*, jobject) {
     {"readerPassThruMode", "(BB)[B", (void*)nfcManager_readerPassThruMode},
     {"transceiveAppData", "([B)[B", (void*)nfcManager_transceiveAppData},
 #if (NXP_EXTNS == TRUE)
+     {"getDefaultFelicaCLTPowerState", "()I",
+            (void*) nfcManager_getDefaultFelicaCLTPowerState},
+
     {"getDefaultAidPowerState", "()I",
      (void*)nfcManager_getDefaultAidPowerState},
 
     {"getDefaultDesfirePowerState", "()I",
      (void*)nfcManager_getDefaultDesfirePowerState},
+
+    {"getDefaultFelicaCLTRoute", "()I",
+            (void*) nfcManager_getDefaultFelicaCLTRoute},
 
     {"getDefaultMifareCLTPowerState", "()I",
      (void*)nfcManager_getDefaultMifareCLTPowerState},
@@ -5103,25 +4669,7 @@ static void nfcManager_doFactoryReset(JNIEnv*, jobject) {
 
     {"getLfT3tMax", "()I", (void*)nfcManager_getLfT3tMax},
 
-    {"doEnableDiscovery", "(IZZZZ)V", (void*)nfcManager_enableDiscovery},
-
-    {"doGetSecureElementList", "()[I",
-     (void*)nfcManager_doGetSecureElementList},
-
-    {"doSelectSecureElement", "(I)V", (void*)nfcManager_doSelectSecureElement},
-
-    {"doActivateSecureElement", "(I)V",
-     (void*)nfcManager_activateSecureElement},
-
-    {"doDeselectSecureElement", "(I)V",
-     (void*)nfcManager_doDeselectSecureElement},
-
-    {"doSetSEPowerOffState", "(IZ)V", (void*)nfcManager_doSetSEPowerOffState},
-    {"setDefaultTechRoute", "(III)V", (void*)nfcManager_setDefaultTechRoute},
-
-    {"setDefaultProtoRoute", "(III)V", (void*)nfcManager_setDefaultProtoRoute},
-
-    {"GetDefaultSE", "()I", (void*)nfcManager_GetDefaultSE},
+    {"doEnableDiscovery", "(IZZZZZ)V", (void*)nfcManager_enableDiscovery},
 
     {"doCheckLlcp", "()Z", (void*)nfcManager_doCheckLlcp},
 
@@ -5164,55 +4712,22 @@ static void nfcManager_doFactoryReset(JNIEnv*, jobject) {
 
     {"doDump", "(Ljava/io/FileDescriptor;)V", (void*)nfcManager_doDump},
 
-    {"getChipVer", "()I", (void*)nfcManager_getChipVer},
-
-    {"getFwFileName", "()[B", (void*)nfcManager_getFwFileName},
-
-    {"JCOSDownload", "()I", (void*)nfcManager_doJcosDownload},
-    {"doCommitRouting", "()V", (void*)nfcManager_doCommitRouting},
+    {"commitRouting", "()Z", (void*)nfcManager_doCommitRouting},
 #if (NXP_EXTNS == TRUE)
-    {"doSetNfcMode", "(I)V", (void*)nfcManager_doSetNfcMode},
-
     {"setTransitConfig", "(Ljava/lang/String;)I",
      (void*)nfcManager_setTransitConfig},
-
 #endif
-    {"doGetSecureElementTechList", "()I",
-     (void*)nfcManager_getSecureElementTechList},
-
     {"doGetActiveSecureElementList", "()[I",
      (void*)nfcManager_getActiveSecureElementList},
 
-    {"doGetSecureElementUid", "()[B", (void*)nfcManager_getSecureElementUid},
-
-    {"setEmvCoPollProfile", "(ZI)I", (void*)nfcManager_setEmvCoPollProfile},
-
-    {"doSetSecureElementListenTechMask", "(I)V",
-     (void*)nfcManager_setSecureElementListenTechMask},
     {"getNciVersion", "()I", (void*)nfcManager_doGetNciVersion},
     {"doSetScreenState", "(I)V", (void*)nfcManager_doSetScreenState},
-    {"doSetScreenOrPowerState", "(I)V",
-     (void*)nfcManager_doSetScreenOrPowerState},
-    // Factory Test Code
-    {"doPrbsOn", "(IIII)V", (void*)nfcManager_doPrbsOn},
-    {"doPrbsOff", "()V", (void*)nfcManager_doPrbsOff},
-    // SWP self test
-    {"SWPSelfTest", "(I)I", (void*)nfcManager_SWPSelfTest},
     // check firmware version
     {"getFWVersion", "()I", (void*)nfcManager_getFwVersion},
 #if (NXP_EXTNS == TRUE)
-    {"updateScreenState", "()V", (void*)nfcManager_doUpdateScreenState},
-    {"doEnablep2p", "(Z)V", (void*)nfcManager_Enablep2p},
-    {"doSetProvisionMode", "(Z)V", (void*)nfcManager_setProvisionMode},
-    {"doGetRouting", "()[B", (void*)nfcManager_getRouting},
-    {"getNfcInitTimeout", "()I", (void*)nfcManager_getNfcInitTimeout},
-    {"isVzwFeatureEnabled", "()Z", (void*)nfcManager_isVzwFeatureEnabled},
     {"isNfccBusy", "()Z", (void*)nfcManager_isNfccBusy},
 #endif
-    {"doSetEEPROM", "([B)V", (void*)nfcManager_doSetEEPROM},
-    {"doGetSeInterface", "(I)I", (void*)nfcManager_doGetSeInterface},
     // Factory Test Code
-    {"doCheckJcopDlAtBoot", "()Z", (void*)nfcManager_doCheckJcopDlAtBoot},
     {"doEnableDtaMode", "()V", (void*)nfcManager_doEnableDtaMode},
     {"doDisableDtaMode", "()V", (void*)nfcManager_doDisableDtaMode},
     {"doFactoryReset", "()V", (void*)nfcManager_doFactoryReset},
@@ -5226,7 +4741,6 @@ static void nfcManager_doFactoryReset(JNIEnv*, jobject) {
     {"setPreferredSimSlot", "(I)I", (void*)nfcManager_setPreferredSimSlot},
     {"routeApduPattern", "(II[B[B)Z", (void*)nfcManager_routeApduPattern},
     {"unrouteApduPattern", "([B)Z", (void*)nfcManager_unrouteApduPattern},
-    {"doNfcSelfTest", "(I)I", (void*)nfcManager_nfcSelfTest}
 #endif
   };
 
@@ -5488,31 +5002,6 @@ static void nfcManager_doFactoryReset(JNIEnv*, jobject) {
 
   /*******************************************************************************
   **
-  ** Function:        nfcManager_getChipVer
-  **
-  ** Description:     Gets the chip version.
-  **                  e: JVM environment.
-  **                  o: Java object.
-  **
-  ** Returns:         None      0x00
-  **                  PN547C2   0x01
-  **                  PN65T     0x02 .
-  **
-  *******************************************************************************/
-  static int nfcManager_getChipVer(JNIEnv * e, jobject o) {
-    (void)e;
-    (void)o;
-    DLOG_IF(INFO, nfc_debug_enabled) << StringPrintf("%s: enter", __func__);
-    unsigned long num = 0;
-
-    GetNxpNumValue(NAME_NXP_NFC_CHIP, (void*)&num, sizeof(num));
-    DLOG_IF(INFO, nfc_debug_enabled)
-        << StringPrintf("%ld: nfcManager_getChipVer", num);
-    return num;
-  }
-
-  /*******************************************************************************
-  **
   ** Function:        nfcManager_setTransitConfig
   **
   ** Description:     Set Transit Configuration
@@ -5579,7 +5068,7 @@ static void nfcManager_doFactoryReset(JNIEnv*, jobject) {
   **                  NULL in case file name not found
   **
   *******************************************************************************/
-  static jbyteArray nfcManager_getFwFileName(JNIEnv * e, jobject o) {
+   __attribute__((unused)) static jbyteArray nfcManager_getFwFileName(JNIEnv * e, jobject o) {
     (void)o;
     DLOG_IF(INFO, nfc_debug_enabled) << StringPrintf("%s: enter", __func__);
     char fwFileName[256];
@@ -5767,10 +5256,11 @@ static void nfcManager_doFactoryReset(JNIEnv*, jobject) {
   }
 #endif
 
-  static void nfcManager_doCommitRouting(JNIEnv * e, jobject o) {
+  static jboolean nfcManager_doCommitRouting(JNIEnv * e, jobject o) {
     (void)e;
     (void)o;
     DLOG_IF(INFO, nfc_debug_enabled) << StringPrintf("%s: enter", __func__);
+    bool status = false;
     PowerSwitch::getInstance().setLevel(PowerSwitch::FULL_POWER);
     PowerSwitch::getInstance().setModeOn(PowerSwitch::HOST_ROUTING);
 #if (NXP_EXTNS == TRUE && NXP_NFCC_HCE_F == TRUE)
@@ -5784,7 +5274,7 @@ static void nfcManager_doFactoryReset(JNIEnv*, jobject) {
         /*Stop RF discovery to reconfigure*/
         startRfDiscovery(false);
       }
-      RoutingManager::getInstance().commitRouting();
+      status = RoutingManager::getInstance().commitRouting();
       startRfDiscovery(true);
 #if (NXP_EXTNS == TRUE && NXP_NFCC_HCE_F == TRUE)
       pTransactionController->transactionEnd(
@@ -5792,6 +5282,7 @@ static void nfcManager_doFactoryReset(JNIEnv*, jobject) {
     }
 #endif
     DLOG_IF(INFO, nfc_debug_enabled) << StringPrintf("%s: exit", __func__);
+    return status;
   }
 #if (NXP_EXTNS == TRUE)
   static void nfcManager_doSetNfcMode(JNIEnv * e, jobject o, jint nfcMode) {
@@ -6103,7 +5594,7 @@ static void nfcManager_doFactoryReset(JNIEnv*, jobject) {
   ** Returns:         None
   **
   *******************************************************************************/
-  static void nfcManager_doSetScreenOrPowerState(JNIEnv * e, jobject o,
+   __attribute__((unused)) static void nfcManager_doSetScreenOrPowerState(JNIEnv * e, jobject o,
                                                  jint state) {
     LOG(ERROR) << StringPrintf("%s: Enter", __func__);
     if ((state & NFA_SCREEN_STATE_MASK) <=
@@ -6587,6 +6078,7 @@ bool update_transaction_stat(const char * req_handle, transaction_state_t req_st
           NULL, NULL, transaction_data.discovery_params.technologies_mask,
           transaction_data.discovery_params.enable_lptd,
           transaction_data.discovery_params.reader_mode,
+          0x00,
           transaction_data.discovery_params.enable_p2p,
           transaction_data.discovery_params.restart);
     }
@@ -6686,50 +6178,6 @@ bool update_transaction_stat(const char * req_handle, transaction_state_t req_st
         LOG(ERROR) << StringPrintf("received SIGHUP\n");
         break;
     }
-  }
-
-  /*******************************************************************************
-  **
-  ** Function         nfcManager_doGetSeInterface
-  **
-  ** Description      This function is used to get the eSE Client interfaces.
-  **
-  ** Returns          integer - Physical medium
-  **
-  *******************************************************************************/
-  static int nfcManager_doGetSeInterface(JNIEnv * /* e */, jobject /* o */, jint type) {
-    unsigned long num = 0;
-    switch (type) {
-      case LDR_SRVCE:
-        if (GetNxpNumValue(NAME_NXP_P61_LS_DEFAULT_INTERFACE, (void*)&num,
-                           sizeof(num)) == false) {
-          DLOG_IF(INFO, nfc_debug_enabled)
-              << StringPrintf("NAME_NXP_P61_LS_DEFAULT_INTERFACE not found");
-          num = 1;
-        }
-        break;
-      case JCOP_SRVCE:
-        if (GetNxpNumValue(NAME_NXP_P61_JCOP_DEFAULT_INTERFACE, (void*)&num,
-                           sizeof(num)) == false) {
-          DLOG_IF(INFO, nfc_debug_enabled)
-              << StringPrintf("NAME_NXP_P61_JCOP_DEFAULT_INTERFACE not found");
-          num = 1;
-        }
-        break;
-      case LTSM_SRVCE:
-        if (GetNxpNumValue(NAME_NXP_P61_LTSM_DEFAULT_INTERFACE, (void*)&num,
-                           sizeof(num)) == false) {
-          DLOG_IF(INFO, nfc_debug_enabled)
-              << StringPrintf("NAME_NXP_P61_LTSM_DEFAULT_INTERFACE not found");
-          num = 1;
-        }
-        break;
-      default:
-        break;
-    }
-    DLOG_IF(INFO, nfc_debug_enabled)
-        << StringPrintf("%ld: nfcManager_doGetSeInterface", num);
-    return num;
   }
 
 #if (NXP_EXTNS == TRUE)
@@ -6840,7 +6288,7 @@ bool update_transaction_stat(const char * req_handle, transaction_state_t req_st
   ** Returns:         None.
   **
   *******************************************************************************/
-  static void nfcManager_setProvisionMode(JNIEnv * e, jobject o,
+ __attribute__((unused)) static void nfcManager_setProvisionMode(JNIEnv * e, jobject o,
                                           jboolean provisionMode) {
     DLOG_IF(INFO, nfc_debug_enabled) << StringPrintf(
         "Enter :%s  provisionMode = %d", __func__, provisionMode);
@@ -7978,7 +7426,7 @@ bool update_transaction_stat(const char * req_handle, transaction_state_t req_st
     sNfaNxpNtfEvent.notifyOne();
   }
 
-  static void nfcManager_doPrbsOn(JNIEnv * e, jobject o, jint prbs,
+  __attribute__((unused)) static void nfcManager_doPrbsOn(JNIEnv * e, jobject o, jint prbs,
                                   jint hw_prbs, jint tech, jint rate) {
     (void)e;
     (void)o;
@@ -8100,7 +7548,7 @@ bool update_transaction_stat(const char * req_handle, transaction_state_t req_st
     return;
   }
 
-  static void nfcManager_doPrbsOff(JNIEnv * e, jobject o) {
+  __attribute__((unused)) static void nfcManager_doPrbsOff(JNIEnv * e, jobject o) {
     (void)e;
     (void)o;
     DLOG_IF(INFO, nfc_debug_enabled) << StringPrintf("%s: enter", __func__);
@@ -8139,7 +7587,7 @@ bool update_transaction_stat(const char * req_handle, transaction_state_t req_st
     return;
   }
 
-  static jint nfcManager_SWPSelfTest(JNIEnv * e, jobject o, jint ch) {
+__attribute__((unused)) static jint nfcManager_SWPSelfTest(JNIEnv * e, jobject o, jint ch) {
     (void)e;
     (void)o;
     DLOG_IF(INFO, nfc_debug_enabled) << StringPrintf("%s: enter", __func__);
@@ -8309,29 +7757,6 @@ bool update_transaction_stat(const char * req_handle, transaction_state_t req_st
     DLOG_IF(INFO, nfc_debug_enabled)
         << StringPrintf("%s: exit; version =0x%X", __func__, version);
     return version;
-  }
-
-  static void nfcManager_doSetEEPROM(JNIEnv * e, jobject o, jbyteArray val) {
-    (void)e;
-    (void)o;
-    (void)val;
-    DLOG_IF(INFO, nfc_debug_enabled) << StringPrintf("%s: enter", __func__);
-    tNFA_STATUS status = NFA_STATUS_FAILED;
-    //    bool stat = false;                        /*commented to eliminate
-    //    unused variable warning*/
-    //    uint8_t param;                              /*commented to eliminate
-    //    unused variable warning*/
-
-    if (!sIsNfaEnabled) {
-      DLOG_IF(INFO, nfc_debug_enabled)
-          << StringPrintf("NFC does not enabled!!");
-      return;
-    }
-
-    DLOG_IF(INFO, nfc_debug_enabled)
-        << StringPrintf("%s: exit; status =0x%X", __func__, status);
-
-    return;
   }
 
   /*******************************************************************************
@@ -9237,6 +8662,48 @@ bool update_transaction_stat(const char * req_handle, transaction_state_t req_st
     mSelfTestTransacAB.notifyOne();
   }
 #endif
+
 }
 
 /* namespace android */
+
+  /*******************************************************************************
+   **
+   ** Function:        nfcManager_getUiccId()
+   **
+   ** Description:
+   **
+   ** Returns:         success/failure
+   **
+   *******************************************************************************/
+   jint nfcManager_getUiccId(jint uicc_slot) {
+
+    if((uicc_slot == 0x00) || (uicc_slot == 0x01))
+    {
+        return 0x02;
+    }
+    else if(uicc_slot == 0x02)
+    {
+        return 0x04;
+    }
+    else
+    {
+        return 0xFF;
+    }
+  }
+
+  jint nfcManager_getUiccRoute(jint uicc_slot) {
+
+    if(uicc_slot == 0x01)
+    {
+        return 0x402;
+    }
+    else if(uicc_slot == 0x02)
+    {
+        return 0x481;
+    }
+    else
+    {
+        return 0xFF;
+    }
+  }
