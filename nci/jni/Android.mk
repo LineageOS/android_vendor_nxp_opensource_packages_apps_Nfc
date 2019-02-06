@@ -52,7 +52,7 @@ LOCAL_C_INCLUDES += \
     vendor/nxp/opensource/commonsys/external/libnfc-nci/SN100x/extns/impl
 
 LOCAL_SHARED_LIBRARIES := \
-    libicuuc \
+    libandroidicu \
     libnativehelper \
     libcutils \
     libutils \
