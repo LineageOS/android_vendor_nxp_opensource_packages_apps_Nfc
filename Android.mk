@@ -1,4 +1,3 @@
-ifeq ($(strip $(TARGET_USES_NQ_NFC)),true)
 LOCAL_PATH:= $(call my-dir)
 
 ########################################
@@ -29,4 +28,3 @@ LOCAL_MODULE_OWNER := nxp
 include $(BUILD_PACKAGE)
 
 include $(call all-makefiles-under,$(LOCAL_PATH))
-endif
