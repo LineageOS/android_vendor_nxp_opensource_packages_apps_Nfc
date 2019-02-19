@@ -1206,9 +1206,6 @@ void SecureElement::notifyConnectivityListeners(uint8_t evtSrc) {
     return;
   }
 
-  e->CallVoidMethod(mNativeData->manager,
-                    android::gCachedNfcManagerNotifyConnectivityListeners,
-                    evtSrc);
   if (e->ExceptionCheck()) {
     e->ExceptionClear();
     LOG(ERROR) << StringPrintf("%s: fail notify", fn);

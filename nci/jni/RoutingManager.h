@@ -171,11 +171,6 @@ class RoutingManager {
   void nfaEEConnect();
   void nfaEEDisconnect();
   SyncEvent mEEDisconnectEvt;
-  bool setRoutingEntry(int type, int value, int route, int power);
-  bool clearRoutingEntry(int type);
-  bool setDefaultRoute(const int defaultRoute, const int protoRoute,
-                       const int techRoute);
-  bool clearAidTable();
   bool removeNfcid2Routing(uint8_t* nfcID2);
   bool addAidRouting(const uint8_t* aid, uint8_t aidLen, int route, int power,
                      int aidInfo);
@@ -184,6 +179,7 @@ class RoutingManager {
                        int optparamlen);
   void handleSERemovedNtf();
   bool is_ee_recovery_ongoing();
+  void setEmptyAidEntry(void);
 #if (NXP_NFCC_HCE_F == TRUE)
   void notifyT3tConfigure();
 #endif
@@ -206,6 +202,16 @@ class RoutingManager {
   void onNfccShutdown();
   int registerJniFunctions(JNIEnv* e);
   void ee_removed_disc_ntf_handler(tNFA_HANDLE handle, tNFA_EE_STATUS status);
+  bool setRoutingEntry(int type, int value, int route, int power);
+  bool clearRoutingEntry(int type);
+  bool clearAidTable();
+  void registerProtoRouteEnrty(tNFA_HANDLE ee_handle,
+                               tNFA_PROTOCOL_MASK protocols_switch_on,
+                               tNFA_PROTOCOL_MASK protocols_switch_off,
+                               tNFA_PROTOCOL_MASK protocols_battery_off,
+                               tNFA_PROTOCOL_MASK protocols_screen_lock,
+                               tNFA_PROTOCOL_MASK protocols_screen_off,
+                               tNFA_PROTOCOL_MASK protocols_screen_off_lock);
   SyncEvent mLmrtEvent;
   SyncEvent mEeSetModeEvent;
   SyncEvent mCeRegisterEvent;  // FelicaOnHost
@@ -231,16 +237,6 @@ class RoutingManager {
                                           const int protoRoute,
                                           const int techRoute);
   uint16_t getUiccRouteLocId(const int route);
-  void initialiseTableEntries(void);
-  void compileProtoEntries(void);
-  void compileTechEntries(void);
-  void consolidateProtoEntries(void);
-  void consolidateTechEntries(void);
-  void setProtoRouting(void);
-#if (NXP_EXTNS == TRUE)
-  void setEmptyAidEntry(void);
-#endif
-  void setTechRouting(void);
   void processTechEntriesForFwdfunctionality(void);
   void configureOffHostNfceeTechMask(void);
   void checkProtoSeID(void);
@@ -327,6 +323,7 @@ class RoutingManager {
   int mHostListnTechMask;
   int mUiccListnTechMask;
   int mFwdFuntnEnable;
+  int mHostListnEnable;
   static int mChipId;
   SyncEvent mEeRegisterEvent;
   SyncEvent mRoutingEvent;

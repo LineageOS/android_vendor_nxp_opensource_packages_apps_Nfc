@@ -54,7 +54,7 @@ LOCAL_C_INCLUDES += \
     $(LIBNFC_PATH)/SN100x/extns/impl
 
 LOCAL_SHARED_LIBRARIES := \
-    libicuuc \
+    libandroidicu \
     libnativehelper \
     libcutils \
     libutils \

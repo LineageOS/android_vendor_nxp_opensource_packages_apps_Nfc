@@ -49,10 +49,10 @@ LOCAL_C_INCLUDES += \
     $(VOB_COMPONENTS)/gki/ulinux \
     $(VOB_COMPONENTS)/gki/common \
     $(LIBNFC_PATH)/utils/include \
-    vendor/nxp/opensource/halimpl/SN100x/extns/impl
+    vendor/nxp/opensource/commonsys/external/libnfc-nci/SN100x/extns/impl
 
 LOCAL_SHARED_LIBRARIES := \
-    libicuuc \
+    libandroidicu \
     libnativehelper \
     libcutils \
     libutils \
