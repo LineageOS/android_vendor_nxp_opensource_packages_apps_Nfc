@@ -1351,6 +1351,24 @@ public class NfcService implements DeviceHostListener {
         }
 
         @Override
+        public boolean isNfcSecureEnabled() {
+            //TODO: Implementation missing. Returning false as a temporary fix.
+            return false;
+        }
+
+        @Override
+        public boolean deviceSupportsNfcSecure() {
+            //TODO: Implementation missing. Returning false as a temporary fix.
+            return false;
+        }
+
+        @Override
+        public boolean setNfcSecure(boolean enable) {
+            //TODO: Implementation missing. Returning false as a temporary fix.
+            return false;
+        }
+
+        @Override
         public INfcTag getNfcTagInterface() throws RemoteException {
             return mNfcTagService;
         }
