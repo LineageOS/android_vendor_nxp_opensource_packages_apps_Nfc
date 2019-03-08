@@ -25,14 +25,11 @@ import java.util.List;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.Map;
-
 import android.content.BroadcastReceiver;
-import android.content.pm.ActivityInfo;
 import android.content.pm.ResolveInfo;
 import android.content.pm.PackageInfo;
-import android.net.Uri;
-import android.util.Log;
 
+import android.util.Log;
 import com.nxp.nfc.gsma.internal.INxpNfcController;
 import com.android.nfc.cardemulation.CardEmulationManager;
 import com.android.nfc.cardemulation.RegisteredAidCache;
@@ -42,11 +39,10 @@ import android.os.Binder;
 import android.content.ComponentName;
 import android.content.pm.PackageManager;
 import android.content.pm.PackageManager.NameNotFoundException;
-
 import com.android.nfc.NfcPermissions;
 import com.android.nfc.NfcService;
 import com.nxp.nfc.NxpConstants;
-
+import android.nfc.NfcAdapter;
 
 public class NxpNfcController {
 
@@ -61,16 +57,17 @@ public class NxpNfcController {
     private RegisteredAidCache mRegisteredAidCache;
     private CardEmulationManager mCardEmulationManager;
     private boolean mGsmaCommitOffhostService = false;
-    static final String TAG = "NxpNfcControllerService";
+    static final String TAG = "NxpNfcController";
     boolean DBG = true;
 
     public ArrayList<String> mEnabledMultiEvts = new ArrayList<String>();
     public final HashMap<String, Boolean> mMultiReceptionMap = new HashMap<String, Boolean>();
-    private Object mWaitX509CheckCert = null;
-    private boolean mHasX509Cert = false;
+    //private NfcService mService;
+    private Object mWaitCheckCert = null;
+    private boolean mHasCert = false;
+    private Object mWaitOMACheckCert = null;
+    private boolean mHasOMACert = false;
     private ComponentName unicastPkg = null;
-
-    static final int X509_WAIT_TIMEOUT = 10000;
 
     public NxpNfcController(Context context, CardEmulationManager cardEmulationManager) {
         mContext = context;
@@ -82,66 +79,101 @@ public class NxpNfcController {
 
     public INxpNfcController getNxpNfcControllerInterface() {
         if(mNxpNfcControllerInterface != null) {
-            if(DBG) Log.d(TAG, "GSMA: mNxpNfcControllerInterface is not Null");
+            Log.d("NxpNfcController", "GSMA: mNxpNfcControllerInterface is not Null");
             return mNxpNfcControllerInterface;
         }
         return null;
     }
 
     public ArrayList<String> getEnabledMultiEvtsPackageList() {
+        if(mEnabledMultiEvts.size() == 0x00) {
+            Log.d(TAG, " check for unicast mode service resolution");
+            getPackageListUnicastMode();
+        }
         return mEnabledMultiEvts;
     }
 
-    private boolean checkCertificatesFromUICC(String pkg, String seName) {
-        // FIXME: Should this be ACTION_CHECK_CERT ?
-        return checkX509CertificatesFromSim(pkg, seName);
-   }
-
     public void setResultForCertificates(boolean result) {
-        // FIXME: Might expect ACTION_CHECK_CERT
-        setResultForX509Certificates(result);
+        Log.d(TAG, "setResultForCertificates() Start");
+        synchronized (mWaitCheckCert) {
+            if (mWaitCheckCert != null) {
+                if (result) {
+                    mHasCert = true;
+                } else {
+                    mHasCert = false;
+                }
+                mWaitCheckCert.notify();
+            }
+        }
+        Log.d(TAG, "setResultForCertificates() End");
     }
 
-    // "org.simalliance.openmobileapi.service.ACTION_CHECK_X509
-    private boolean checkX509CertificatesFromSim (String pkg, String seName) {
-        if (DBG) Log.d(TAG, "checkX509CertificatesFromSim() " + pkg + ", " + seName);
+    private boolean checkCertificatesFromUICC(String pkg, String seName) {
+        Log.d(TAG, "checkCertificatesFromUICC() " + pkg + ", " + seName);
+        Intent CertificateIntent = new Intent();
+        CertificateIntent.setAction(NxpConstants.ACTION_CHECK_X509);
+        CertificateIntent.setPackage(NxpConstants.SET_PACKAGE_NAME);
+        CertificateIntent.putExtra(NfcAdapter.EXTRA_SECURE_ELEMENT_NAME, seName);
+        CertificateIntent.putExtra(NxpConstants.EXTRA_PKG, pkg);
+        mContext.sendBroadcast(CertificateIntent);
 
-        Intent checkX509CertificateIntent = new Intent();
-        checkX509CertificateIntent.setAction(NxpConstants.ACTION_CHECK_X509);
-        checkX509CertificateIntent.setPackage(NxpConstants.SET_PACKAGE_NAME);
-        checkX509CertificateIntent.putExtra(NxpConstants.EXTRA_SE_NAME, seName);
-        checkX509CertificateIntent.putExtra(NxpConstants.EXTRA_PKG, pkg);
-        mContext.sendBroadcast(checkX509CertificateIntent);
-
-        mWaitX509CheckCert = new Object();
-        mHasX509Cert = false;
+        mWaitCheckCert = new Object();
+        mHasCert = false;
         try {
-            synchronized (mWaitX509CheckCert) {
-                mWaitX509CheckCert.wait(X509_WAIT_TIMEOUT); //add timeout 10s
+            synchronized (mWaitCheckCert) {
+                mWaitCheckCert.wait(1000); // timeout ms
             }
         } catch (InterruptedException e) {
-            // Should not happen; fall-through to abort.
-            Log.w(TAG, "checkX509CertificatesFromSim(): interrupted");
+            Log.w(TAG, "interruped exception .");
         }
-        mWaitX509CheckCert = null;
+        mWaitCheckCert = null;
 
-        if (mHasX509Cert) {
+        if (mHasCert) {
             return true;
         } else {
             return false;
         }
-    }
+   }
+
+    private boolean checkX509CertificatesFromSim (String pkg, String seName) {
+        if (DBG) Log.d(TAG, "checkX509CertificatesFromSim() " + pkg + ", " + seName);
+
+        Intent checkCertificateIntent = new Intent();
+        checkCertificateIntent.setAction("org.simalliance.openmobileapi.service.ACTION_CHECK_X509");
+        checkCertificateIntent.setPackage("org.simalliance.openmobileapi.service");
+        checkCertificateIntent.putExtra("org.simalliance.openmobileapi.service.EXTRA_SE_NAME", seName);
+        checkCertificateIntent.putExtra("org.simalliance.openmobileapi.service.EXTRA_PKG", pkg);
+        mContext.sendBroadcast(checkCertificateIntent);
+
+        mWaitOMACheckCert = new Object();
+        mHasOMACert = false;
+        try {
+            synchronized (mWaitOMACheckCert) {
+                mWaitOMACheckCert.wait(1000); //add timeout ms
+            }
+        } catch (InterruptedException e) {
+            // Should not happen; fall-through to abort.
+            Log.w(TAG, "interruped.");
+        }
+        mWaitOMACheckCert = null;
+
+        if (mHasOMACert) {
+            return true;
+        } else {
+            return false;
+        }
+   }
 
     public void setResultForX509Certificates(boolean result) {
-        Log.d(TAG, "setResultForX509Certificates() Start, result: " + result);
-        if (mWaitX509CheckCert != null) {
-            synchronized (mWaitX509CheckCert) {
+        Log.d(TAG, "setResultForX509Certificates() Start");
+        synchronized (mWaitOMACheckCert) {
+            if (mWaitOMACheckCert != null) {
                 if (result) {
-                    mHasX509Cert = true;
+                    mHasOMACert = true;
                 } else {
-                    mHasX509Cert = false;
+                    mHasOMACert = false;
                 }
-                mWaitX509CheckCert.notify();
+                mWaitOMACheckCert.notify();
             }
         }
         Log.d(TAG, "setResultForX509Certificates() End");
@@ -177,30 +209,13 @@ public class NxpNfcController {
         }
     }
 
-    private ComponentName getPackageListUnicastMode (Intent intent) {
+    private void getPackageListUnicastMode () {
         unicastPkg = null;
         List<NQApduServiceInfo> regServices = new ArrayList<NQApduServiceInfo>(mCardEmulationManager.getAllServices());
-        if(DBG) Log.d(TAG, "getPackageListUnicastMode(): regServices.size() " + regServices.size());
-
         PackageManager pm = mContext.getPackageManager();
-        /*
-         * FIXME: we can use queryBroadcastReceivers to get partial matches
-         * FIXME: we cannot use queryIntentActivities for partial match
-        List<ResolveInfo> intentBroadcastReceivers = pm.queryBroadcastReceivers(
-                new Intent(NxpConstants.ACTION_MULTI_EVT_TRANSACTION,
-                        Uri.parse("nfc://secure:0/SIM")),
-                        (PackageManager.MATCH_DEFAULT_ONLY |
-                                PackageManager.GET_INTENT_FILTERS |
-                                PackageManager.GET_RESOLVED_FILTER));
-        if(DBG) Log.d(TAG, "getPackageListUnicastMode() : intentBroadcastReceivers.size() " + intentBroadcastReceivers.size());
-         */
-        List<ResolveInfo> intentReceivers = pm.queryIntentActivities(
-                intent,
-                (PackageManager.MATCH_DEFAULT_ONLY |
-                        PackageManager.GET_INTENT_FILTERS |
-                        PackageManager.GET_RESOLVED_FILTER));
-        if(DBG) Log.d(TAG, "getPackageListUnicastMode() : intentReceivers.size() " + intentReceivers.size());
-
+        List<ResolveInfo> intentServices = pm.queryIntentActivities(
+                new Intent(NxpConstants.ACTION_MULTI_EVT_TRANSACTION),
+                PackageManager.GET_INTENT_FILTERS| PackageManager.GET_RESOLVED_FILTER);
         ArrayList<String> apduResolvedServices = new ArrayList<String>();
         String packageName = null;
         String resolvedApduService = null;
@@ -210,16 +225,16 @@ public class NxpNfcController {
 
         for(NQApduServiceInfo service : regServices) {
             packageName = service.getComponent().getPackageName();
-            for(ResolveInfo resInfo : intentReceivers) {
+            for(ResolveInfo resInfo : intentServices){
                 resolveInfoService = null;
-                Log.d(TAG, "Registered Activity in resolved cache " + resInfo.activityInfo.packageName);
+                Log.e(TAG, " Registered Service in resolved cache"+resInfo.activityInfo.packageName);
                 if(resInfo.activityInfo.packageName.equals(packageName)) {
                     resolveInfoService = resInfo;
                     break;
                 }
             }
             if(resolveInfoService == null) {
-                Log.e(TAG, "Registered Activity is not found in cache");
+                Log.e(TAG, " Registered Service is not found in cache");
                 continue;
             }
             int priority = resolveInfoService.priority;
@@ -241,34 +256,33 @@ public class NxpNfcController {
         }
         if(apduResolvedServices.size() == 0x00) {
             Log.e(TAG, "No services to resolve, not starting the activity");
-            return unicastPkg;
+            return;
         }else if(apduResolvedServices.size() > 0x01) {
-            Log.d(TAG, "apduResolvedServices.size(): " + apduResolvedServices.size());
+            Log.e(TAG, " resolved"+apduResolvedServices.size());
             minInstallTime = getApplicationInstallTime(apduResolvedServices.get(0));
             for(String resolvedService : apduResolvedServices) {
                 if(getApplicationInstallTime(resolvedService) <= minInstallTime ) {
                     minInstallTime = getApplicationInstallTime(resolvedService);
                     resolvedApduService = resolvedService;
                 }
-                Log.d(TAG, "Install time  of application"+ minInstallTime);
+                Log.e(TAG, " Install time  of application"+ minInstallTime);
             }
 
         } else  resolvedApduService = apduResolvedServices.get(0);
 
-        Log.d(TAG, "Final Resolved Service: " + resolvedApduService);
+        Log.e(TAG, " Final Resolved Service"+resolvedApduService);
         if(resolvedApduService != null) {
-            for(ResolveInfo resolve : intentReceivers) {
+            for(ResolveInfo resolve : intentServices) {
                 if(resolve.activityInfo.packageName.equals(resolvedApduService)) {
-                    unicastPkg = new ComponentName(resolvedApduService, resolve.activityInfo.name);
+                    unicastPkg = new ComponentName(resolvedApduService ,resolve.activityInfo.name);
                     break;
                 }
             }
         }
-        return unicastPkg;
     }
 
-    public ComponentName getUnicastPackage(Intent intent) {
-        return getPackageListUnicastMode(intent);
+    public ComponentName getUnicastPackage() {
+        return unicastPkg;
     }
 
     final class NxpNfcControllerInterface extends INxpNfcController.Stub {
@@ -291,7 +305,7 @@ public class NxpNfcController {
             if(preferredPaymentService != null) {
                 if(preferredPaymentService.getPackageName() != null &&
                     !preferredPaymentService.getPackageName().equals(packageName)) {
-                    Log.d(TAG, "getDefaultOffHostService: unregistered package Name");
+                    Log.d(TAG, "getDefaultOffHostService unregistered package Name");
                     return null;
                 }
                 String defaultservice = preferredPaymentService.getClassName();

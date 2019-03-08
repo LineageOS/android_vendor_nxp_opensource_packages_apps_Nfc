@@ -17,7 +17,7 @@
  *
  *  The original Work has been changed by NXP Semiconductors.
  *
- *  Copyright (C) 2015 NXP Semiconductors
+ *  Copyright (C) 2015-2018 NXP Semiconductors
  *
  *  Licensed under the Apache License, Version 2.0 (the "License");
  *  you may not use this file except in compliance with the License.
@@ -38,6 +38,7 @@ import android.annotation.Nullable;
 import android.nfc.NdefMessage;
 import android.os.Bundle;
 
+import java.io.FileDescriptor;
 import java.io.IOException;
 
 public interface DeviceHost {
@@ -48,11 +49,6 @@ public interface DeviceHost {
          * Notifies transaction
          */
         public void onCardEmulationDeselected();
-
-        /**
-         * Notifies transaction
-         */
-        public void onCardEmulationAidSelected(byte[] aid,byte[] data, int evtSrc);
 
         /**
          * Notifies connectivity event from the SE
@@ -111,11 +107,9 @@ public interface DeviceHost {
         /**
          * Notifies SWP Reader Events.
          */
-        public void onSWPReaderRequestedEvent(boolean istechA, boolean istechB);
+        public void onETSIReaderRequestedEvent(boolean istechA, boolean istechB);
 
-        public void onSWPReaderRequestedFail(int FailCause);
-
-        public void onSWPReaderActivatedEvent();
+        public void onETSIReaderRequestedFail(int FailCause);
 
         public void onETSIReaderModeStartConfig(int eeHandle);
 
@@ -123,7 +117,11 @@ public interface DeviceHost {
 
         public void onETSIReaderModeSwpTimeout(int disc_ntf_timeout);
 
+        public void onETSIReaderModeRestart();
+
         public void onUiccStatusEvent(int uiccStat);
+
+        public void onNfcTransactionEvent(byte[] aid, byte[] data, String seName);
     }
 
     public interface TagEndpoint {
@@ -135,6 +133,7 @@ public interface DeviceHost {
         boolean isPresent();
         void startPresenceChecking(int presenceCheckDelay,
                                    @Nullable TagDisconnectedCallback callback);
+        void stopPresenceChecking();
 
         int[] getTechList();
         void removeTechnology(int tech); // TODO remove this one
@@ -272,6 +271,8 @@ public interface DeviceHost {
 
     public void doSelectSecureElement(int seID);
 
+    public void doActivateSecureElement(int seID);
+
     public void doSetSecureElementListenTechMask(int tech_mask);
     public int doGetSecureElementTechList();
 
@@ -334,6 +335,8 @@ public interface DeviceHost {
 
     public boolean unrouteApduPattern(byte[] apduData);
 
+    public int doNfcSelfTest(int type);
+
     public boolean doCheckLlcp();
 
     public boolean doCheckJcopDlAtBoot();
@@ -368,7 +371,7 @@ public interface DeviceHost {
 
     int getChipVer();
 
-    byte[] getFwFileName();
+    int setTransitConfig(String configs);
 
     int getNfcInitTimeout();
 
@@ -376,7 +379,7 @@ public interface DeviceHost {
 
     void doSetNfcMode(int nfcMode);
 
-    String dump();
+    void dump(FileDescriptor fd);
 
     boolean enableScreenOffSuspend();
 
@@ -397,6 +400,14 @@ public interface DeviceHost {
     void notifyEEReaderEvent(int evt);
 
     void etsiInitConfig();
+
+    void stopPoll(int mode);
+
+    void startPoll();
+
+    int mposSetReaderMode(boolean on);
+
+    boolean mposGetReaderMode();
 
     void updateScreenState();
     //boolean enableReaderMode(int technologies);
@@ -437,11 +448,13 @@ public interface DeviceHost {
 
     public void shutdown();
 
-    public byte[] getAdditionalConfigOptions();
-
     public int doselectUicc(int uiccSlot);
 
     public int doGetSelectedUicc();
 
     public int setPreferredSimSlot(int uiccSlot);
+
+    public byte[] readerPassThruMode(byte status, byte modulationTyp);
+
+    public byte[] transceiveAppData(byte[] data);
 }

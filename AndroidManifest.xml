@@ -13,6 +13,22 @@
      See the License for the specific language governing permissions and
      limitations under the License.
 -->
+<!-- The original Work has been changed by NXP Semiconductors.
+
+     Copyright 2018 NXP
+
+     Licensed under the Apache License, Version 2.0 (the "License");
+     you may not use this file except in compliance with the License.
+     You may obtain a copy of the License at
+
+     http://www.apache.org/licenses/LICENSE-2.0
+
+     Unless required by applicable law or agreed to in writing, software
+     distributed under the License is distributed on an "AS IS" BASIS,
+     WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+     See the License for the specific language governing permissions and
+     limitations under the License.
+ -->
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
         package="com.android.nfc"
         android:sharedUserId="android.uid.nfc"
@@ -52,10 +68,19 @@
     <uses-permission android:name="android.permission.DISPATCH_NFC_MESSAGE" />
     <uses-permission android:name="android.permission.OVERRIDE_WIFI_CONFIG" />
     <uses-permission android:name="android.permission.DEVICE_POWER" />
+    <uses-permission android:name="android.permission.ACCESS_VR_MANAGER"/>
     <uses-permission android:name="android.permission.USER_ACTIVITY" />
+    <uses-permission android:name="android.permission.SEND_RECEIVE_STK_INTENT" />
     <uses-permission android:name="android.permission.BIND_RESOLVER_RANKER_SERVICE" />
+    <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
     <protected-broadcast android:name="com.nxp.action.TRANSACTION_DETECTED" />
     <protected-broadcast android:name="com.gsma.services.nfc.action.TRANSACTION_EVENT" />
+    <protected-broadcast android:name="com.nxp.nfc_extras.action.NFC_MPOS_READER_MODE_RESTART" />
+    <protected-broadcast android:name="com.nxp.nfc_extras.action.NFC_MPOS_READER_MODE_TIMEOUT" />
+    <protected-broadcast android:name="com.nxp.nfc_extras.action.NFC_MPOS_READER_MODE_REMOVE_CARD" />
+    <protected-broadcast android:name="com.nxp.nfc_extras.action.NFC_MPOS_READER_MODE_STOP_SUCCESS" />
+    <protected-broadcast android:name="com.nxp.nfc_extras.action.NFC_MPOS_READER_MODE_START_FAIL" />
+    <protected-broadcast android:name="com.nxp.nfc_extras.action.NFC_MPOS_READER_MODE_START_SUCCESS" />
     <permission-group android:name ="com.gsma.services.nfc.permission"
                       android:label ="@string/permgrouplab_NFC"
                       android:description="@string/permgroupdesc_NFC"
@@ -75,6 +100,7 @@
                  android:killAfterRestore="false"
                  android:usesCleartextTraffic="false"
                  android:supportsRtl="true"
+                 android:hardwareAccelerated="false"
     >
         <meta-data android:name="com.google.android.backup.api_key"
             android:value="AEdPqrEAAAAIbiKKs0wlimxeJ9y8iRIaBOH6aeb2IurmZyBHvg" />
@@ -103,14 +129,6 @@
         />
 
         <activity android:name=".EnableNfcDialogActivity"
-            android:finishOnCloseSystemDialogs="true"
-            android:excludeFromRecents="true"
-            android:clearTaskOnLaunch="true"
-            android:multiprocess="true"
-        />
-
-        <activity android:name=".cardemulation.DefaultRemovedActivity"
-            android:theme="@*android:style/Theme.Material.Dialog.Alert"
             android:finishOnCloseSystemDialogs="true"
             android:excludeFromRecents="true"
             android:clearTaskOnLaunch="true"
@@ -166,6 +184,12 @@
         <service android:name=".beam.BeamReceiveService"
             android:process=":beam"
         />
+
+        <receiver android:name=".NfcBootCompletedReceiver">
+            <intent-filter>
+                <action android:name="android.intent.action.BOOT_COMPLETED" />
+            </intent-filter>
+        </receiver>
 
         <service android:name=".handover.PeripheralHandoverService"
         />

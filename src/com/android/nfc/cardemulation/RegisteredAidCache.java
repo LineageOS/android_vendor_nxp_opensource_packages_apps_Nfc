@@ -18,6 +18,25 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+/******************************************************************************
+ *
+ *  The original Work has been changed by NXP Semiconductors.
+ *
+ *  Copyright (C) 2015-2018 NXP Semiconductors
+ *
+ *  Licensed under the Apache License, Version 2.0 (the "License");
+ *  you may not use this file except in compliance with the License.
+ *  You may obtain a copy of the License at
+ *
+ *  http://www.apache.org/licenses/LICENSE-2.0
+ *
+ *  Unless required by applicable law or agreed to in writing, software
+ *  distributed under the License is distributed on an "AS IS" BASIS,
+ *  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ *  See the License for the specific language governing permissions and
+ *  limitations under the License.
+ *
+ ******************************************************************************/
 
 package com.android.nfc.cardemulation;
 
@@ -47,7 +66,10 @@ import android.nfc.cardemulation.NQAidGroup;
 public class RegisteredAidCache {
     static final String TAG = "RegisteredAidCache";
 
-    static final boolean DBG = true;
+    static final boolean DBG = false;
+
+    static final int AID_ROUTE_QUAL_SUBSET = 0x20;
+    static final int AID_ROUTE_QUAL_PREFIX = 0x10;
 
     // mAidServices maps AIDs to services that have registered them.
     // It's a TreeMap in order to be able to quickly select subsets
@@ -422,6 +444,8 @@ public class RegisteredAidCache {
         for (NQApduServiceInfo service : services) {
             if (DBG) Log.d(TAG, "generateServiceMap component: " + service.getComponent());
             List<String> prefixAids = service.getPrefixAids();
+            List<String> subSetAids = service.getSubsetAids();
+
             for (String aid : service.getAids()) {
                 if (!CardEmulation.isValidAid(aid)) {
                     Log.e(TAG, "Aid " + aid + " is not valid.");
@@ -443,6 +467,24 @@ public class RegisteredAidCache {
                         }
                     }
                     if (foundPrefix) {
+                        continue;
+                    }
+                } else if (aid.endsWith("#") && !supportsAidSubsetRegistration()) {
+                    Log.e(TAG, "Subset AID " + aid + " ignored on device that doesn't support it.");
+                    continue;
+                } else if (supportsAidSubsetRegistration() && subSetAids.size() > 0 && isExact(aid)) {
+                    // Check if we already have an overlapping subset registered for this AID
+                    boolean foundSubset = false;
+                    for (String subsetAid : subSetAids) {
+                        String plainSubset = subsetAid.substring(0, subsetAid.length() - 1);
+                        if (plainSubset.startsWith(aid)) {
+                            Log.e(TAG, "Ignoring exact AID " + aid + " because subset AID " + plainSubset +
+                                    " is already registered");
+                            foundSubset = true;
+                            break;
+                        }
+                    }
+                    if (foundSubset) {
                         continue;
                     }
                 }
@@ -646,6 +688,16 @@ public class RegisteredAidCache {
                     // This prefix is the default; therefore, AIDs of all conflicting children
                     // will no longer be evaluated.
                     resolvedAids.addAll(prefixConflicts.aids);
+                    for(String aid : resolveInfo.defaultService.getSubsetAids()) {
+                        if(prefixConflicts.aids.contains(aid)) {
+                            if((CardEmulation.CATEGORY_PAYMENT.equals(resolveInfo.defaultService.getCategoryForAid(aid))) || (resolveInfo.defaultService.getComponent().equals(mPreferredForegroundService))) {
+                                AidResolveInfo childResolveInfo = resolveAidConflictLocked(mAidServices.get(aid), false);
+                                aidCache.put(aid,childResolveInfo);
+                                Log.d(TAG, "AID " + aid+ " shared with prefix; " +
+                                                "adding subset .");
+                             }
+                        }
+                   }
                 } else if (resolveInfo.services.size() > 0) {
                     // This means we don't have a default for this prefix and all its
                     // conflicting children. So, for all conflicting AIDs, just add
@@ -807,10 +859,10 @@ public class RegisteredAidCache {
                 continue;
             }
             if(aid.endsWith("#")) {
-                aidInfo |= 0x20;
+                aidInfo |= AID_ROUTE_QUAL_SUBSET;
             }
             if(aid.endsWith("*") || (resolveInfo.prefixInfo != null && resolveInfo.prefixInfo.matchingSubset)) {
-                aidInfo |= 0x10;
+                aidInfo |= AID_ROUTE_QUAL_PREFIX;
             }
             if (resolveInfo.services.size() == 0) {
                 // No interested services
