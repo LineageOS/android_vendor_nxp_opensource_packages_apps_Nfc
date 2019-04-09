@@ -58,6 +58,11 @@ public class ForegroundUtils extends IProcessObserver.Stub {
         void onUidToBackground(int uid);
     }
 
+    @Override
+    public void onForegroundServicesChanged(int pid, int uid, int serviceTypes) {
+      // TODO (b/129628309): implement method for updated IProcessObserver interface
+    }
+
     public static ForegroundUtils getInstance() {
         return Singleton.INSTANCE;
     }
