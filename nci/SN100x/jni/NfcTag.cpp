@@ -35,7 +35,7 @@
 *  See the License for the specific language governing permissions and
 *  limitations under the License.
 *
-*  Copyright 2018 NXP
+*  Copyright 2018-2019 NXP
 *
 ******************************************************************************/
 
@@ -103,7 +103,9 @@ NfcTag::NfcTag()
   memset(mLastKovioUid, 0, NFC_KOVIO_MAX_LEN);
 #if (NXP_EXTNS == TRUE)
   mPrevNumTechList = 0;
+  memset(&mActivationParams_t, 0, sizeof(activationParams_t));
 #endif
+  memset (&mLastKovioTime, 0, sizeof(timespec));
 }
 
 /*******************************************************************************
@@ -211,7 +213,23 @@ void NfcTag::setActivationState() {
   DLOG_IF(INFO, nfc_debug_enabled)
       << StringPrintf("%s: state=%u", fn, mActivationState);
 }
-
+#if (NXP_EXTNS == TRUE)
+/*******************************************************************************
+**
+** Function:        resetActivationState
+**
+** Description:     Set the state to InActive due tag lost.
+**
+** Returns:         None.
+**
+*******************************************************************************/
+void NfcTag::resetActivationState() {
+  static const char fn[] = "NfcTag::resetActivationState";
+  mActivationState = InActive;
+  DLOG_IF(INFO, nfc_debug_enabled)
+      << StringPrintf("%s: state=%u", fn, mActivationState);
+}
+#endif
 /*******************************************************************************
 **
 ** Function:        isActivated
@@ -392,25 +410,25 @@ void NfcTag::discoverTechnologies(tNFA_ACTIVATED& activationData) {
       }
     }
   } else if (NFC_PROTOCOL_ISO_DEP == rfDetail.protocol) {
+    // type-4 tag uses technology ISO-DEP and technology A or B
+    mTechList[mNumTechList] =
+        TARGET_TYPE_ISO14443_4;  // is TagTechnology.ISO_DEP by Java API
 #if (NXP_EXTNS == TRUE)
         if((rfDetail.rf_tech_param.mode == NFC_DISCOVERY_TYPE_POLL_A) ||
            (rfDetail.rf_tech_param.mode == NFC_DISCOVERY_TYPE_POLL_A_ACTIVE)) {
           double fc = 13560000;
           uint8_t fwi = rfDetail.intf_param.intf_param.pa_iso.fwi;
-          if (fwi >= MIN_FWI && fwi <= MAX_FWI) {
+          if ((int8_t)fwi >= MIN_FWI && fwi <= MAX_FWI) {
             double fwt = (((1 << fwi) * 256 * 16) / fc) * 1000;
             double iso_timeout = RETRY_COUNT*fwt;
               if (iso_timeout < MIN_TRANSCEIVE_TIMEOUT_IN_MILLISEC)
-                fwt = MIN_TRANSCEIVE_TIMEOUT_IN_MILLISEC;
+                iso_timeout = MIN_TRANSCEIVE_TIMEOUT_IN_MILLISEC;
             DLOG_IF(INFO, nfc_debug_enabled) << StringPrintf(
-              "Setting the Xceive timeout = %f, fwi = %0#x, iso_timeout = %f", fwt, fwi, iso_timeout);
-            setTransceiveTimeout(mTechList[mNumTechList], fwt);
+              "Setting the Xceive timeout = %f, fwi = %0#x, fwt = %f", iso_timeout, fwi, fwt);
+            setTransceiveTimeout(mTechList[mNumTechList], iso_timeout);
           }
         }
 #endif
-    // type-4 tag uses technology ISO-DEP and technology A or B
-    mTechList[mNumTechList] =
-        TARGET_TYPE_ISO14443_4;  // is TagTechnology.ISO_DEP by Java API
     if ((rfDetail.rf_tech_param.mode == NFC_DISCOVERY_TYPE_POLL_A) ||
         (rfDetail.rf_tech_param.mode == NFC_DISCOVERY_TYPE_POLL_A_ACTIVE) ||
         (rfDetail.rf_tech_param.mode == NFC_DISCOVERY_TYPE_LISTEN_A) ||

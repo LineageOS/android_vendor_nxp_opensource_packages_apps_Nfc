@@ -18,7 +18,6 @@
 #include "MposManager.h"
 #include <nativehelper/ScopedLocalRef.h>
 #include <base/logging.h>
-#include "phNxpConfig.h"
 #include "config.h"
 #include "SecureElement.h"
 #include <android-base/stringprintf.h>
@@ -110,12 +109,15 @@ MposManager& MposManager::getInstance()
 ** Returns:         True if ok.
 **
 *******************************************************************************/
-bool MposManager::initialize(nfc_jni_native_data* native)
-{
+bool MposManager::initialize(nfc_jni_native_data* native) {
   mNativeData = native;
   initializeReaderInfo();
-  GetNxpNumValue(NAME_NXP_NFA_DM_DISC_NTF_TIMEOUT, &mDiscNtfTimeout, sizeof(mDiscNtfTimeout));
-  GetNxpNumValue(NAME_NXP_SWP_RD_TAG_OP_TIMEOUT, (void *) &mRdrTagOpTimeout, sizeof(mRdrTagOpTimeout));
+
+  if (NfcConfig::hasKey(NAME_NXP_NFA_DM_DISC_NTF_TIMEOUT))
+    mDiscNtfTimeout = NfcConfig::getUnsigned(NAME_NXP_NFA_DM_DISC_NTF_TIMEOUT);
+
+  if (NfcConfig::hasKey(NAME_NXP_SWP_RD_TAG_OP_TIMEOUT))
+    mRdrTagOpTimeout = NfcConfig::getUnsigned(NAME_NXP_SWP_RD_TAG_OP_TIMEOUT);
   return true;
 }
 
@@ -797,8 +799,9 @@ tNFA_STATUS MposManager::validateHCITransactionEventParams(uint8_t *aData, int32
     DLOG_IF(INFO, nfc_debug_enabled)
       << StringPrintf ("Power off procedure to be triggered");
     unsigned long num;
-    if(GetNxpNumValue(NAME_NFA_CONFIG_FORMAT, (void *)&num, sizeof(num)))
+    if (NfcConfig::hasKey(NAME_NFA_CONFIG_FORMAT))
     {
+        num = NfcConfig::getUnsigned(NAME_NFA_CONFIG_FORMAT);
         if (num == 0x05)
         {
           DLOG_IF(INFO, nfc_debug_enabled)
@@ -911,22 +914,19 @@ static void NxpResponse_Cb(uint8_t event, uint16_t param_len, uint8_t *p_param)
 {
     (void)event;
     DLOG_IF(INFO, nfc_debug_enabled) << StringPrintf("NxpResponse_Cb Received length data = 0x%x status = 0x%x", param_len, p_param[3]);
-
-    if(p_param != NULL && p_param[3] == 0x00)
-    {
+    if (p_param != NULL) {
+      if (p_param[3] == 0x00) {
         SetCbStatus(NFA_STATUS_OK);
-    }
-    else
-    {
+      } else {
         SetCbStatus(NFA_STATUS_FAILED);
-    }
-    gnxpfeature_conf.rsp_len = (uint8_t)param_len;
-    if(param_len > 0 && p_param != NULL)
-    {
+      }
+      gnxpfeature_conf.rsp_len = (uint8_t)param_len;
+      if (param_len > 0) {
         memcpy(gnxpfeature_conf.rsp_data, p_param, param_len);
+      }
+      SyncEventGuard guard(gnxpfeature_conf.NxpFeatureConfigEvt);
+      gnxpfeature_conf.NxpFeatureConfigEvt.notifyOne();
     }
-    SyncEventGuard guard(gnxpfeature_conf.NxpFeatureConfigEvt);
-    gnxpfeature_conf.NxpFeatureConfigEvt.notifyOne ();
 }
 
 /*******************************************************************************

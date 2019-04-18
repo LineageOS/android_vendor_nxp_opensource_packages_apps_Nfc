@@ -32,7 +32,7 @@
 *  See the License for the specific language governing permissions and
 *  limitations under the License.
 *
-*  Copyright 2018 NXP
+*  Copyright 2018-2019 NXP
 *
 ******************************************************************************/
 package com.android.nfc.cardemulation;
@@ -81,8 +81,8 @@ import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicReference;
-import com.gsma.nfc.internal.RegisteredNfcServicesCache;
 import com.android.nfc.NfcService;
+import android.os.SystemProperties;
 
 /**
  * This class is inspired by android.content.pm.RegisteredServicesCache
@@ -94,7 +94,8 @@ import com.android.nfc.NfcService;
 public class RegisteredServicesCache {
     static final String XML_INDENT_OUTPUT_FEATURE = "http://xmlpull.org/v1/doc/features.html#indent-output";
     static final String TAG = "RegisteredServicesCache";
-    static final boolean DEBUG = true;
+    static final boolean DEBUG =
+        ((SystemProperties.get("persist.nfc.ce_debug").equals("1")) ? true : false);
     static final String SERVICE_STATE_FILE_VERSION="1.0";
 
     final Context mContext;
@@ -106,21 +107,21 @@ public class RegisteredServicesCache {
     // mUserServices holds the card emulation services that are running for each user
     final SparseArray<UserServices> mUserServices = new SparseArray<UserServices>();
     final Callback mCallback;
-    final AtomicFile mDynamicAidsFile;
+    final AtomicFile mDynamicSettingsFile;
     final AtomicFile mServiceStateFile;
     final HashMap<ComponentName, NfcApduServiceInfo> mAllServices = Maps.newHashMap();
     HashMap<String, HashMap<ComponentName, Integer>> installedServices = new HashMap<>();
-    private RegisteredNfcServicesCache mRegisteredNfcServicesCache;
 
     public interface Callback {
         void onServicesUpdated(int userId, final List<NfcApduServiceInfo> services);
     };
 
-    static class DynamicAids {
+    static class DynamicSettings {
         public final int uid;
         public final HashMap<String, NfcAidGroup> aidGroups = Maps.newHashMap();
+        public String offHostSE;
 
-        DynamicAids(int uid) {
+        DynamicSettings(int uid) {
             this.uid = uid;
         }
     };
@@ -131,8 +132,8 @@ public class RegisteredServicesCache {
          */
         final HashMap<ComponentName, NfcApduServiceInfo> services =
                 Maps.newHashMap(); // Re-built at run-time
-        final HashMap<ComponentName, DynamicAids> dynamicAids =
-                Maps.newHashMap(); // In memory cache of dynamic AID store
+        final HashMap<ComponentName, DynamicSettings> dynamicSettings =
+                Maps.newHashMap(); // In memory cache of dynamic Setting store
     };
 
     private UserServices findOrCreateUserLocked(int userId) {
@@ -160,8 +161,6 @@ public class RegisteredServicesCache {
                         if(Intent.ACTION_PACKAGE_REMOVED.equals(action)) {
                             Uri uri = intent.getData();
                             String pkg = uri != null ? uri.getSchemeSpecificPart() : null;
-                            mRegisteredNfcServicesCache.onPackageRemoved(pkg); //GSMA changes
-                            mRegisteredNfcServicesCache.writeDynamicApduService();
                         }
                         boolean replaced = intent.getBooleanExtra(Intent.EXTRA_REPLACING, false) &&
                                 (Intent.ACTION_PACKAGE_ADDED.equals(action) ||
@@ -170,6 +169,7 @@ public class RegisteredServicesCache {
                         invalidateCache(UserHandle.getUserId(uid));
                         } else {
                             // Cache will automatically be updated on user switch
+                            if (DEBUG) Log.d(TAG, " Not removing service here " + replaced);
                         }
                     } else {
                         if (DEBUG) Log.d(TAG, "Ignoring package intent due to package being replaced.");
@@ -196,17 +196,8 @@ public class RegisteredServicesCache {
         mContext.registerReceiverAsUser(mReceiver.get(), UserHandle.ALL, sdFilter, null, null);
 
         File dataDir = mContext.getFilesDir();
-        mDynamicAidsFile = new AtomicFile(new File(dataDir, "dynamic_aids.xml"));
+        mDynamicSettingsFile = new AtomicFile(new File(dataDir, "dynamic_aids.xml"));
         mServiceStateFile = new AtomicFile(new File(dataDir, "service_state.xml"));
-    }
-
-    void initialize(RegisteredNfcServicesCache registeredNfcServicesCache) {
-        mRegisteredNfcServicesCache = registeredNfcServicesCache;
-        synchronized (mLock) {
-            readDynamicAidsLocked();
-            mRegisteredNfcServicesCache.readDynamicApduService();
-        }
-        invalidateCache(ActivityManager.getCurrentUser());
     }
 
     void dump(ArrayList<NfcApduServiceInfo> services) {
@@ -307,7 +298,6 @@ public class RegisteredServicesCache {
                 Log.w(TAG, "Unable to load component info " + resolvedService.toString(), e);
             }
         }
-        AddGsmaServices(validServices);
         return validServices;
     }
 
@@ -318,11 +308,6 @@ public class RegisteredServicesCache {
     public HashMap<ComponentName, NfcApduServiceInfo> getAllStaticHashServices() {
         return mAllServices;
     }
-
-//Adding the GSMA Services to the Service List
- private void AddGsmaServices(ArrayList<NfcApduServiceInfo> validServices){
-    validServices.addAll(mRegisteredNfcServicesCache.getApduservicesList());
- }
 
     public void invalidateCache(int userId) {
         final ArrayList<NfcApduServiceInfo> validServices = getInstalledServices(userId);
@@ -349,31 +334,34 @@ public class RegisteredServicesCache {
                 userServices.services.put(service.getComponent(), service);
             }
 
-            // Apply dynamic AID mappings
+            // Apply dynamic Setting mappings
             ArrayList<ComponentName> toBeRemoved = new ArrayList<ComponentName>();
-            for (Map.Entry<ComponentName, DynamicAids> entry :
-                    userServices.dynamicAids.entrySet()) {
+            for (Map.Entry<ComponentName, DynamicSettings> entry :
+                    userServices.dynamicSettings.entrySet()) {
                 // Verify component / uid match
                 ComponentName component = entry.getKey();
-                DynamicAids dynamicAids = entry.getValue();
+                DynamicSettings dynamicSettings = entry.getValue();
                 NfcApduServiceInfo serviceInfo = userServices.services.get(component);
-                if (serviceInfo == null || (serviceInfo.getUid() != dynamicAids.uid)) {
+                if (serviceInfo == null || (serviceInfo.getUid() != dynamicSettings.uid)) {
                     toBeRemoved.add(component);
                     continue;
                 } else {
-                    for (NfcAidGroup group : dynamicAids.aidGroups.values()) {
+                    for (NfcAidGroup group : dynamicSettings.aidGroups.values()) {
                         serviceInfo.setOrReplaceDynamicNfcAidGroup(group);
+                    }
+                    if (dynamicSettings.offHostSE != null) {
+                      serviceInfo.setOffHostSecureElement(dynamicSettings.offHostSE);
                     }
                 }
             }
 
             if (toBeRemoved.size() > 0) {
                 for (ComponentName component : toBeRemoved) {
-                    Log.d(TAG, "Removing dynamic AIDs registered by " + component);
-                    userServices.dynamicAids.remove(component);
+                    Log.d(TAG, "Removing dynamic Settings registered by " + component);
+                    userServices.dynamicSettings.remove(component);
                 }
                 // Persist to filesystem
-                writeDynamicAidsLocked();
+                writeDynamicSettingsLocked();
             }
             updateServiceStateFromFile(userId);
             Log.e(TAG,"1"+Thread.currentThread().getStackTrace()[2].getMethodName()+":WriteServiceStateToFile");
@@ -384,14 +372,14 @@ public class RegisteredServicesCache {
         dump(validServices);
     }
 
-    private void readDynamicAidsLocked() {
+    private void readDynamicSettingsLocked() {
         FileInputStream fis = null;
         try {
-            if (!mDynamicAidsFile.getBaseFile().exists()) {
+            if (!mDynamicSettingsFile.getBaseFile().exists()) {
                 Log.d(TAG, "Dynamic AIDs file does not exist.");
                 return;
             }
-            fis = mDynamicAidsFile.openRead();
+            fis = mDynamicSettingsFile.openRead();
             XmlPullParser parser = Xml.newPullParser();
             parser.setInput(fis, null);
             int eventType = parser.getEventType();
@@ -404,6 +392,7 @@ public class RegisteredServicesCache {
                 boolean inService = false;
                 ComponentName currentComponent = null;
                 int currentUid = -1;
+                String currentOffHostSE = null;
                 ArrayList<NfcAidGroup> currentGroups = new ArrayList<NfcAidGroup>();
                 while (eventType != XmlPullParser.END_DOCUMENT) {
                     tagName = parser.getName();
@@ -411,12 +400,14 @@ public class RegisteredServicesCache {
                         if ("service".equals(tagName) && parser.getDepth() == 2) {
                             String compString = parser.getAttributeValue(null, "component");
                             String uidString = parser.getAttributeValue(null, "uid");
+                            String offHostString = parser.getAttributeValue(null, "offHostSE");
                             if (compString == null || uidString == null) {
                                 Log.e(TAG, "Invalid service attributes");
                             } else {
                                 try {
                                     currentUid = Integer.parseInt(uidString);
                                     currentComponent = ComponentName.unflattenFromString(compString);
+                                    currentOffHostSE = offHostString;
                                     inService = true;
                                 } catch (NumberFormatException e) {
                                     Log.e(TAG, "Could not parse service uid");
@@ -435,27 +426,29 @@ public class RegisteredServicesCache {
                         if ("service".equals(tagName)) {
                             // See if we have a valid service
                             if (currentComponent != null && currentUid >= 0 &&
-                                    currentGroups.size() > 0) {
+                                    (currentGroups.size() > 0 || currentOffHostSE != null)) {
                                 final int userId = UserHandle.getUserId(currentUid);
-                                DynamicAids dynAids = new DynamicAids(currentUid);
+                                DynamicSettings dynSettings = new DynamicSettings(currentUid);
                                 for (NfcAidGroup group : currentGroups) {
-                                    dynAids.aidGroups.put(group.getCategory(), group);
+                                    dynSettings.aidGroups.put(group.getCategory(), group);
                                 }
+                                dynSettings.offHostSE = currentOffHostSE;
                                 UserServices services = findOrCreateUserLocked(userId);
-                                services.dynamicAids.put(currentComponent, dynAids);
+                                services.dynamicSettings.put(currentComponent, dynSettings);
                             }
                             currentUid = -1;
                             currentComponent = null;
                             currentGroups.clear();
                             inService = false;
+                            currentOffHostSE = null;
                         }
                     }
                     eventType = parser.next();
                 };
             }
         } catch (Exception e) {
-            Log.e(TAG, "Could not parse dynamic AIDs file, trashing.");
-            mDynamicAidsFile.delete();
+            Log.e(TAG, "Could not parse dynamic Settings file, trashing.");
+            mDynamicSettingsFile.delete();
         } finally {
             if (fis != null) {
                 try {
@@ -466,10 +459,10 @@ public class RegisteredServicesCache {
         }
     }
 
-    private boolean writeDynamicAidsLocked() {
+    private boolean writeDynamicSettingsLocked() {
         FileOutputStream fos = null;
         try {
-            fos = mDynamicAidsFile.startWrite();
+            fos = mDynamicSettingsFile.startWrite();
             XmlSerializer out = new FastXmlSerializer();
             out.setOutput(fos, "utf-8");
             out.startDocument(null, true);
@@ -477,10 +470,13 @@ public class RegisteredServicesCache {
             out.startTag(null, "services");
             for (int i = 0; i < mUserServices.size(); i++) {
                 final UserServices user = mUserServices.valueAt(i);
-                for (Map.Entry<ComponentName, DynamicAids> service : user.dynamicAids.entrySet()) {
+                for (Map.Entry<ComponentName, DynamicSettings> service : user.dynamicSettings.entrySet()) {
                     out.startTag(null, "service");
                     out.attribute(null, "component", service.getKey().flattenToString());
                     out.attribute(null, "uid", Integer.toString(service.getValue().uid));
+                    if(service.getValue().offHostSE != null) {
+                        out.attribute(null, "offHostSE", service.getValue().offHostSE);
+                    }
                     for (NfcAidGroup group : service.getValue().aidGroups.values()) {
                         group.writeAsXml(out);
                     }
@@ -489,12 +485,12 @@ public class RegisteredServicesCache {
             }
             out.endTag(null, "services");
             out.endDocument();
-            mDynamicAidsFile.finishWrite(fos);
+            mDynamicSettingsFile.finishWrite(fos);
             return true;
         } catch (Exception e) {
-            Log.e(TAG, "Error writing dynamic AIDs", e);
+            Log.e(TAG, "Error writing dynamic Settings", e);
             if (fos != null) {
-                mDynamicAidsFile.failWrite(fos);
+                mDynamicSettingsFile.failWrite(fos);
             }
             return false;
         }
@@ -519,7 +515,7 @@ public class RegisteredServicesCache {
              int eventType = parser.getEventType();
              int currUid = -1;
              ComponentName currComponent = null;
-             HashMap<ComponentName ,NfcApduServiceInfo> nfcOffHostServiceMap = mRegisteredNfcServicesCache.getApduservicesMaps();
+             //HashMap<ComponentName ,NfcApduServiceInfo> nfcOffHostServiceMap = mRegisteredNfcServicesCache.getApduservicesMaps();
              int state = NfcConstants.SERVICE_STATE_ENABLED;
 
              while (eventType != XmlPullParser.START_TAG &&
@@ -603,13 +599,9 @@ public class RegisteredServicesCache {
                                  UserServices serviceCache = findOrCreateUserLocked(userId);
                                  NfcApduServiceInfo serviceInfo = serviceCache.services.get(currComponent);
 
-                                 if(serviceInfo == null) {
-                                 // CHECK for GSMA related services also.
-                                     serviceInfo = nfcOffHostServiceMap.get(currComponent);
-                                     if(serviceInfo == null) {
-                                         Log.e(TAG, "could not find the required serviceInfo");
-                                     } else serviceInfo.setServiceState(CardEmulation.CATEGORY_OTHER ,state);
-                                 } else   serviceInfo.setServiceState(CardEmulation.CATEGORY_OTHER ,state);
+                                 if(serviceInfo != null) {
+                                    serviceInfo.setServiceState(CardEmulation.CATEGORY_OTHER ,state);
+                                 }
                          }
                          currUid       = -1;
                          currComponent = null;
@@ -634,7 +626,7 @@ public class RegisteredServicesCache {
 
     private boolean writeServiceStateToFile(int currUserId) {
         FileOutputStream fos = null;
-        ArrayList<NfcApduServiceInfo> nfcOffHostServiceCache = mRegisteredNfcServicesCache.getApduservicesList();
+        //ArrayList<NfcApduServiceInfo> nfcOffHostServiceCache = mRegisteredNfcServicesCache.getApduservicesList();
         /*if(NfcService.getInstance().getAidRoutingTableStatus() == 0x00) {
             Log.e(TAG, " Aid Routing Table still  availble , No need to disable services");
             return false;
@@ -685,35 +677,6 @@ public class RegisteredServicesCache {
                     out.endTag(null, "service");
                 }
             }
-            dump(nfcOffHostServiceCache);
-            //ADD GSMA services Cache
-            for(NfcApduServiceInfo serviceInfo : nfcOffHostServiceCache) {
-                out.startTag(null ,"service");
-                out.attribute(null, "component", serviceInfo.getComponent().flattenToString());
-                Log.d(TAG,"component name"+ serviceInfo.getComponent().flattenToString());
-                out.attribute(null, "uid", Integer.toString(serviceInfo.getUid()));
-                Log.d(TAG,"uid name"+ Integer.toString(serviceInfo.getUid()));
-
-                boolean isServiceInstalled = false;
-                if(installedServices.containsKey(Integer.toString(serviceInfo.getUid()))){
-                    HashMap<ComponentName, Integer> componentStates = installedServices.get(Integer.toString(serviceInfo.getUid()));
-                    if (componentStates.containsKey(serviceInfo.getComponent())) {
-                        state = componentStates.get(serviceInfo.getComponent());
-                        componentStates.remove(serviceInfo.getComponent());
-                        if(componentStates.isEmpty())
-                        {
-                            installedServices.remove(Integer.toString(serviceInfo.getUid()));
-                        }
-                        isServiceInstalled = true;
-                    }
-                }
-                if (!isServiceInstalled) {
-                    state = serviceInfo.getServiceState(CardEmulation.CATEGORY_OTHER);
-                }
-                out.attribute(null, "serviceState", Integer.toString(state));
-                Log.d(TAG,"service State:"+ Integer.toString(state));
-                out.endTag(null, "service");
-            }
             out.endTag(null ,"services");
             out.endDocument();
             mServiceStateFile.finishWrite(fos);
@@ -731,7 +694,7 @@ public class RegisteredServicesCache {
     public int updateServiceState(int userId , int uid,
             Map<String , Boolean> serviceState) {
         boolean success = false;
-        HashMap<ComponentName ,NfcApduServiceInfo> nfcOffHostServiceMap = mRegisteredNfcServicesCache.getApduservicesMaps();
+        //HashMap<ComponentName ,NfcApduServiceInfo> nfcOffHostServiceMap = mRegisteredNfcServicesCache.getApduservicesMaps();
         if(NfcService.getInstance().getAidRoutingTableStatus() == 0x00) {
             Log.e(TAG, " Aid Routing Table still  availble , No need to disable services");
             return 0xFF;
@@ -748,9 +711,6 @@ public class RegisteredServicesCache {
                 Log.e(TAG, "updateServiceState  " + entry.getValue());
                 if (serviceInfo != null) {
                     serviceInfo.enableService(CardEmulation.CATEGORY_OTHER, entry.getValue());
-                } else if ((serviceInfo = nfcOffHostServiceMap.get(componentName)) != null) {
-                      // CHECK for GSMA cache
-                      serviceInfo.enableService(CardEmulation.CATEGORY_OTHER, entry.getValue());
                 } else {
                       Log.e(TAG, "Could not find service " + componentName);
                       return 0xFF;
@@ -761,6 +721,92 @@ public class RegisteredServicesCache {
         }
         invalidateCache(ActivityManager.getCurrentUser());
         return (success?0x00:0xFF);
+    }
+
+    public boolean setOffHostSecureElement(int userId, int uid, ComponentName componentName,
+            String offHostSE) {
+        ArrayList<NfcApduServiceInfo> newServices = null;
+        synchronized (mLock) {
+            UserServices services = findOrCreateUserLocked(userId);
+            // Check if we can find this service
+            NfcApduServiceInfo serviceInfo = getService(userId, componentName);
+            if (serviceInfo == null) {
+                Log.e(TAG, "Service " + componentName + " does not exist.");
+                return false;
+            }
+            if (serviceInfo.getUid() != uid) {
+                // This is probably a good indication something is wrong here.
+                // Either newer service installed with different uid (but then
+                // we should have known about it), or somebody calling us from
+                // a different uid.
+                Log.e(TAG, "UID mismatch.");
+                return false;
+            }
+            if (offHostSE == null || serviceInfo.isOnHost()) {
+                Log.e(TAG, "OffHostSE mismatch with Service type");
+                return false;
+            }
+
+            DynamicSettings dynSettings = services.dynamicSettings.get(componentName);
+            if (dynSettings == null) {
+                dynSettings = new DynamicSettings(uid);
+            }
+            dynSettings.offHostSE = offHostSE;
+            boolean success = writeDynamicSettingsLocked();
+            if (!success) {
+                Log.e(TAG, "Failed to persist AID group.");
+                dynSettings.offHostSE = null;
+                return false;
+            }
+
+            serviceInfo.setOffHostSecureElement(offHostSE);
+            newServices = new ArrayList<NfcApduServiceInfo>(services.services.values());
+        }
+        // Make callback without the lock held
+        mCallback.onServicesUpdated(userId, newServices);
+        return true;
+    }
+
+    public boolean unsetOffHostSecureElement(int userId, int uid, ComponentName componentName) {
+        ArrayList<NfcApduServiceInfo> newServices = null;
+        synchronized (mLock) {
+            UserServices services = findOrCreateUserLocked(userId);
+            // Check if we can find this service
+            NfcApduServiceInfo serviceInfo = getService(userId, componentName);
+            if (serviceInfo == null) {
+                Log.e(TAG, "Service " + componentName + " does not exist.");
+                return false;
+            }
+            if (serviceInfo.getUid() != uid) {
+                // This is probably a good indication something is wrong here.
+                // Either newer service installed with different uid (but then
+                // we should have known about it), or somebody calling us from
+                // a different uid.
+                Log.e(TAG, "UID mismatch.");
+                return false;
+            }
+            if (serviceInfo.isOnHost() || serviceInfo.getOffHostSecureElement() == null) {
+                Log.e(TAG, "OffHostSE is not set");
+                return false;
+            }
+            serviceInfo.unsetOffHostSecureElement();
+            DynamicSettings dynSettings = services.dynamicSettings.get(componentName);
+            if (dynSettings != null) {
+              String offHostSE = dynSettings.offHostSE;
+              dynSettings.offHostSE = serviceInfo.getOffHostSecureElement();
+              boolean success = writeDynamicSettingsLocked();
+              if (!success) {
+                Log.e(TAG, "Failed to persist AID group.");
+                dynSettings.offHostSE = offHostSE;
+                return false;
+              }
+            }
+
+            newServices = new ArrayList<NfcApduServiceInfo>(services.services.values());
+        }
+        // Make callback without the lock held
+        mCallback.onServicesUpdated(userId, newServices);
+        return true;
     }
 
     public boolean registerAidGroupForService(int userId, int uid,
@@ -793,19 +839,20 @@ public class RegisteredServicesCache {
                 }
             }
             serviceInfo.setOrReplaceDynamicNfcAidGroup(nfcAidGroup);
-            DynamicAids dynAids = services.dynamicAids.get(componentName);
-            if (dynAids == null) {
-                dynAids = new DynamicAids(uid);
-                services.dynamicAids.put(componentName, dynAids);
+            DynamicSettings dynSettings = services.dynamicSettings.get(componentName);
+            if (dynSettings == null) {
+                dynSettings = new DynamicSettings(uid);
+                dynSettings.offHostSE = serviceInfo.getOffHostSecureElement();
+                services.dynamicSettings.put(componentName, dynSettings);
             }
-            dynAids.aidGroups.put(nfcAidGroup.getCategory(), nfcAidGroup);
-            success = writeDynamicAidsLocked();
+            dynSettings.aidGroups.put(nfcAidGroup.getCategory(), nfcAidGroup);
+            success = writeDynamicSettingsLocked();
             if (success) {
                 newServices = new ArrayList<NfcApduServiceInfo>(services.services.values());
             } else {
                 Log.e(TAG, "Failed to persist AID group.");
                 // Undo registration
-                dynAids.aidGroups.remove(nfcAidGroup.getCategory());
+                dynSettings.aidGroups.remove(nfcAidGroup.getCategory());
             }
         }
         if (success) {
@@ -848,10 +895,10 @@ public class RegisteredServicesCache {
                     return false;
                 }
                 // Remove from local cache
-                DynamicAids dynAids = services.dynamicAids.get(componentName);
+                DynamicSettings dynAids = services.dynamicSettings.get(componentName);
                 if (dynAids != null) {
                     NfcAidGroup deletedGroup = dynAids.aidGroups.remove(category);
-                    success = writeDynamicAidsLocked();
+                    success = writeDynamicSettingsLocked();
                     if (success) {
                         newServices = new ArrayList<NfcApduServiceInfo>(services.services.values());
                     } else {
@@ -872,6 +919,13 @@ public class RegisteredServicesCache {
         return success;
     }
 
+    void initialize() {
+        synchronized (mLock) {
+            readDynamicSettingsLocked();
+        }
+        invalidateCache(ActivityManager.getCurrentUser());
+    }
+
     public void dump(FileDescriptor fd, PrintWriter pw, String[] args) {
         pw.println("Registered HCE services for current user: ");
         UserServices userServices = findOrCreateUserLocked(ActivityManager.getCurrentUser());
@@ -883,14 +937,20 @@ public class RegisteredServicesCache {
     }
 
     public void updateStatusOfServices(boolean commitStatus) {
-            final UserServices userServices = mUserServices.get(ActivityManager.getCurrentUser());
-            for (NfcApduServiceInfo serviceInfo : userServices.services.values()) {
-                if(!serviceInfo.hasCategory(CardEmulation.CATEGORY_OTHER)) {
-                    continue;
-                }
-                serviceInfo.updateServiceCommitStatus(CardEmulation.CATEGORY_OTHER,commitStatus);
-            }
-            Log.e(TAG,"3"+Thread.currentThread().getStackTrace()[2].getMethodName()+":WriteServiceStateToFile");
-            writeServiceStateToFile(ActivityManager.getCurrentUser());
+      final UserServices userServices = mUserServices.get(ActivityManager.getCurrentUser());
+      if (userServices != null && userServices.services != null) {
+        for (NfcApduServiceInfo serviceInfo : userServices.services.values()) {
+          if (!serviceInfo.hasCategory(CardEmulation.CATEGORY_OTHER)) {
+            continue;
+          }
+          serviceInfo.updateServiceCommitStatus(CardEmulation.CATEGORY_OTHER, commitStatus);
+        }
+        Log.e(TAG,
+            "3" + Thread.currentThread().getStackTrace()[2].getMethodName()
+                + ":WriteServiceStateToFile");
+        writeServiceStateToFile(ActivityManager.getCurrentUser());
+      } else {
+        Log.e(TAG, "updateStatusOfServices failed... ");
+      }
     }
 }

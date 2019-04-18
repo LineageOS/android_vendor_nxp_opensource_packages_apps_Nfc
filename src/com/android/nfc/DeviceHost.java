@@ -29,7 +29,7 @@
 *  See the License for the specific language governing permissions and
 *  limitations under the License.
 *
-*  Copyright 2018 NXP
+*  Copyright 2018-2019 NXP
 *
 ******************************************************************************/
 package com.android.nfc;
@@ -212,7 +212,7 @@ public interface DeviceHost {
      * <p>This is called from a thread
      * that may block for long periods of time during the update process.
      */
-    public void checkFirmware();
+    public boolean checkFirmware();
 
     public boolean initialize();
 
@@ -252,6 +252,8 @@ public interface DeviceHost {
     public int getDefaultMifareCLTPowerState();
 
     public int getDefaultFelicaCLTPowerState();
+
+    public int getGsmaPwrState();
 
     public boolean commitRouting();
 
@@ -341,6 +343,8 @@ public interface DeviceHost {
     public void factoryReset();
 
     public void shutdown();
+
+    public boolean setNfcSecure(boolean enable);
 
 /* NXP extension are here */
     public void doChangeDiscoveryTech(int pollTech, int listenTech);
