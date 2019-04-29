@@ -298,7 +298,12 @@ class RoutingManager {
       JNIEnv* e);
   static int com_android_nfc_cardemulation_doGetDefaultOffHostRouteDestination(
       JNIEnv* e);
-
+  static jbyteArray com_android_nfc_cardemulation_doGetOffHostUiccDestination(
+      JNIEnv* e);
+  static jbyteArray com_android_nfc_cardemulation_doGetOffHostEseDestination(
+      JNIEnv* e);
+  static int com_android_nfc_cardemulation_doGetDefaultIsoDepRouteDestination(
+      JNIEnv* e);
   static int com_android_nfc_cardemulation_doGetAidMatchingMode(JNIEnv* e);
   static int com_android_nfc_cardemulation_doGetAidMatchingPlatform(JNIEnv* e);
 
