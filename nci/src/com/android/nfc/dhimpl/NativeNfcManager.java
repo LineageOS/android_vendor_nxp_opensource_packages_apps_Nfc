@@ -99,8 +99,8 @@ public class NativeNfcManager implements DeviceHost {
                 mNqHal = INqNfc.getService();
             }
             if(mNqHal != null) {
-                isHalServiceSupported = true;
                 chipIdValue = mNqHal.getNfcChipId();
+                isHalServiceSupported = true;
                 Log.d(TAG, "Chip-ID received from HAL interface: "+chipIdValue);
             }
         }
@@ -110,7 +110,7 @@ public class NativeNfcManager implements DeviceHost {
 
         if(isHalServiceSupported == false) {
             Log.d(TAG, "Reading system property for chip-id.");
-            chipIdValue = SystemProperties.get("vendor.qti.nfc.chipid", "");
+            chipIdValue = SystemProperties.get("vendor.qti.nfc.chipid", "0x51");
             Log.d(TAG, "Chip-ID received from system property: "+chipIdValue);
         }
 
