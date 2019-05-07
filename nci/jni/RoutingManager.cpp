@@ -63,6 +63,15 @@ const JNINativeMethod RoutingManager::sMethods[] = {
     {"doGetDefaultOffHostRouteDestination", "()I",
      (void*)RoutingManager::
          com_android_nfc_cardemulation_doGetDefaultOffHostRouteDestination},
+    {"doGetOffHostUiccDestination", "()[B",
+     (void*)RoutingManager::
+         com_android_nfc_cardemulation_doGetOffHostUiccDestination},
+    {"doGetOffHostEseDestination", "()[B",
+     (void*)RoutingManager::
+         com_android_nfc_cardemulation_doGetOffHostEseDestination},
+    {"doGetDefaultIsoDepRouteDestination", "()I",
+     (void*)RoutingManager::
+         com_android_nfc_cardemulation_doGetDefaultIsoDepRouteDestination},
     {"doGetAidMatchingMode", "()I",
      (void*)RoutingManager::com_android_nfc_cardemulation_doGetAidMatchingMode}};
 
@@ -1267,6 +1276,11 @@ bool RoutingManager::removeApduRouting(uint8_t apduDataLen,
   return ((nfaStat == NFA_STATUS_OK) ? true : false);
 }
 
+int RoutingManager::
+    com_android_nfc_cardemulation_doGetDefaultIsoDepRouteDestination(JNIEnv*) {
+  return 0;
+}
+
 #if (NXP_EXTNS == TRUE)
 void RoutingManager::setDefaultTechRouting(int seId, int tech_switchon,
                                            int tech_switchoff) {
@@ -2434,6 +2448,19 @@ int RoutingManager::registerJniFunctions(JNIEnv* e) {
       e, "com/android/nfc/cardemulation/AidRoutingManager", sMethods,
       NELEM(sMethods));
 }
+
+jbyteArray
+RoutingManager::com_android_nfc_cardemulation_doGetOffHostUiccDestination(
+    JNIEnv* e) {
+  return NULL;
+}
+
+jbyteArray
+RoutingManager::com_android_nfc_cardemulation_doGetOffHostEseDestination(
+    JNIEnv* e) {
+  return NULL;
+}
+
 
 int RoutingManager::com_android_nfc_cardemulation_doGetDefaultRouteDestination(
     JNIEnv*) {
