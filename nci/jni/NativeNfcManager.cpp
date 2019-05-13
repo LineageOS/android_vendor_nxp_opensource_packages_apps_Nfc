@@ -1901,10 +1901,17 @@ static void nfaConnectionCallback(uint8_t connEvent,
   *******************************************************************************/
   static jboolean nfcManager_routeAid(JNIEnv * e, jobject, jbyteArray aid,
                                       jint route, jint power, jint aidInfo) {
-    ScopedByteArrayRO bytes(e, aid);
-    uint8_t* buf =
-        const_cast<uint8_t*>(reinterpret_cast<const uint8_t*>(&bytes[0]));
-    size_t bufLen = bytes.size();
+    uint8_t* buf;
+    size_t bufLen;
+
+    if (aid == NULL) {
+      buf = NULL;
+      bufLen = 0;
+    } else {
+      ScopedByteArrayRO bytes(e, aid);
+      buf = const_cast<uint8_t*>(reinterpret_cast<const uint8_t*>(&bytes[0]));
+      bufLen = bytes.size();
+    }
 
 #if (NXP_EXTNS == TRUE)
     if ((nfcFL.nfccFL._NFC_NXP_STAT_DUAL_UICC_WO_EXT_SWITCH) &&
@@ -1945,10 +1952,17 @@ static void nfaConnectionCallback(uint8_t connEvent,
   **
   *******************************************************************************/
   static jboolean nfcManager_unrouteAid(JNIEnv * e, jobject, jbyteArray aid) {
-    ScopedByteArrayRO bytes(e, aid);
-    uint8_t* buf =
-        const_cast<uint8_t*>(reinterpret_cast<const uint8_t*>(&bytes[0]));
-    size_t bufLen = bytes.size();
+    uint8_t* buf;
+    size_t bufLen;
+
+    if (aid == NULL) {
+      buf = NULL;
+      bufLen = 0;
+    } else {
+      ScopedByteArrayRO bytes(e, aid);
+      buf = const_cast<uint8_t*>(reinterpret_cast<const uint8_t*>(&bytes[0]));
+      bufLen = bytes.size();
+    }
     bool result = RoutingManager::getInstance().removeAidRouting(buf, bufLen);
     return result;
   }
