@@ -3,7 +3,7 @@
  *  Copyright (c) 2016, The Linux Foundation. All rights reserved.
  *  Not a Contribution.
  *
- *  Copyright (C) 2018 NXP Semiconductors
+ *  Copyright (C) 2018-2019 NXP Semiconductors
  *  The original Work has been changed by NXP Semiconductors.
  *
  *  Copyright (C) 2012 The Android Open Source Project
@@ -1289,7 +1289,6 @@ bool SecureElement::doNfcee_Session_Reset()
   reset_nfcee_session) == NFA_STATUS_OK)
   {
     LOG(INFO) << StringPrintf("%s Nfcee session reset success", fn);
-    android::startRfDiscovery(true);
 
     if(setNfccPwrConfig(POWER_ALWAYS_ON) == NFA_STATUS_OK)
     {
@@ -1318,6 +1317,7 @@ bool SecureElement::doNfcee_Session_Reset()
   else
     status = NFA_STATUS_FAILED;
 
+  android::startRfDiscovery(true);
   return (status == NFA_STATUS_OK) ? true: false;
 }
 
@@ -1689,6 +1689,19 @@ void SecureElement::releasePendingTransceive()
     LOG(INFO) << StringPrintf("%s: Exit", fn);
 }
 
+/*******************************************************************************
+**
+** Function:        isWiredModeOpen
+**
+** Description:     Wired Mode open status
+**
+** Returns:         0 if wired mode closed.
+**
+*******************************************************************************/
+int SecureElement::isWiredModeOpen() {
+  if (mIsWiredModeOpen) return 1;
+  return 0;
+}
 /**********************************************************************************
  **
  ** Function:        getUiccStatus

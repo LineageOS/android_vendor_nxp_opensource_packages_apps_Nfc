@@ -795,6 +795,8 @@ static int reSelect(tNFA_INTF_TYPE rfInterface, bool fSwitchIfNeeded) {
          retry++;
         LOG(ERROR) << StringPrintf("%s: waiting for Card to be activated %x %x", __func__,retry,sConnectOk);
       } while(sConnectOk == false && retry < 3);
+      if(NfcTag::getInstance ().mNumDiscNtf)
+        NfcTag::getInstance ().mNumDiscNtf = 0;
     }
 #endif
     DLOG_IF(INFO, nfc_debug_enabled) << StringPrintf(
@@ -1128,7 +1130,10 @@ static jbyteArray nativeNfcTag_doTransceive(JNIEnv* e, jobject o,
 
         if (doReconnect) {
           nativeNfcTag_doReconnect(e, o);
-        } else {
+        }
+#if (NXP_EXTNS != TRUE)
+         else {
+#endif
           if (transDataLen != 0) {
             result.reset(e->NewByteArray(transDataLen));
             if (result.get() != NULL) {
@@ -1138,7 +1143,9 @@ static jbyteArray nativeNfcTag_doTransceive(JNIEnv* e, jobject o,
               LOG(ERROR) << StringPrintf("%s: Failed to allocate java byte array",
                                        __func__);
           }
+#if (NXP_EXTNS != TRUE)
         }
+#endif
       } else {
         // marshall data to java for return
         result.reset(e->NewByteArray(sRxDataBuffer.size()));
@@ -1495,6 +1502,10 @@ static jboolean nativeNfcTag_doPresenceCheck(JNIEnv*, jobject) {
   if (!sRfInterfaceMutex.tryLock()) {
     DLOG_IF(INFO, nfc_debug_enabled) << StringPrintf(
         "%s: tag is being reSelected assume it is present", __func__);
+#if (NXP_EXTNS == TRUE)
+    if (nfcManager_isNfcActive() == false)
+      return JNI_FALSE;
+#endif
     return JNI_TRUE;
   }
 
