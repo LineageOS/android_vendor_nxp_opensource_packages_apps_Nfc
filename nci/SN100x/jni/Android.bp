@@ -1,5 +1,5 @@
 cc_library_shared {
-    name: "libnfc_nci_jni",
+    name: "libsn100nfc_nci_jni",
 
     cflags:
      ["-DNXP_EXTNS=TRUE"]  + [
@@ -13,12 +13,12 @@ cc_library_shared {
     include_dirs: [
         "external/libxml2/include",
         "frameworks/native/include",
-        "system/nfc/SN100x/src/include",
-        "system/nfc/SN100x/src/nfa/include",
-        "system/nfc/SN100x/src/nfc/include",
-        "system/nfc/SN100x/src/gki/ulinux",
-        "system/nfc/SN100x/src/gki/common",
-    ] + ["system/nfc/SN100x/utils/include"],
+        "vendor/nxp/opensource/commonsys/external/libnfc-nci/SN100x/src/include",
+        "vendor/nxp/opensource/commonsys/external/libnfc-nci/SN100x/src/nfa/include",
+        "vendor/nxp/opensource/commonsys/external/libnfc-nci/SN100x/src/nfc/include",
+        "vendor/nxp/opensource/commonsys/external/libnfc-nci/SN100x/src/gki/ulinux",
+        "vendor/nxp/opensource/commonsys/external/libnfc-nci/SN100x/src/gki/common",
+    ] + ["vendor/nxp/opensource/commonsys/external/libnfc-nci/SN100x/utils/include"],
 
     local_include_dirs: [
         "extns/pn54x/inc",
@@ -32,7 +32,7 @@ cc_library_shared {
         "libcutils",
         "libutils",
         "liblog",
-        "libnfc-nci",
+        "libsn100nfc-nci",
         "libchrome",
         "libbase",
     ],
