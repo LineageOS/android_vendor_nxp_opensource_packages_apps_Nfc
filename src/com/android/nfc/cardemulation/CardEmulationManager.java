@@ -53,6 +53,7 @@ import com.android.nfc.cardemulation.RegisteredServicesCache;
 import com.android.nfc.cardemulation.RegisteredNfcFServicesCache;
 import com.nxp.nfc.NfcAidServiceInfo;
 import android.os.SystemProperties;
+
 /**
  * CardEmulationManager is the central entity
  * responsible for delegating to individual components
@@ -643,7 +644,7 @@ public class CardEmulationManager implements RegisteredServicesCache.Callback,
         int userId = ActivityManager.getCurrentUser();
         return mServiceCache.getServices(userId);
     }
-     public void updateStatusOfServices(boolean commitStatus) {
+    public void updateStatusOfServices(boolean commitStatus) {
         mServiceCache.updateStatusOfServices(commitStatus);
     }
 }

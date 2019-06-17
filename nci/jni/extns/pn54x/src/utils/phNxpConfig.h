@@ -39,14 +39,14 @@
 #ifndef _NXP_CONFIG_H
 #define _NXP_CONFIG_H
 
-int GetNxpStrValue(const char* name, char* p_value, unsigned long len);
+/*int GetNxpStrValue(const char* name, char* p_value, unsigned long len);
 int GetNxpNumValue(const char* name, void* p_value, unsigned long len);
 int GetNxpByteArrayValue(const char* name, char* pValue, long bufflen,
                          long* len);
 void resetNxpConfig(void);
 int isNxpRFConfigModified();
 int isNxpConfigModified();
-int updateNxpConfigTimestamp();
+int updateNxpConfigTimestamp();*/
 
 #define NAME_NXPLOG_EXTNS_LOGLEVEL "NXPLOG_EXTNS_LOGLEVEL"
 #define NAME_NXPLOG_NCIHAL_LOGLEVEL "NXPLOG_NCIHAL_LOGLEVEL"
@@ -57,7 +57,6 @@ int updateNxpConfigTimestamp();
 
 #define NAME_MIFARE_READER_ENABLE "MIFARE_READER_ENABLE"
 #define NAME_FW_STORAGE "FW_STORAGE"
-#define NAME_NXP_FW_NAME "NXP_FW_NAME"
 #define NAME_NXP_ACT_PROP_EXTN "NXP_ACT_PROP_EXTN"
 #define NAME_NXP_RF_CONF_BLK_1 "NXP_RF_CONF_BLK_1"
 #define NAME_NXP_RF_CONF_BLK_2 "NXP_RF_CONF_BLK_2"
@@ -76,10 +75,7 @@ int updateNxpConfigTimestamp();
 #define NAME_NXP_DEFAULT_NFCEE_TIMEOUT "NXP_DEFAULT_NFCEE_TIMEOUT"
 #define NAME_NXP_DEFAULT_NFCEE_DISC_TIMEOUT "NXP_DEFAULT_NFCEE_DISC_TIMEOUT"
 #define NAME_NXP_CE_ROUTE_STRICT_DISABLE "NXP_CE_ROUTE_STRICT_DISABLE"
-#define NAME_NXP_P61_LS_DEFAULT_INTERFACE "NXP_P61_LS_DEFAULT_INTERFACE"
-#define NAME_NXP_P61_JCOP_DEFAULT_INTERFACE "NXP_P61_JCOP_DEFAULT_INTERFACE"
 #define NAME_NXP_JCOPDL_AT_BOOT_ENABLE "NXP_JCOPDL_AT_BOOT_ENABLE"
-#define NAME_NXP_P61_LTSM_DEFAULT_INTERFACE "NXP_P61_LTSM_DEFAULT_INTERFACE"
 #define NAME_NXP_LOADER_SERICE_VERSION "NXP_LOADER_SERVICE_VERSION"
 #define NAME_NXP_AGC_DEBUG_ENABLE "NXP_AGC_DEBUG_ENABLE"
 #define NAME_NXP_WIRED_MODE_RF_FIELD_ENABLE "NXP_WIRED_MODE_RF_FIELD_ENABLE"

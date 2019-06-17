@@ -2,7 +2,7 @@
  * Copyright (c) 2016, The Linux Foundation. All rights reserved.
  * Not a Contribution.
  *
- * Copyright (C) 2015-2018 NXP Semiconductors
+ * Copyright (C) 2015-2019 NXP Semiconductors
  * The original Work has been changed by NXP Semiconductors.
  *
  * Copyright (C) 2012 The Android Open Source Project
@@ -146,17 +146,17 @@ tNFA_STATUS NxpPropCmd_send(uint8_t *pData4Tx, uint8_t dataLen,
 static void NxpResponse_Cb(uint8_t event, uint16_t param_len,
                            uint8_t* p_param) {
   (void)event;
-  DLOG_IF(INFO, nfc_debug_enabled) << StringPrintf(
-      "NxpResponse_Cb Received length data = 0x%x status = 0x%x", param_len,
-      p_param[3]);
-
-  if (p_param[3] == 0x00) {
-    SetCbStatus(NFA_STATUS_OK);
-  } else {
-    SetCbStatus(NFA_STATUS_FAILED);
-  }
   gnxpfeature_conf.rsp_len = (uint8_t)param_len;
   if (param_len > 0 && p_param != NULL) {
+    DLOG_IF(INFO, nfc_debug_enabled) << StringPrintf(
+        "NxpResponse_Cb Received length data = 0x%x status = 0x%x", param_len,
+        p_param[3]);
+
+    if (p_param[3] == 0x00) {
+      SetCbStatus(NFA_STATUS_OK);
+    } else {
+      SetCbStatus(NFA_STATUS_FAILED);
+    }
     memcpy(gnxpfeature_conf.rsp_data, p_param, param_len);
   }
   SyncEventGuard guard(gnxpfeature_conf.NxpFeatureConfigEvt);
@@ -677,7 +677,7 @@ tNFA_STATUS SetVenConfigValue(jint nfcMode) {
   return status;
 }
 
-static void NxpResponse_GetNumNFCEEValueCb(uint8_t event, uint16_t param_len,
+static void NxpResponse_GetNumNFCEEValueCb(__attribute__((unused))uint8_t event, uint16_t param_len,
                                            uint8_t* p_param) {
   uint8_t cfg_param_offset = 0x05;
   swp_getconfig_status = SWP_DEFAULT;
@@ -838,7 +838,7 @@ tNFA_STATUS SetHfoConfigValue(void) {
   if (NFA_STATUS_OK == status) {
     DLOG_IF(INFO, nfc_debug_enabled)
         << StringPrintf("%s: HFO Settinng Success", __func__);
-    // TBD write value in temp file in /data/vendor/nfc
+    // TBD write value in temp file in /data/nfc
     // At next boot hal will read this file and re-apply the
     // Default Clock setting
   }

@@ -305,16 +305,6 @@ public class PeripheralHandoverService extends Service implements BluetoothPerip
         return null;
     }
 
-
-                    // Not required to check the remote BT "target" device
-                    // connection status, because sometimes the connection
-                    // state is not yet been updated upon disconnection.
-                    // It is enough to check the connection status for
-                    // "other" remote BT device/s.
-
-
-            // Ignore
-
     @Override
     public boolean onUnbind(Intent intent) {
         // prevent any future callbacks to the client, no rebind call needed.

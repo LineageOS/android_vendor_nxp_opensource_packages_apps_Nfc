@@ -17,7 +17,7 @@
  *
  *  The original Work has been changed by NXP Semiconductors.
  *
- *  Copyright (C) 2015-2018 NXP Semiconductors
+ *  Copyright (C) 2015-2019 NXP Semiconductors
  *
  *  Licensed under the Apache License, Version 2.0 (the "License");
  *  you may not use this file except in compliance with the License.
@@ -61,7 +61,7 @@ using namespace std;
 #define EE_HCI_DEFAULT_HANDLE 0x401
 
 typedef struct protoroutInfo {
-  uint8_t ee_handle;
+  uint16_t ee_handle;
   tNFA_PROTOCOL_MASK protocols_switch_on;
   tNFA_PROTOCOL_MASK protocols_switch_off;
   tNFA_PROTOCOL_MASK protocols_battery_off;
@@ -149,6 +149,9 @@ class RoutingManager {
 
   static RoutingManager& getInstance();
   bool initialize(nfc_jni_native_data* native);
+  void deinitialize();
+  void enableRoutingToHost();
+  void disableRoutingToHost();
 #if (NXP_EXTNS == TRUE)
   void setRouting(bool);
   void getRouting();
@@ -159,7 +162,6 @@ class RoutingManager {
                                tNFA_PROTOCOL_MASK protocols_screen_lock,
                                tNFA_PROTOCOL_MASK protocols_screen_off,
                                tNFA_PROTOCOL_MASK protocols_screen_off_lock);
-  void notifyReRoutingEntry();
   void HandleAddNfcID2_Req();
   void HandleRmvNfcID2_Req();
   void setCeRouteStrictDisable(uint32_t state);
@@ -180,9 +182,6 @@ class RoutingManager {
   void handleSERemovedNtf();
   bool is_ee_recovery_ongoing();
   void setEmptyAidEntry(void);
-#if (NXP_NFCC_HCE_F == TRUE)
-  void notifyT3tConfigure();
-#endif
 #else
   bool addAidRouting(const uint8_t* aid, uint8_t aidLen, int route,
                      int aidInfo);
@@ -201,6 +200,8 @@ class RoutingManager {
   void deregisterT3tIdentifier(int handle);
   void onNfccShutdown();
   int registerJniFunctions(JNIEnv* e);
+  bool setNfcSecure(bool enable);
+  void updateRoutingTable();
   void ee_removed_disc_ntf_handler(tNFA_HANDLE handle, tNFA_EE_STATUS status);
   bool setRoutingEntry(int type, int value, int route, int power);
   bool clearRoutingEntry(int type);
@@ -231,7 +232,9 @@ class RoutingManager {
                   tNFA_STATUS status);
   void notifyActivated(uint8_t technology);
   void notifyDeactivated(uint8_t technology);
-  void notifyLmrtFull();
+  tNFA_TECHNOLOGY_MASK updateEeTechRouteSetting();
+  void updateDefaultProtocolRoute();
+  void updateDefaultRoute();
   void printMemberData(void);
   void extractRouteLocationAndPowerStates(const int defaultRoute,
                                           const int protoRoute,
@@ -302,24 +305,30 @@ class RoutingManager {
       JNIEnv* e);
   static jbyteArray com_android_nfc_cardemulation_doGetOffHostEseDestination(
       JNIEnv* e);
-  static int com_android_nfc_cardemulation_doGetDefaultIsoDepRouteDestination(
-      JNIEnv* e);
   static int com_android_nfc_cardemulation_doGetAidMatchingMode(JNIEnv* e);
   static int com_android_nfc_cardemulation_doGetAidMatchingPlatform(JNIEnv* e);
+  static int com_android_nfc_cardemulation_doGetDefaultIsoDepRouteDestination(
+      JNIEnv* e);
 
   std::vector<uint8_t> mRxDataBuffer;
   map<int, uint16_t> mMapScbrHandle;
+  bool mSecureNfcEnabled;
 
   // Fields below are final after initialize()
+  vector<uint8_t> mOffHostRouteUicc;
+  vector<uint8_t> mOffHostRouteEse;
+  int mDefaultFelicaRoute;
   int mDefaultOffHostRoute;
   int mAidMatchingMode;
   int mNfcFOnDhHandle;
   bool mIsScbrSupported;
+  int mDefaultIsoDepRoute;
   uint16_t mDefaultSysCode;
   uint16_t mDefaultSysCodeRoute;
   uint8_t mDefaultSysCodePowerstate;
   uint8_t mOffHostAidRoutingPowerState;
   tNFA_EE_CBACK_DATA mCbEventData;
+  tNFA_EE_DISCOVER_REQ mEeInfo;
   int mAidMatchingPlatform;
   tNFA_TECHNOLOGY_MASK mSeTechMask;
   static const JNINativeMethod sMethods[];
@@ -340,15 +349,7 @@ class RoutingManager {
   uint32_t mCeRouteStrictDisable;
   uint32_t mDefaultIso7816SeID;
   uint32_t mDefaultIso7816Powerstate;
-  uint32_t mDefaultIsoDepSeID;
-  uint32_t mDefaultIsoDepPowerstate;
-  uint32_t mDefaultT3TSeID;
-  uint32_t mDefaultT3TPowerstate;
-  uint32_t mDefaultTechType;
   uint32_t mDefaultTechASeID;
-  uint32_t mDefaultTechAPowerstate;
-  uint32_t mDefaultTechBSeID;
-  uint32_t mDefaultTechBPowerstate;
   uint32_t mDefaultTechFSeID;
   uint32_t mDefaultTechFPowerstate;
   uint32_t mAddAid;

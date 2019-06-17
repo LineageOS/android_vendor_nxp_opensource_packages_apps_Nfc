@@ -12,7 +12,7 @@
  *  See the License for the specific language governing permissions and
  *  limitations under the License.
  *
- *  Copyright 2018 NXP
+ *  Copyright 2018-2019 NXP
  *
  ******************************************************************************/
 #include <android-base/stringprintf.h>
@@ -28,6 +28,8 @@ using namespace android;
 using android::base::StringPrintf;
 
 extern bool nfc_debug_enabled;
+
+MposManager::MposManager() { mNativeData = NULL; }
 
 namespace android {
 extern tNFA_STATUS EmvCo_dosetPoll(jboolean enable);
@@ -100,8 +102,9 @@ bool MposManager::initialize(nfc_jni_native_data* native) {
   mNativeData = native;
   initializeReaderInfo();
   mDiscNtfTimeout = NfcConfig::getUnsigned(NAME_NFA_DM_DISC_NTF_TIMEOUT);
-  GetNxpNumValue(NAME_NXP_SWP_RD_TAG_OP_TIMEOUT, (void*)&mRdrTagOpTimeout,
-                 sizeof(mRdrTagOpTimeout));
+  if (NfcConfig::hasKey(NAME_NXP_SWP_RD_TAG_OP_TIMEOUT)) {
+    mRdrTagOpTimeout = NfcConfig::getUnsigned(NAME_NXP_SWP_RD_TAG_OP_TIMEOUT);
+  }
   return true;
 }
 

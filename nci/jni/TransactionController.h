@@ -1,6 +1,6 @@
 /******************************************************************************
  *
- *  Copyright (C) 2015-2018 NXP Semiconductors
+ *  Copyright (C) 2015-2019 NXP Semiconductors
  *
  *  Licensed under the Apache License, Version 2.0 (the "License");
  *  you may not use this file except in compliance with the License.
@@ -40,7 +40,6 @@ typedef enum transactionId {
   NFA_EE_ACTION_EVENT,
   NFA_TRANS_CE_ACTIVATED_EVENT,
   etsiReader,
-  jcosDownload,
   setScreenState,
   staticDualUicc,
   getTransanctionRequest,

@@ -2,7 +2,7 @@
  * Copyright (c) 2016, The Linux Foundation. All rights reserved.
  * Not a Contribution.
  *
- * Copyright (C) 2015-2018 NXP Semiconductors
+ * Copyright (C) 2015-2019 NXP Semiconductors
  * The original Work has been changed by NXP Semiconductors.
  *
  * Copyright (C) 2012 The Android Open Source Project
@@ -60,6 +60,7 @@ NfcTag::NfcTag()
       mNumDiscNtf(0),
       mNumDiscTechList(0),
       mTechListIndex(0),
+      mNfcDisableinProgress(false),
       mCashbeeDetected(false),
       mEzLinkTypeTag(false),
 #if (NXP_EXTNS == TRUE)

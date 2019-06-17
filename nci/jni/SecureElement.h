@@ -17,7 +17,7 @@
  *
  *  The original Work has been changed by NXP Semiconductors.
  *
- *  Copyright (C) 2015-2018 NXP Semiconductors
+ *  Copyright (C) 2015-2019 NXP Semiconductors
  *
  *  Licensed under the Apache License, Version 2.0 (the "License");
  *  you may not use this file except in compliance with the License.
@@ -55,6 +55,7 @@
 #define CONNECTIVITY_PIPE_ID_UICC2 0x23
 
 #define SIG_NFC 44
+#define SIG_SPI_EVENT_HANDLER 45
 #endif
 #define SIGNAL_EVENT_SIZE 0x02
 typedef enum {
@@ -168,7 +169,6 @@ class SecureElement {
   mNfceeData mNfceeData_t;
   uint8_t mHostsPresent;
   uint8_t mETSI12InitStatus;
-  uint8_t mHostsId[MAX_NFCEE];
   uint8_t eSE_Compliancy;
   uint8_t mCreatedPipe;
   uint8_t mDeletePipeHostId;
@@ -423,31 +423,6 @@ class SecureElement {
 
   /*******************************************************************************
   **
-  ** Function:        notifyConnectivityListeners
-  **
-  ** Description:     Notify the NFC service about a connectivity event from
-  *secure element.
-  **                  evtSrc: source of event UICC/eSE.
-  **
-  ** Returns:         None
-  **
-  *******************************************************************************/
-  void notifyConnectivityListeners(uint8_t evtSrc);
-
-  /*******************************************************************************
-  **
-  ** Function:        notifyEmvcoMultiCardDetectedListeners
-  **
-  ** Description:     Notify the NFC service about a multiple card presented to
-  **                  Emvco reader.
-  **
-  ** Returns:         None
-  **
-  *******************************************************************************/
-  void notifyEmvcoMultiCardDetectedListeners();
-
-  /*******************************************************************************
-  **
   ** Function:        notifyTransactionListenersOfTlv
   **
   ** Description:     Notify the NFC service about a transaction event from
@@ -680,7 +655,7 @@ class SecureElement {
   jint getSETechnology(tNFA_HANDLE eeHandle);
   static const int MAX_NUM_EE = NFA_EE_MAX_EE_SUPPORTED;    /*max number of EE's*/
   static const uint8_t UICC_ID = 0x02;
-  static const uint8_t UICC2_ID = 0x04;
+  static const uint8_t UICC2_ID = 0x03;
   static const uint8_t ESE_ID = 0x01;
   static const uint8_t DH_ID = 0x00;
 #if (NXP_EXTNS == TRUE)
@@ -697,7 +672,6 @@ class SecureElement {
 #if (NXP_EXTNS == TRUE)
 
   bool meSESessionIdOk;
-  void setCPTimeout();
   SyncEvent mRfFieldOffEvent;
   void NfccStandByOperation(nfcc_standby_operation_t value);
   NFCSTATUS eSE_Chip_Reset(void);
@@ -804,7 +778,6 @@ class SecureElement {
   nfc_jni_native_data* mNativeData;
   bool mIsInit;           // whether EE is initialized
   uint8_t mActualNumEe;   // actual number of EE's reported by the stack
-  uint8_t mNumEePresent;  // actual number of usable EE's
   bool mbNewEE;
   uint8_t mNewPipeId;
   uint8_t mNewSourceGate;
