@@ -1,5 +1,5 @@
 cc_library_shared {
-    name: "libnfc_nci_jni",
+    name: "libnqnfc_nci_jni",
 
     cflags: [
         "-Wall",
@@ -23,12 +23,12 @@ cc_library_shared {
 
     include_dirs: [
         "libnativehelper/include/nativehelper",
-        "system/nfc/src/nfa/include",
-        "system/nfc/src/nfc/include",
-        "system/nfc/src/include",
-        "system/nfc/src/gki/ulinux",
-        "system/nfc/src/gki/common",
-        "system/nfc/utils/include",
+        "vendor/nxp/opensource/commonsys/external/libnfc-nci/src/nfa/include",
+        "vendor/nxp/opensource/commonsys/external/libnfc-nci/src/nfc/include",
+        "vendor/nxp/opensource/commonsys/external/libnfc-nci/src/include",
+        "vendor/nxp/opensource/commonsys/external/libnfc-nci/src/gki/ulinux",
+        "vendor/nxp/opensource/commonsys/external/libnfc-nci/src/gki/common",
+        "vendor/nxp/opensource/commonsys/external/libnfc-nci/utils/include",
 
     ],
 
@@ -46,12 +46,12 @@ cc_library_shared {
         "libcutils",
         "libutils",
         "liblog",
-        "libnfc-nci",
+        "libnqnfc-nci",
         "libchrome",
         "libbase",
         "android.hardware.nfc@1.0",
         "android.hardware.nfc@1.1",
-        "vendor.nxp.nxpnfc@1.0",
+        "vendor.nxp.hardware.nfc@1.0",
     ],
 
     product_variables: {

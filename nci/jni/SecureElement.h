@@ -193,6 +193,7 @@ class SecureElement {
 #endif
 #define NCI_INTERFACE_UICC_DIRECT_STAT 0x82
 #define NCI_INTERFACE_ESE_DIRECT_STAT 0x83
+  static const int MAX_NUM_EE = NFA_EE_MAX_EE_SUPPORTED; /*max number of EE's*/
 
   /*******************************************************************************
   **
@@ -653,7 +654,6 @@ class SecureElement {
   Mutex mNfccStandbyMutex;
 #endif
   jint getSETechnology(tNFA_HANDLE eeHandle);
-  static const int MAX_NUM_EE = NFA_EE_MAX_EE_SUPPORTED;    /*max number of EE's*/
   static const uint8_t UICC_ID = 0x02;
   static const uint8_t UICC2_ID = 0x03;
   static const uint8_t ESE_ID = 0x01;

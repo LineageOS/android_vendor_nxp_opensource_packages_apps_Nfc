@@ -173,6 +173,7 @@ bool nfcManager_isTransanctionOnGoing(bool isInstallRequest);
 bool nfcManager_isRequestPending(void);
 static jboolean nfcManager_doPartialInitForEseCosUpdate(JNIEnv* e, jobject o);
 static jboolean nfcManager_doPartialDeinitForEseCosUpdate(JNIEnv* e, jobject o);
+static void nfcManager_doResonantFrequency(JNIEnv* e, jobject o, jboolean modeOn);
 extern tNFA_STATUS enableSWPInterface();
 extern tNFA_STATUS NxpNfc_Send_CoreResetInit_Cmd(void);
 extern tNFA_STATUS SendAGCDebugCommand();
@@ -4610,6 +4611,8 @@ static void restartUiccListen(jint uiccSlot) {
      (void*)nfcManager_getDefaultFelicaCLTPowerState},
     {"getDefaultFelicaCLTRoute", "()I",
      (void*)nfcManager_getDefaultFelicaCLTRoute},
+    {"doResonantFrequency", "(Z)V",
+              (void *)nfcManager_doResonantFrequency},
 #endif
     {"commitRouting", "()Z", (void*)nfcManager_doCommitRouting},
     {"doGetActiveSecureElementList", "()[I",
@@ -7033,6 +7036,19 @@ static jboolean nfcManager_doPartialDeinitForEseCosUpdate(JNIEnv* e, jobject o) 
   return true;
 }
 
+/*******************************************************************************
+ **
+ ** Function:        nfcManager_doResonantFrequency
+ **
+ ** Description:     factory mode to measure resonance frequency
+ **
+ ** Returns:         void
+ **
+ *******************************************************************************/
+static void nfcManager_doResonantFrequency(JNIEnv* e, jobject o,
+                                               jboolean modeOn) {
+  /*Nothing to be done. dummy Funtion to support SSI*/
+}
 #endif
 
   /*******************************************************************************
