@@ -83,7 +83,6 @@ public:
   static const uint8_t EE_APP_HANLDE_UICC2 = 0xF8;
   static const uint8_t EE_APP_HANLDE_UICC3 = 0xF9;
   uint8_t muicc2_selected;    /* UICC2 or UICC3 selected from config file*/
-  SyncEvent       mApduPaternAddRemoveEvent;
   SyncEvent   mAidAddRemoveEvent;
 /*******************************************************************************
 **
@@ -125,7 +124,7 @@ void getEeHandleList(tNFA_HANDLE *list, uint8_t* count);
   bool    mGetAtrRspwait;
   bool    mAbortEventWaitOk;
 
-  uint8_t mTransceiveStatus;      /* type to indicate the status of transceive sent*/
+  tNFA_STATUS mTransceiveStatus;      /* type to indicate the status of transceive sent*/
   tNFA_HCI_GET_GATE_PIPE_LIST mHciCfg;
   tNFA_STATUS mCommandStatus;     //completion status of the last command
   tNFA_HANDLE     mNfaHciHandle;          //NFA handle to NFA's HCI component

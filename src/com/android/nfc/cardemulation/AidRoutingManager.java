@@ -214,17 +214,6 @@ public class AidRoutingManager {
         }
     }
 
-    public boolean configureApduPatternRouting(List<ApduPatternResolveInfo> apduPatternList) {
-        NfcService.getInstance().unrouteApduPattern("FFFFFFFFFFFFFFEF");
-        if(apduPatternList.size() == 0x00 || apduPatternList == null)
-            return false;
-        for(ApduPatternResolveInfo apduPatternInfo : apduPatternList) {
-            NfcService.getInstance().routeApduPattern(apduPatternInfo.referenceData,apduPatternInfo.mask,
-                    apduPatternInfo.route,apduPatternInfo.powerState);
-        }
-        return true;
-    }
-
     private int getRouteForSecureElement(String se) {
       if (se == null || se.length() <= 3) {
         return 0;
@@ -240,8 +229,8 @@ public class AidRoutingManager {
           if (mOffHostRouteUicc.length >= index && index > 0) {
             return mOffHostRouteUicc[index - 1] & 0xFF;
           }
-            if (mOffHostRouteEse == null && mOffHostRouteUicc == null)
-              return mDefaultOffHostRoute;
+          if (mOffHostRouteEse == null && mOffHostRouteUicc == null)
+            return mDefaultOffHostRoute;
         }
       } catch (NumberFormatException e) {
       }
@@ -296,15 +285,7 @@ public class AidRoutingManager {
 
         synchronized (mLock) {
             if (routeForAid.equals(mRouteForAid) && !force) {
-                if (DBG) Log.d(TAG, "Routing table unchanged, but commit the routing");
-                if(mLastCommitStatus == false){
-                    NfcService.getInstance().updateStatusOfServices(false);
-                }
-                else
-                {/*If last commit status was success, And a new service is added whose AID's are
-                already resolved by previously installed services, service state of newly installed app needs to be updated*/
-                    NfcService.getInstance().updateStatusOfServices(true);
-                }
+                if (DBG) Log.d(TAG, "Routing table unchanged, not updating");
                 return false;
             }
 
@@ -398,19 +379,6 @@ public class AidRoutingManager {
                       }
                     }
                 }
-                if(NfcService.getInstance().getNciVersion() != NfcService.getInstance().NCI_VERSION_1_0) {
-                  String emptyAid = "";
-                  AidEntry entry = new AidEntry();
-                  entry.route = mDefaultRoute;
-                  if(mDefaultRoute==ROUTE_HOST) {
-                    entry.isOnHost = true;
-                  } else {
-                    entry.isOnHost = false;
-                  }
-                  entry.aidInfo = RegisteredAidCache.AID_ROUTE_QUAL_PREFIX;
-                  aidRoutingTableCache.put(emptyAid, entry);
-                  if (DBG) Log.d(TAG, "Add emptyAid into AidRoutingTable");
-                }
                 if( calculateAidRouteSize(aidRoutingTableCache) <= mMaxAidRoutingTableSize) {
                 aidRouteResolved = true;
                 break;
@@ -418,15 +386,11 @@ public class AidRoutingManager {
             }
             if(aidRouteResolved == true) {
               commit(aidRoutingTableCache);
-              NfcService.getInstance().updateStatusOfServices(true);
-              if (NfcService.getInstance().getNciVersion() == NfcService.NCI_VERSION_1_0) {
-                NfcService.getInstance().updateDefaultAidRouteForNci_1_0(mDefaultRoute);
-              }
+              NfcService.getInstance().updateDefaultAidRoute(mDefaultRoute);
               mLastCommitStatus = true;
           } else {
               Log.e(TAG, "RoutingTable unchanged because it's full, not updating");
               NfcService.getInstance().notifyRoutingTableFull();
-              NfcService.getInstance().updateStatusOfServices(false);
               mLastCommitStatus = false;
           }
         }
@@ -470,13 +434,6 @@ public class AidRoutingManager {
 
     public boolean getLastCommitRoutingStatus() {
         return mLastCommitStatus;
-    }
-
-    final class ApduPatternResolveInfo {
-        public String  mask;
-        public String  referenceData;
-        public int route;
-        public int powerState;
     }
 
     public void dump(FileDescriptor fd, PrintWriter pw, String[] args) {

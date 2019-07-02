@@ -187,12 +187,11 @@ public class NfcService implements DeviceHostListener {
     static final int MSG_ETSI_SWP_TIMEOUT = 50;
     static final int MSG_SWP_READER_RESTART = 58;
     static final int MSG_SE_INIT = 59;
-    static final int MSG_ROUTE_APDU = 60;
-    static final int MSG_UNROUTE_APDU = 61;
     static final int MSG_CLEAR_ROUTING = 62;
     static final int MSG_INIT_WIREDSE = 63;
     static final int MSG_COMPUTE_ROUTING_PARAMS = 64;
     static final int MSG_RESET_AND_UPDATE_ROUTING_PARAMS = 65;
+    static final int MSG_DEINIT_WIREDSE = 66;
     // Update stats every 4 hours
     static final long STATS_UPDATE_INTERVAL_MS = 4 * 60 * 60 * 1000;
     static final long MAX_POLLING_PAUSE_TIMEOUT = 40000;
@@ -418,7 +417,8 @@ public class NfcService implements DeviceHostListener {
     Class mWiredSeClass;
     Method mWiredSeInitMethod, mWiredSeDeInitMethod;
     Object mWiredSeObj;
-
+    Class mNfcExtnsClass;
+    Object  mNfcExtnsObj;
     Class mNfcExtraClass;
     Object mNfcExtraObj;
 
@@ -620,6 +620,20 @@ public class NfcService implements DeviceHostListener {
         mContentResolver = mContext.getContentResolver();
         mDeviceHost = new NativeNfcManager(mContext, this);
 
+        try {
+            Object[] objargs = new Object[] {mContext};
+            mNfcExtnsClass = Class.forName("com.android.nfc.NfcExtnsService");
+            Constructor mNfcConstr = mNfcExtnsClass.getDeclaredConstructor(Context.class);
+            mNfcExtnsObj   = mNfcConstr.newInstance(objargs);
+        } catch(ClassNotFoundException | IllegalAccessException e) {
+            Log.d(TAG, "NfcExtnsService not found");
+        } catch (InstantiationException e) {
+            Log.e(TAG, "NfcExtnsService object Instantaiation failed");
+        }   catch (NoSuchMethodException e ) {
+            Log.e(TAG, " NoSuchMethodException");
+        }  catch (InvocationTargetException e) {
+            Log.e(TAG, " InvocationTargetException");
+        }
         Object[] args = new Object[] {mDeviceHost, mContext};
         try {
           mNfcExtraClass = Class.forName("com.android.nfc.NfcAdapterExtrasService");
@@ -950,10 +964,7 @@ public class NfcService implements DeviceHostListener {
             mDeviceHost.setPreferredSimSlot(uiccSlot);
             nci_version = getNciVersion();
             Log.d(TAG, "NCI_Version: " + nci_version);
-            if (nci_version == NCI_VERSION_1_0) {
-                /*reset default AID route shared preference while enabling NFC*/
-                mNxpPrefsEditor.remove("PREF_SET_DEFAULT_ROUTE_ID").commit();
-            }
+            mNxpPrefsEditor.remove("PREF_SET_DEFAULT_ROUTE_ID").commit();
             if (mIsHceCapable) {
                 // Generate the initial card emulation routing table
                 mCardEmulationManager.onNfcEnabled();
@@ -997,18 +1008,7 @@ public class NfcService implements DeviceHostListener {
             }
             Log.i(TAG, "Disabling NFC");
             updateState(NfcAdapter.STATE_TURNING_OFF);
-
-            try{
-                mWiredSeDeInitMethod = mWiredSeClass.getDeclaredMethod("wiredSeDeInitialize");
-                mWiredSeDeInitMethod.invoke(mWiredSeObj);
-            } catch (NoSuchElementException | NoSuchMethodException e) {
-                Log.i(TAG, "No such Method WiredSeInitialize");
-            } catch (RuntimeException | IllegalAccessException | InvocationTargetException e) {
-                Log.e(TAG, "Error in invoking wiredSeInitialize invocation");
-            } catch (Exception e) {
-                Log.e(TAG, "caught Exception during wiredSeInitialize");
-                e.printStackTrace();
-            }
+            deInitWiredSe();
             /* Sometimes mDeviceHost.deinitialize() hangs, use a watch-dog.
              * Implemented with a new thread (instead of a Handler or AsyncTask),
              * because the UI Thread and AsyncTask thread-pools can also get hung
@@ -1947,6 +1947,18 @@ public class NfcService implements DeviceHostListener {
             }
             return mDeviceHost.doGetSelectedUicc();
         }
+
+        @Override
+        public int setFieldDetectMode(boolean mode) {
+          NfcPermissions.enforceUserPermissions(mContext);
+          return mDeviceHost.doSetFieldDetectMode(mode);
+        }
+
+        @Override
+        public boolean isFieldDetectEnabled() {
+          NfcPermissions.enforceUserPermissions(mContext);
+          return mDeviceHost.isFieldDetectEnabled();
+        }
 }
 
     final class ReaderModeDeathRecipient implements IBinder.DeathRecipient {
@@ -2401,10 +2413,7 @@ public class NfcService implements DeviceHostListener {
 
     boolean _nfcEeReset() throws IOException {
         synchronized (NfcService.this) {
-            if (!isNfcEnabledOrShuttingDown()) {
-               throw new IOException("NFC adapter is disabled");
-            }
-            return mSecureElement.doReset(EE_HANDLE_0xF3);
+          return mSecureElement.doReset(EE_HANDLE_0xF3);
         }
      }
 
@@ -2616,7 +2625,7 @@ public class NfcService implements DeviceHostListener {
         TechSeId = (techRoute >> ROUTE_LOC_MASK);
         TechFSeId = (techfRoute >> ROUTE_LOC_MASK);
         /* Technology types are masked internally depending on the capability of SE */
-        if(TechSeId == TechFSeId)
+        if(techRoute == techfRoute)
         {
            TechRoute = 0x07;
            mDeviceHost.setRoutingEntry(TECH_ENTRY,TechRoute, TechSeId, techRoute & 0x3F);
@@ -2755,7 +2764,6 @@ public class NfcService implements DeviceHostListener {
                 "please disable other servives in Settings Menu", 20);
         Log.d(TAG, "notify aid routing table full to the user here");
 
-        ComponentName prevPaymentComponent = mAidCache.getPreviousPreferredPaymentService();
         mNxpPrefsEditor = mNxpPrefs.edit();
         mNxpPrefsEditor.putInt("PREF_SET_AID_ROUTING_TABLE_FULL",0x01);
         mNxpPrefsEditor.commit();
@@ -2766,7 +2774,6 @@ public class NfcService implements DeviceHostListener {
             Log.d(TAG, "notify aid routing table full to the user");
         }
         mContext.sendBroadcastAsUser(aidTableFull, UserHandle.CURRENT);
-        mAidCache.setPreviousPreferredPaymentService(null);
     }
 
     public void routeAids(String aid, int route, int aidInfo, int power) {
@@ -2805,25 +2812,6 @@ public class NfcService implements DeviceHostListener {
 
     public void unrouteAids(String aid) {
         sendMessage(MSG_UNROUTE_AID, aid);
-    }
-
-    public void routeApduPattern(String apdu, String mask ,int route, int powerState) {
-        Message msg = mHandler.obtainMessage();
-        msg.what = MSG_ROUTE_APDU;
-        msg.arg1 = route;
-        msg.arg2 = powerState;
-        Bundle apduPatternbundle = new Bundle();
-        apduPatternbundle.putString("apduData",apdu);
-        apduPatternbundle.putString("apduMask",mask);
-        msg.setData(apduPatternbundle);
-        mHandler.sendMessage(msg);
-   }
-
-    public void unrouteApduPattern(String apdu) {
-        Message msg = mHandler.obtainMessage();
-        msg.what = MSG_UNROUTE_APDU;
-        msg.obj = apdu;
-        mHandler.sendMessage(msg);
     }
 
     public int getNciVersion() {
@@ -2872,6 +2860,10 @@ public class NfcService implements DeviceHostListener {
     public void initWiredSe() {
         Log.d(TAG, "Init wired Se");
         mHandler.sendEmptyMessage(MSG_INIT_WIREDSE);
+    }
+    public void deInitWiredSe() {
+        Log.d(TAG, "DeInit wired Se");
+        mHandler.sendEmptyMessage(MSG_DEINIT_WIREDSE);
     }
     /**
      * get default Aid route entry in case application does not configure this route entry
@@ -3102,20 +3094,10 @@ public class NfcService implements DeviceHostListener {
                     break;
                 }
                 case MSG_COMMIT_ROUTING: {
-                    boolean commit = false;
                     Log.d(TAG, "commitRouting >>>");
-                    synchronized (NfcService.this) {
-                        int defaultRoute=mNxpPrefs.getInt("PREF_SET_DEFAULT_ROUTE_ID", GetDefaultRouteEntry());
-                        mDeviceHost.setEmptyAidRoute(defaultRoute >> ROUTE_LOC_MASK);
-                        if (mCurrentDiscoveryParameters.shouldEnableDiscovery()) {
-                            commit = true;
-                        } else {
-                            Log.d(TAG, "Not committing routing because discovery is disabled.");
-                        }
-                    }
-                    if (commit) {
-                        mDeviceHost.commitRouting();
-                    }
+                    int defaultRoute=mNxpPrefs.getInt("PREF_SET_DEFAULT_ROUTE_ID", GetDefaultRouteEntry());
+                    mDeviceHost.setEmptyAidRoute(defaultRoute >> ROUTE_LOC_MASK);
+                    mDeviceHost.commitRouting();
                     break;
                 }
                 case MSG_RESET_AND_UPDATE_ROUTING_PARAMS: {
@@ -3420,26 +3402,7 @@ public class NfcService implements DeviceHostListener {
                     }
 
                     break;
-                case MSG_ROUTE_APDU:{
-                    int route = msg.arg1;
-                    int power = msg.arg2;
-                    String apduData = null;
-                    String apduMask = null;
-                    Bundle dataBundle = msg.getData();
-                    if (dataBundle != null) {
-                        apduData = dataBundle.getString("apduData");
-                        apduMask = dataBundle.getString("apduMask");
-                    }
-                    // Send the APDU
-                    if(apduData != null && dataBundle != null)
-                        mDeviceHost.routeApduPattern(route, power, hexStringToBytes(apduData) ,hexStringToBytes(apduMask));
-                    break;
-                }
-                case MSG_UNROUTE_APDU: {
-                    String apdu = (String) msg.obj;
-                    mDeviceHost.unrouteApduPattern(hexStringToBytes(apdu));
-                    break;
-                }
+
                 case MSG_INIT_WIREDSE: {
                      try {
                        mWiredSeInitMethod = mWiredSeClass.getDeclaredMethod("wiredSeInitialize");
@@ -3454,6 +3417,20 @@ public class NfcService implements DeviceHostListener {
                      }
                     break;
                 }
+                case MSG_DEINIT_WIREDSE: {
+                    try {
+                      mWiredSeInitMethod = mWiredSeClass.getDeclaredMethod("wiredSeDeInitialize");
+                      mWiredSeInitMethod.invoke(mWiredSeObj);
+                    } catch (NoSuchElementException | NoSuchMethodException e) {
+                      Log.i(TAG, "No such Method wiredSeDeInitialize");
+                    } catch (RuntimeException | IllegalAccessException | InvocationTargetException e) {
+                      Log.e(TAG, "Error in invoking wiredSeDeInitialize invocation");
+                    } catch (Exception e) {
+                      Log.e(TAG, "caught Exception during wiredSeDeInitialize");
+                      e.printStackTrace();
+                    }
+                   break;
+               }
                 default:
                     Log.e(TAG, "Unknown message received");
                     break;
@@ -3917,18 +3894,8 @@ public class NfcService implements DeviceHostListener {
             mDeviceHost.dump(fd);
         }
     }
-   /**
-     * Update the status of all the services which were populated to commit to routing table
-     */
-    public void updateStatusOfServices(boolean commitStatus) {
-        if(commitStatus == true)
-        {
-            mAidCache.setPreviousPreferredPaymentService(null);
-        }
-        mCardEmulationManager.updateStatusOfServices(commitStatus);
-    }
 
-    public void updateDefaultAidRouteForNci_1_0(int routeLoc) {
+    public void updateDefaultAidRoute(int routeLoc) {
       mNxpPrefsEditor = mNxpPrefs.edit();
       Log.d(TAG, "writing to preferences setDefaultAidRouteLoc  :" + routeLoc);
       if (mNxpPrefs.getInt("PREF_SET_DEFAULT_ROUTE_ID", 0xFF) == routeLoc) {
