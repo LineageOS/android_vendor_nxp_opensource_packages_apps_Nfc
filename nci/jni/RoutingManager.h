@@ -181,17 +181,13 @@ class RoutingManager {
                        int optparamlen);
   void handleSERemovedNtf();
   bool is_ee_recovery_ongoing();
-  void setEmptyAidEntry(void);
+  void setEmptyAidEntry(int route);
+  void ClearSystemCodeRouting();
 #else
   bool addAidRouting(const uint8_t* aid, uint8_t aidLen, int route,
                      int aidInfo);
 #endif
 
-  bool addApduRouting(uint8_t route, uint8_t powerState,
-                      const uint8_t* apduData, uint8_t apduDataLen,
-                      const uint8_t* apduMask, uint8_t apduMaskLen);
-
-  bool removeApduRouting(uint8_t apduDataLen, const uint8_t* apduData);
   void setEERecovery(bool value);
   void cleanRouting();
   bool removeAidRouting(const uint8_t* aid, uint8_t aidLen);
@@ -220,6 +216,7 @@ class RoutingManager {
   Mutex mResetHandlerMutex;
   IntervalTimer LmrtRspTimer;
   SyncEvent mEeUpdateEvent;
+  SyncEvent mEeInfoEvent;
   IntervalTimer mNfcFRspTimer;
 
  private:
@@ -334,15 +331,14 @@ class RoutingManager {
   static const JNINativeMethod sMethods[];
   int mDefaultEe;  // since this variable is used in both cases moved out of
                    // compiler switch
+  bool mReceivedEeInfo;
   int mHostListnTechMask;
   int mUiccListnTechMask;
   int mFwdFuntnEnable;
-  int mHostListnEnable;
   static int mChipId;
   SyncEvent mEeRegisterEvent;
   SyncEvent mRoutingEvent;
 #if (NXP_EXTNS == TRUE)
-  bool mIsDirty;
   protoEntry_t mProtoTableEntries[MAX_PROTO_ENTRIES];
   techEntry_t mTechTableEntries[MAX_TECH_ENTRIES];
   LmrtEntry_t mLmrtEntries[MAX_ROUTE_LOC_ENTRIES];

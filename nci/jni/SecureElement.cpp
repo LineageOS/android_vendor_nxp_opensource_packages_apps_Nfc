@@ -157,12 +157,18 @@ const uint16_t ACTIVE_SE_USE_ANY = 0xFFFF;
 SecureElement::SecureElement()
     : mActiveEeHandle(NFA_HANDLE_INVALID),
 #if (NXP_EXTNS == TRUE)
+      mHostsPresent(0),
       mETSI12InitStatus(NFA_STATUS_FAILED),
       eSE_Compliancy(0),
       mCreatedPipe(0),
       mDeletePipeHostId(0),
       mWmMaxWtxCount(0),
       meseETSI12Recovery(false),
+      mAbortEventWaitOk(false),
+      mNfaHciHandle(NFA_HANDLE_INVALID),
+      pipeStatus(0),
+      IsCmdsentOnOpenDwpSession(false),
+      EE_HANDLE_0xF4(0),
       mPassiveListenEnabled(false),
       meseUiccConcurrentAccess(false),
       mPassiveListenTimeout(0),

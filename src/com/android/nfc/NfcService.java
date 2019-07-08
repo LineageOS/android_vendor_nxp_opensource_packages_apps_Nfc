@@ -297,6 +297,12 @@ public class NfcService implements DeviceHostListener {
     // Timeout to re-apply routing if a tag was present and we postponed it
     private static final int APPLY_ROUTING_RETRY_TIMEOUT_MS = 5000;
 
+    // these states are for making enable and disable nfc atomic
+    private int NXP_NFC_STATE_OFF = 0;
+    private int NXP_NFC_STATE_TURNING_ON = 1;
+    private int NXP_NFC_STATE_ON = 2;
+    private int NXP_NFC_STATE_TURNING_OFF = 3;
+
     // eSE handle
     public static final int EE_HANDLE_0xF3 = 0x4C0;
 
@@ -366,6 +372,8 @@ public class NfcService implements DeviceHostListener {
     // and the default AsyncTask thread so it is read unprotected from that
     // thread
     int mState;  // one of NfcAdapter.STATE_ON, STATE_TURNING_ON, etc
+    int mNxpNfcState = NXP_NFC_STATE_OFF;
+
     // fields below are final after onCreate()
     Context mContext;
     private DeviceHost mDeviceHost;
@@ -995,6 +1003,9 @@ public class NfcService implements DeviceHostListener {
             commitRouting();
             /* WiredSe Init after ESE is discovered and initialised */
             initWiredSe();
+            synchronized (NfcService.this) {
+                mNxpNfcState = NXP_NFC_STATE_ON;
+            }
             return true;
         }
 
@@ -1042,6 +1053,7 @@ public class NfcService implements DeviceHostListener {
             synchronized (NfcService.this) {
                 mCurrentDiscoveryParameters = NfcDiscoveryParameters.getNfcOffParameters();
                 updateState(NfcAdapter.STATE_OFF);
+                mNxpNfcState = NXP_NFC_STATE_OFF;
             }
             releaseSoundPool();
             return result;
@@ -1126,6 +1138,14 @@ public class NfcService implements DeviceHostListener {
     final class NfcAdapterService extends INfcAdapter.Stub {
         @Override
         public boolean enable() throws RemoteException {
+            synchronized (NfcService.this) {
+                if (mNxpNfcState != NXP_NFC_STATE_OFF) {
+                    Log.e(TAG, "mNxpNfcStateis not equal to NXP_NFC_STATE_OFF."
+                                + " Enable NFC Rejected.");
+                    return false;
+                }
+                mNxpNfcState = NXP_NFC_STATE_TURNING_ON;
+            }
             NfcPermissions.enforceAdminPermissions(mContext);
 
             saveNfcOnSetting(true);
@@ -1145,6 +1165,14 @@ public class NfcService implements DeviceHostListener {
        }
         @Override
         public boolean disable(boolean saveState) throws RemoteException {
+          synchronized (NfcService.this) {
+            if (mNxpNfcState != NXP_NFC_STATE_ON) {
+              Log.e(TAG, "mNxpNfcStateis not equal to NXP_NFC_STATE_ON."
+                + " Disable NFC Rejected.");
+              return false;
+            }
+            mNxpNfcState = NXP_NFC_STATE_TURNING_OFF;
+          }
           NfcPermissions.enforceAdminPermissions(mContext);
 
           if (saveState) {
@@ -2450,7 +2478,7 @@ public class NfcService implements DeviceHostListener {
         }
     }
 
-    boolean isNfcEnabled() {
+    public boolean isNfcEnabled() {
         synchronized (this) {
             return mState == NfcAdapter.STATE_ON;
         }

@@ -257,6 +257,9 @@ public class NativeNfcManager implements DeviceHost {
     public native int   getDefaultFelicaCLTRoute();
 
     @Override
+    public native void doResonantFrequency(boolean isResonantFreq);
+
+    @Override
     public native int   getDefaultAidPowerState();
 
     @Override
@@ -333,9 +336,7 @@ public class NativeNfcManager implements DeviceHost {
     public native void doSetScreenState(int screen_state_mask);
 
     @Override
-    public native void doResonantFrequency(boolean isResonantFreq);
 
-    @Override
     public native int getNciVersion();
 
     private native void doEnableDiscovery(int techMask,
