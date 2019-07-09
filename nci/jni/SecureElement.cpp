@@ -3789,7 +3789,7 @@ void* spiEventHandlerThread(void* arg) {
   }
   (void)arg;
   uint16_t usEvent = 0, usEvtLen = 0;
-  tNFC_STATUS stat;
+  tNFC_STATUS stat = NFA_STATUS_FAILED;
 
   NFCSTATUS ese_status = NFA_STATUS_FAILED;
 
