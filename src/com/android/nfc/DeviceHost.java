@@ -44,6 +44,8 @@ public interface DeviceHost {
     public interface DeviceHostListener {
         public void onRemoteEndpointDiscovered(TagEndpoint tag);
 
+        /**
+         */
         public void onHostCardEmulationActivated(int technology);
         public void onHostCardEmulationData(int technology, byte[] data);
         public void onHostCardEmulationDeactivated(int technology);
@@ -267,8 +269,6 @@ public interface DeviceHost {
 
     public int getLfT3tMax();
 
-    public boolean routeApduPattern(int route, int powerState, byte[] apduData, byte[] apduMask);
-
     public LlcpConnectionlessSocket createLlcpConnectionlessSocket(int nSap, String sn)
             throws LlcpException;
 
@@ -277,8 +277,6 @@ public interface DeviceHost {
 
     public LlcpSocket createLlcpSocket(int sap, int miu, int rw,
             int linearBufferLength) throws LlcpException;
-
-    public boolean unrouteApduPattern(byte[] apduData);
 
     public boolean doCheckLlcp();
 
@@ -361,5 +359,6 @@ public interface DeviceHost {
     public int doselectUicc(int uiccSlot);
     public int doGetSelectedUicc();
     public int setPreferredSimSlot(int uiccSlot);
-
+    public int doSetFieldDetectMode(boolean mode);
+    public boolean isFieldDetectEnabled();
 }

@@ -2,7 +2,7 @@
  * Copyright (c) 2016, The Linux Foundation. All rights reserved.
  * Not a Contribution.
  *
- * Copyright (C) 2015-2018 NXP Semiconductors
+ * Copyright (C) 2015-2019 NXP Semiconductors
  * The original Work has been changed by NXP Semiconductors.
  *
  * Copyright (C) 2012 The Android Open Source Project
@@ -60,6 +60,7 @@ NfcTag::NfcTag()
       mNumDiscNtf(0),
       mNumDiscTechList(0),
       mTechListIndex(0),
+      mNfcDisableinProgress(false),
       mCashbeeDetected(false),
       mEzLinkTypeTag(false),
 #if (NXP_EXTNS == TRUE)
@@ -542,6 +543,19 @@ void NfcTag::discoverTechnologies(tNFA_DISC_RESULT& discoveryData) {
   }
   mTechHandles[mNumTechList] = discovery_ntf.rf_disc_id;
   mTechLibNfcTypes[mNumTechList] = discovery_ntf.protocol;
+
+#if (NFC_NXP_NON_STD_CARD == TRUE)
+  /* convert protocol to ISO-DEP if tag supports SAK=0x53 or
+     0x13 without NFC-DEP(Assuming reader mode is enabled)*/
+  if (discovery_ntf.rf_tech_param.param.pa.sel_rsp == 0x13) {
+    DLOG_IF(INFO, nfc_debug_enabled)
+        << StringPrintf("%s: NON STD Tags protocol change to ISO-DEP", fn);
+    mTechList[mNumTechList] =
+        TARGET_TYPE_ISO14443_4;  // is TagTechnology.ISO_DEP by Java API
+    mTechHandles[mNumTechList] = discovery_ntf.rf_disc_id;
+    mTechLibNfcTypes[mNumTechList] = NFC_PROTOCOL_ISO_DEP;
+  }
+#endif
 
   // save the stack's data structure for interpretation later
   memcpy(&(mTechParams[mNumTechList]), &(discovery_ntf.rf_tech_param),

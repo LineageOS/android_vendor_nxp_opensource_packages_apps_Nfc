@@ -57,6 +57,7 @@ NativeJniExtns& NativeJniExtns::getInstance() { return nativeExtnsObj; }
  **
  *******************************************************************************/
 NativeJniExtns::NativeJniExtns() : lib_handle(NULL) {
+  memset(&regNfcExtnsFunc, 0, sizeof(fpRegisterNfcExtns));
   DLOG_IF(INFO, nfc_debug_enabled) << StringPrintf("%s: Enter", __func__);
   extns_jni_path = "/system/lib64/libnfc_jni_extns.so";
 }
@@ -134,7 +135,30 @@ void NativeJniExtns::initialize(JNIEnv* e) {
     (*regNfcExtnsFunc.initNativeJni)(e);
   }
 }
-
+/*******************************************************************************
+ **
+ ** Function:        isExtensionPresent
+ **
+ ** Description:     Used externally to determine if extension is present or not.
+ **
+ ** Returns:         'true' if extension is Present, else 'false'.
+ **
+ *******************************************************************************/
+bool NativeJniExtns::isExtensionPresent() {
+  return (lib_handle != NULL) ? true : false;
+}
+/*******************************************************************************
+**
+** Function:        initializeNativeData
+**
+** Description:     initialize native data
+**
+** Returns:         None
+**
+******************************************************************************/
+void NativeJniExtns::initializeNativeData(nfc_jni_native_data* native) {
+  gNativeData = native;
+}
 /*******************************************************************************
  **
  ** Function:        NativeJniExtns
@@ -156,8 +180,9 @@ NativeJniExtns::~NativeJniExtns() { unloadExtnsLibrary(); };
 ** Returns:         None
 **
 *******************************************************************************/
-void NativeJniExtns::notifyNfcEvent(std::string evt) {
-  if (gNfcExtnsImplInstance != NULL) gNfcExtnsImplInstance->notifyNfcEvt(evt);
+void NativeJniExtns::notifyNfcEvent(std::string evt, void* evt_data) {
+  if (gNfcExtnsImplInstance != NULL)
+    gNfcExtnsImplInstance->notifyNfcEvt(evt, evt_data);
 }
 
 /*******************************************************************************

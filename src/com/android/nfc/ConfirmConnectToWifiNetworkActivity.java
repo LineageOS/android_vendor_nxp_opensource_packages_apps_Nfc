@@ -150,7 +150,6 @@ public class ConfirmConnectToWifiNetworkActivity extends Activity
                         doConnect(
                                 (WifiManager) ConfirmConnectToWifiNetworkActivity.this
                                         .getSystemService(Context.WIFI_SERVICE));
-                                ConfirmConnectToWifiNetworkActivity.this.finish();
                     }
                 }
             }

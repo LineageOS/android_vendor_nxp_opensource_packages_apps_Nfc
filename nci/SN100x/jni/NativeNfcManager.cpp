@@ -114,6 +114,7 @@ extern void NxpPropCmd_OnResponseCallback(uint8_t event, uint16_t param_len,
 extern tNFA_STATUS NxpPropCmd_send(uint8_t * pData4Tx, uint8_t dataLen,
                                    uint8_t * rsp_len, uint8_t * rsp_buf,
                                    uint32_t rspTimeout, tHAL_NFC_ENTRY * halMgr);
+extern tNFA_STATUS send_flush_ram_to_flash();
 extern bool gIsWaiting4Deact2SleepNtf;
 extern bool gGotDeact2IdleNtf;
 #endif
@@ -236,6 +237,14 @@ typedef enum dual_uicc_error_states {
   DUAL_UICC_ERROR_INVALID_SLOT,
   DUAL_UICC_ERROR_STATUS_UNKNOWN
 } dual_uicc_error_state_t;
+
+typedef enum {
+  FDSTATUS_SUCCESS = 0,
+  FDSTATUS_ERROR_NFC_IS_OFF,
+  FDSTATUS_ERROR_NFC_BUSY_IN_MPOS,
+  FDSTATUS_ERROR_UNKNOWN
+} field_detect_status_t;
+
 #endif
 
 static void nfaConnectionCallback(uint8_t event, tNFA_CONN_EVT_DATA* eventData);
@@ -620,8 +629,15 @@ static void nfaConnectionCallback(uint8_t connEvent,
         NfcTag::getInstance ().mTechListIndex =0;
 #endif
         nativeNfcTag_resetPresenceCheck();
+#if (NXP_EXTNS == TRUE)
+        if (gIsSelectingRfInterface == false) {
+          NfcTag::getInstance().connectionEventHandler(connEvent, eventData);
+          nativeNfcTag_abortWaits();
+        }
+#else
         NfcTag::getInstance().connectionEventHandler(connEvent, eventData);
         nativeNfcTag_abortWaits();
+#endif
         NfcTag::getInstance().abort();
 #if (NXP_EXTNS == TRUE)
         NfcTag::getInstance().mIsMultiProtocolTag = false;
@@ -910,7 +926,6 @@ static jboolean nfcManager_initNativeStruc(JNIEnv* e, jobject o) {
     LOG(ERROR) << StringPrintf("%s: fail cache NativeP2pDevice", __func__);
     return JNI_FALSE;
   }
-
   DLOG_IF(INFO, nfc_debug_enabled) << StringPrintf("%s: exit", __func__);
   return JNI_TRUE;
 }
@@ -1287,6 +1302,12 @@ static jboolean nfcManager_unrouteAid(JNIEnv* e, jobject, jbyteArray aid) {
 static jboolean nfcManager_commitRouting(JNIEnv* e, jobject) {
 #if (NXP_EXTNS == TRUE)
   bool status = false;
+  SecureElement& se = SecureElement::getInstance();
+
+  if (se.isRfFieldOn() || se.mActivatedInListenMode) {
+    /* Delay is required to avoid update routing during RF Field session*/
+    usleep(1000 * 1000);
+  }
 
   /*Stop RF discovery to reconfigure*/
   startRfDiscovery(false);
@@ -1303,55 +1324,6 @@ static jboolean nfcManager_commitRouting(JNIEnv* e, jobject) {
 #else
   return RoutingManager::getInstance().commitRouting();
 #endif
-}
-
-/*******************************************************************************
-**
-** Function:        nfcManager_unrouteApduPattern
-**
-** Description:     Remove a APDU and APDU mask routing
-**                  e: JVM environment.
-**                  o: Java object.
-**
-** Returns:         True if ok.
-**
-*******************************************************************************/
-static jboolean nfcManager_unrouteApduPattern (JNIEnv* e, jobject, jbyteArray apduData)
-{
-  bool stat = false;
-#if(NXP_EXTNS == TRUE)
-    ScopedByteArrayRO bytes(e, apduData);
-    uint8_t* apdu = const_cast<uint8_t*>(reinterpret_cast<const uint8_t*>(&bytes[0]));
-    size_t apduLen = bytes.size();
-    stat =  RoutingManager::getInstance().removeApduRouting(apduLen ,apdu);
-#endif
-    return stat;
-}
-
-/*******************************************************************************
-**
-** Function:        nfcManager_routeApduPattern
-**
-** Description:     Route an APDU and APDU mask to an EE
-**                  e: JVM environment.
-**                  o: Java object.
-**
-** Returns:         True if ok.
-**
-*******************************************************************************/
-static jboolean nfcManager_routeApduPattern (JNIEnv* e, jobject, jint route, jint powerState,jbyteArray apduData, jbyteArray apduMask)
-{
-    bool stat = false;
-#if(NXP_EXTNS == TRUE)
-    ScopedByteArrayRO bytes(e, apduData);
-    uint8_t* apdu = const_cast<uint8_t*>(reinterpret_cast<const uint8_t*>(&bytes[0]));
-    size_t apduLen = bytes.size();
-    ScopedByteArrayRO bytes2(e, apduMask);
-    uint8_t* mask = const_cast<uint8_t*>(reinterpret_cast<const uint8_t*>(&bytes2[0]));
-    size_t maskLen = bytes2.size();
-    stat = RoutingManager::getInstance().addApduRouting(route, powerState, apdu, apduLen, mask , maskLen);
-#endif
-    return stat;
 }
 
 /*******************************************************************************
@@ -1501,6 +1473,7 @@ static jboolean nfcManager_doInitialize(JNIEnv* e, jobject o) {
         HciEventManager::getInstance().initialize(getNative(e, o));
 #if(NXP_EXTNS == TRUE)
         MposManager::getInstance().initialize(getNative(e, o));
+        NativeJniExtns::getInstance().initializeNativeData(getNative(e, o));
 #endif
         /////////////////////////////////////////////////////////////////////////////////
         // Add extra configuration here (work-arounds, etc.)
@@ -1673,6 +1646,13 @@ static void nfcManager_enableDiscovery(JNIEnv* e, jobject o,
     tech_mask = (tNFA_TECHNOLOGY_MASK)nat->tech_mask;
   else if (technologies_mask != -1)
     tech_mask = (tNFA_TECHNOLOGY_MASK)technologies_mask;
+
+#if (NXP_EXTNS == TRUE)
+  uint8_t default_tech_mask =
+      NfcConfig::getUnsigned(NAME_POLLING_TECH_MASK, DEFAULT_TECH_MASK);
+  tech_mask &= default_tech_mask;
+#endif
+
   DLOG_IF(INFO, nfc_debug_enabled)
       << StringPrintf("%s: enter; tech_mask = %02x", __func__, tech_mask);
 
@@ -2008,6 +1988,10 @@ static jboolean nfcManager_doDeinitialize(JNIEnv*, jobject) {
     sNfaEnableDisablePollingEvent.notifyOne();
   }
 #if (NXP_EXTNS == TRUE)
+  /*Disable Field Detect Mode if enabled*/
+#ifdef FIELD_DETECT_FEATURE
+  if (NFA_IsFieldDetectEnabled()) NFA_SetFieldDetectMode(false);
+#endif
   SecureElement::getInstance().finalize ();
 #endif
   NfcAdaptation& theInstance = NfcAdaptation::GetInstance();
@@ -2221,6 +2205,81 @@ static jint nfcManager_getDefaultMifareCLTRoute (JNIEnv* /* e */, jobject /* o *
     if (NfcConfig::hasKey(NAME_DEFAULT_FELICA_CLT_ROUTE))
       num = NfcConfig::getUnsigned(NAME_DEFAULT_FELICA_CLT_ROUTE);
     return num;
+  }
+
+  /*******************************************************************************
+  **
+  ** Function:        nfcManager_SetFieldDetectMode
+  **
+  ** Description:     Updates field detect mode ENABLE/DISABLE
+  **                  e: JVM environment.
+  **                  o: Java object.
+  **
+  ** Returns:         Update status
+  **
+  *******************************************************************************/
+  static field_detect_status_t nfcManager_SetFieldDetectMode(JNIEnv*, jobject,
+                                                             jboolean mode) {
+    DLOG_IF(INFO, nfc_debug_enabled) << StringPrintf("%s: Enter", __func__);
+#ifdef FIELD_DETECT_FEATURE
+    se_rd_req_state_t state = MposManager::getInstance().getEtsiReaederState();
+    if (!nfcManager_isNfcActive()) {1
+      DLOG_IF(INFO, nfc_debug_enabled)
+          << StringPrintf("%s: Nfc is not Enabled. Returning", __func__);
+      return FDSTATUS_ERROR_NFC_IS_OFF;
+    }
+
+    if ((state != STATE_SE_RDR_MODE_STOPPED) &&
+        (state != STATE_SE_RDR_MODE_INVALID)) {
+      DLOG_IF(INFO, nfc_debug_enabled)
+          << StringPrintf("%s: MPOS is ongoing.. Returning", __func__);
+      return FDSTATUS_ERROR_NFC_BUSY_IN_MPOS;
+    }
+
+    if (NFA_IsFieldDetectEnabled() == mode) {
+      DLOG_IF(INFO, nfc_debug_enabled) << StringPrintf(
+          "%s: Already %s", __func__, ((mode) ? "ENABLED" : "DISABLED"));
+      return FDSTATUS_SUCCESS;
+    }
+
+    if (sRfEnabled) {
+      // Stop RF Discovery
+      DLOG_IF(INFO, nfc_debug_enabled)
+          << StringPrintf("%s: stop discovery", __func__);
+      startRfDiscovery(false);
+    }
+    NFA_SetFieldDetectMode(mode);
+    // start discovery
+    DLOG_IF(INFO, nfc_debug_enabled)
+        << StringPrintf("%s: reconfigured start discovery", __func__);
+    startRfDiscovery(true);
+#else
+    DLOG_IF(INFO, nfc_debug_enabled)
+        << StringPrintf("%s: Feature not supported", __func__);
+#endif
+    return FDSTATUS_ERROR_UNKNOWN;
+  }
+
+  /*******************************************************************************
+  **
+  ** Function:        nfcManager_IsFieldDetectEnabled
+  **
+  ** Description:     Returns current status of field detect mode
+  **                  e: JVM environment.
+  **                  o: Java object.
+  **
+ ** Returns:         true/false
+  **
+  *******************************************************************************/
+  static jboolean nfcManager_IsFieldDetectEnabled(JNIEnv*, jobject) {
+#ifdef FIELD_DETECT_FEATURE
+    DLOG_IF(INFO, nfc_debug_enabled) << StringPrintf("%s: Enter", __func__);
+    return NFA_IsFieldDetectEnabled();
+#else
+    DLOG_IF(INFO, nfc_debug_enabled)
+        << StringPrintf("%s: Feature not supported", __func__);
+    return false;
+#endif
   }
 #endif
 
@@ -2579,8 +2638,8 @@ int nfcManager_doPartialDeInitialize(JNIEnv*, jobject) {
     {
         DLOG_IF(ERROR, nfc_debug_enabled) << StringPrintf("%s: fail disable; error=0x%X", __func__, stat);
     }
-    theInstance.Finalize();
     theInstance.NFA_SetBootMode(NFA_NORMAL_BOOT_MODE);
+    theInstance.Finalize();
     gsNfaPartialEnabled = false;
     DLOG_IF(INFO, nfc_debug_enabled) << StringPrintf("%s: exit", __func__);
 
@@ -3022,11 +3081,11 @@ static JNINativeMethod gMethods[] = {
 
     {"doResonantFrequency", "(Z)V",
               (void *)nfcManager_doResonantFrequency},
+     {"doSetFieldDetectMode", "(Z)I",
+     (void*)nfcManager_SetFieldDetectMode},
+     {"isFieldDetectEnabled", "()Z",
+     (void*)nfcManager_IsFieldDetectEnabled},
 #endif
-     {"routeApduPattern", "(II[B[B)Z",
-                    (void*) nfcManager_routeApduPattern},
-     {"unrouteApduPattern", "([B)Z",
-                    (void*) nfcManager_unrouteApduPattern},
 #if(NXP_EXTNS == TRUE)
     // check firmware version
     {"getFWVersion", "()I", (void*)nfcManager_getFwVersion},
@@ -3157,6 +3216,9 @@ void doStartupConfig() {
     if (status != NFA_STATUS_OK) {
       LOG(ERROR) << __func__ << ": Failed to configure NFCC_CONFIG_CONTROL";
     }
+#if (NXP_EXTNS == TRUE)
+    send_flush_ram_to_flash();
+#endif
   }
 }
 
@@ -3781,8 +3843,11 @@ static int nfcManager_setTransitConfig(JNIEnv * e, jobject o,
     int stat = NFA_SetTransitConfig(transitConfig);
     if (stat != NFA_STATUS_OK) {
       LOG(ERROR) << StringPrintf("%s: NFA_SetTransitConfig failed", __func__);
+    } else {
+      if(sNfaTransitConfigEvent.wait(10 * ONE_SECOND_MS) == false) {
+        LOG(ERROR) << StringPrintf("Nfa transitConfig Event has terminated");
+      }
     }
-    sNfaTransitConfigEvent.wait(10 * ONE_SECOND_MS);
     return stat;
 }
 
@@ -3847,117 +3912,139 @@ static jint nfcManager_getRemainingAidTableSize (JNIEnv* , jobject )
 }
 
 /*******************************************************************************
-   **
-   ** Function:        nfcManager_doSelectUicc()
-   **
-   ** Description:     Issue any single TLV set config command as per input
-   ** register values and bit values
-   **
-   ** Returns:         success/failure
-   **
-   *******************************************************************************/
-  static int nfcManager_doSelectUicc(JNIEnv * e, jobject o, jint uiccSlot) {
-    (void)e;
-    (void)o;
-    uint8_t retStat = STATUS_UNKNOWN_ERROR;
-
-     if (!isDynamicUiccEnabled) {
+**
+** Function:        nfcManager_doSelectUicc()
+**
+** Description:     Select the preferred UICC slot
+**
+** Returns:        Returns status as below
+**                 DUAL_UICC_ERROR_STATUS_UNKNOWN when error status not defined.
+**                 DUAL_UICC_ERROR_NFC_TURNING_OFF when Nfc is Disabling,
+**                 DUAL_UICC_ERROR_INVALID_SLOT when slot id mismatch,
+**                 DUAL_UICC_ERROR_NFCC_BUSY when RF session is ongoing
+**                 DUAL_UICC_FEATURE_NOT_AVAILABLE when feature not available
+**                 UICC_NOT_CONFIGURED when UICC is not configured.
+*******************************************************************************/
+static int nfcManager_doSelectUicc(JNIEnv* e, jobject o, jint uiccSlot) {
+  (void)e;
+  (void)o;
+  int retStat = DUAL_UICC_ERROR_STATUS_UNKNOWN;
+  tNFA_STATUS status = NFA_STATUS_FAILED;
+  NativeJniExtns& jniExtns = NativeJniExtns::getInstance();
+  if (!isDynamicUiccEnabled) {
+    if (!jniExtns.isExtensionPresent()) {
       retStat = nfcManager_staticDualUicc_Precondition(uiccSlot);
+
+      if (sSeRfActive || SecureElement::getInstance().isRfFieldOn()) {
+        LOG(ERROR) << StringPrintf("%s:FAIL  RF session ongoing", __func__);
+        retStat = DUAL_UICC_ERROR_NFCC_BUSY;
+      }
 
       if (retStat != UICC_NOT_CONFIGURED) {
         DLOG_IF(INFO, nfc_debug_enabled)
             << StringPrintf("staticDualUicc_Precondition failed.");
         return retStat;
       }
-
-      nfcManager_setPreferredSimSlot(NULL, NULL, uiccSlot);
-      retStat = UICC_CONFIGURED;
-      // TODO when
-      //RoutingManager::getInstance().cleanRouting();
-    } else {
-      retStat = DUAL_UICC_FEATURE_NOT_AVAILABLE;
-      DLOG_IF(INFO, nfc_debug_enabled) << StringPrintf(
-          "%s: Dual uicc not supported retStat = %d", __func__, retStat);
     }
-    return retStat;
+    status = nfcManager_setPreferredSimSlot(NULL, NULL, uiccSlot);
+    if (status == NFA_STATUS_OK) retStat = UICC_CONFIGURED;
+  } else {
+    retStat = DUAL_UICC_FEATURE_NOT_AVAILABLE;
+    DLOG_IF(INFO, nfc_debug_enabled) << StringPrintf(
+        "%s: Dual uicc not supported retStat = %d", __func__, retStat);
   }
+  return retStat;
+}
 
-  /*******************************************************************************
-   **
-   ** Function:        nfcManager_doGetSelectedUicc()
-   **
-   ** Description:     get the current selected active UICC
-   **
-   ** Returns:         UICC id
-   **
-   *******************************************************************************/
-  static int nfcManager_doGetSelectedUicc(JNIEnv * e, jobject o) {
-    uint8_t uicc_stat = STATUS_UNKNOWN_ERROR;
-    if (!isDynamicUiccEnabled) {
-      uicc_stat =
-          SecureElement::getInstance().getUiccStatus(sCurrentSelectedUICCSlot);
-    } else {
-      DLOG_IF(INFO, nfc_debug_enabled)
-          << StringPrintf("%s: dual uicc not supported ", __func__);
-      uicc_stat = DUAL_UICC_FEATURE_NOT_AVAILABLE;
-    }
-    return uicc_stat;
-  }
-
-  static int nfcManager_staticDualUicc_Precondition(int uiccSlot) {
-    if (isDynamicUiccEnabled) {
-      DLOG_IF(INFO, nfc_debug_enabled) << StringPrintf(
-          "%s:Dual UICC feature not available . Returning", __func__);
-      return DUAL_UICC_FEATURE_NOT_AVAILABLE;
-    }
-
-    uint8_t retStat = UICC_NOT_CONFIGURED;
-
-    if (sIsDisabling) {
-      LOG(ERROR) << StringPrintf(
-          "%s:FAIL Nfc is Disabling : Switch UICC not allowed", __func__);
-      retStat = DUAL_UICC_ERROR_NFC_TURNING_OFF;
-    } else if (sSeRfActive) {
-      LOG(ERROR) << StringPrintf("%s:FAIL  RF session ongoing", __func__);
-      retStat = DUAL_UICC_ERROR_NFCC_BUSY;
-    } else if ((uiccSlot != 0x01) && (uiccSlot != 0x02)) {
-      LOG(ERROR) << StringPrintf("%s: Invalid slot id", __func__);
-      retStat = DUAL_UICC_ERROR_INVALID_SLOT;
-    } else if (SecureElement::getInstance().isRfFieldOn()) {
-      LOG(ERROR) << StringPrintf("%s:FAIL  RF field on", __func__);
-      retStat = DUAL_UICC_ERROR_NFCC_BUSY;
-    } else if (sDiscoveryEnabled || sRfEnabled) {
-        DLOG_IF(INFO, nfc_debug_enabled) << StringPrintf("%s: Transaction state enabled", __func__);
-    }
-    return retStat;
-  }
-
-  /*******************************************************************************
-   **
-   ** Function:        nfcManager_setPreferredSimSlot()
-   **
-   ** Description:     This api is used to select a particular UICC slot.
-   **
-   **
-   ** Returns:         success/failure
-   **
-   *******************************************************************************/
-  static int nfcManager_setPreferredSimSlot(JNIEnv * e, jobject o,
-                                            jint uiccSlot) {
+/*******************************************************************************
+**
+** Function:        nfcManager_doGetSelectedUicc()
+**
+** Description:     get the current selected active UICC
+**
+** Returns:         UICC id
+**
+*******************************************************************************/
+static int nfcManager_doGetSelectedUicc(JNIEnv * e, jobject o) {
+  uint8_t uicc_stat = STATUS_UNKNOWN_ERROR;
+  if (!isDynamicUiccEnabled) {
+    uicc_stat =
+        SecureElement::getInstance().getUiccStatus(sCurrentSelectedUICCSlot);
+  } else {
     DLOG_IF(INFO, nfc_debug_enabled)
-        << StringPrintf("%s : uiccslot : %d : enter", __func__, uiccSlot);
-
-    tNFA_STATUS status = NFA_STATUS_OK;
-    if (!isDynamicUiccEnabled) {
-      sCurrentSelectedUICCSlot = uiccSlot;
-      NFA_SetPreferredUiccId(
-          (uiccSlot == 2) ? (SecureElement::getInstance().EE_HANDLE_0xF8 &
-                             ~NFA_HANDLE_GROUP_EE)
-                          : (SecureElement::getInstance().EE_HANDLE_0xF4 &
-                             ~NFA_HANDLE_GROUP_EE));
-    }
-    return status;
+        << StringPrintf("%s: dual uicc not supported ", __func__);
+    uicc_stat = DUAL_UICC_FEATURE_NOT_AVAILABLE;
   }
+  return uicc_stat;
+}
+/**********************************************************************************
+**
+** Function:        nfcManager_staticDualUicc_Precondition
+**
+** Description:    Performs precondition checks before switching UICC
+**
+** Returns:        Returns status as below
+**                 DUAL_UICC_ERROR_NFC_TURNING_OFF when Nfc is Disabling,
+**                 DUAL_UICC_ERROR_INVALID_SLOT when slot id mismatch,
+**                 DUAL_UICC_FEATURE_NOT_AVAILABLE when feature not available,
+**                 UICC_NOT_CONFIGURED when UICC is not configured.
+**********************************************************************************/
+static int nfcManager_staticDualUicc_Precondition(int uiccSlot) {
+  if (isDynamicUiccEnabled) {
+    DLOG_IF(INFO, nfc_debug_enabled) << StringPrintf(
+        "%s:Dual UICC feature not available . Returning", __func__);
+    return DUAL_UICC_FEATURE_NOT_AVAILABLE;
+  }
+
+  int retStat = UICC_NOT_CONFIGURED;
+
+  if (sIsDisabling) {
+    LOG(ERROR) << StringPrintf(
+        "%s:FAIL Nfc is Disabling : Switch UICC not allowed", __func__);
+    retStat = DUAL_UICC_ERROR_NFC_TURNING_OFF;
+  } else if ((uiccSlot != 0x01) && (uiccSlot != 0x02)) {
+    LOG(ERROR) << StringPrintf("%s: Invalid slot id", __func__);
+    retStat = DUAL_UICC_ERROR_INVALID_SLOT;
+  }
+  return retStat;
+}
+
+/*******************************************************************************
+**
+** Function:        nfcManager_setPreferredSimSlot()
+**
+** Description:     This api is used to select a particular UICC slot.
+**
+**
+** Returns:         success/failure
+**
+*******************************************************************************/
+static int nfcManager_setPreferredSimSlot(JNIEnv* e, jobject o,
+                                          jint uiccSlot) {
+  DLOG_IF(INFO, nfc_debug_enabled)
+      << StringPrintf("%s : uiccslot : %d : enter", __func__, uiccSlot);
+
+  int retStat = UICC_NOT_CONFIGURED;
+  NativeJniExtns& jniExtns = NativeJniExtns::getInstance();
+  if (!isDynamicUiccEnabled) {
+    if (jniExtns.isExtensionPresent()) {
+      retStat = nfcManager_staticDualUicc_Precondition(uiccSlot);
+
+      if (retStat != UICC_NOT_CONFIGURED) {
+        DLOG_IF(INFO, nfc_debug_enabled)
+            << StringPrintf("staticDualUicc_Precondition failed.");
+        return NFA_STATUS_FAILED;
+      }
+    }
+    sCurrentSelectedUICCSlot = uiccSlot;
+    NFA_SetPreferredUiccId(
+        (uiccSlot == 2) ? (SecureElement::getInstance().EE_HANDLE_0xF8 &
+                           ~NFA_HANDLE_GROUP_EE)
+                        : (SecureElement::getInstance().EE_HANDLE_0xF4 &
+                           ~NFA_HANDLE_GROUP_EE));
+  }
+  return NFA_STATUS_OK;
+}
 #endif
 } /* namespace android */
 /* namespace android */

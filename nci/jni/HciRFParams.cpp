@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2015-2018 NXP Semiconductors
+ * Copyright (C) 2015-2019 NXP Semiconductors
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -56,8 +56,10 @@ HciRFParams::HciRFParams() {
   bPipeStatus_CeA = 0;
   bPipeStatus_CeB = 0;
   bMode_CeB = 0;
+  aPupiRegDataSize_CeB = 0;
   bAfi_CeB = 0;
   bHighLayerRspSize_CeB = 0;
+  get_config = NULL;
   mIsInit = false;
 }
 

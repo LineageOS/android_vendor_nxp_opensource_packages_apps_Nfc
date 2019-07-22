@@ -150,10 +150,7 @@ class RoutingManager {
     void configureOffHostNfceeTechMask(void);
     void configureEeRegister(bool eeReg);
     void dumpTables(int);
-    bool addApduRouting(uint8_t route, uint8_t powerState,const uint8_t* apduData,
-         uint8_t apduDataLen ,const uint8_t* apduMask, uint8_t apduMaskLen);
 
-    bool removeApduRouting(uint8_t apduDataLen, const uint8_t* apduData);
     uint32_t getUicc2selected();
     bool addAidRouting(const uint8_t* aid, uint8_t aidLen,
                                    int route, int aidInfo, int power);
@@ -269,19 +266,9 @@ class RoutingManager {
     int mHostListnTechMask;
     int mUiccListnTechMask;
     int mFwdFuntnEnable;
-    int mHostListnEnable;
     uint32_t mDefaultIso7816SeID;
     uint32_t mDefaultIso7816Powerstate;
-    uint32_t mDefaultIsoDepSeID;
-    uint32_t mDefaultIsoDepPowerstate;
-    uint32_t mDefaultT3TSeID;
-    uint32_t mDefaultT3TPowerstate;
-    uint32_t mDefaultTechType;
     uint32_t mDefaultTechASeID;
-    uint32_t mDefaultTechAPowerstate;
-    uint32_t mDefaultTechBSeID;
-    uint32_t mDefaultTechBPowerstate;
-    uint32_t mDefaultTechFSeID;
     uint32_t mDefaultTechFPowerstate;
     protoEntry_t mProtoTableEntries[MAX_PROTO_ENTRIES];
     techEntry_t mTechTableEntries[MAX_TECH_ENTRIES];

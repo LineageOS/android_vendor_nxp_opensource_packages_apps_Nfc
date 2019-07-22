@@ -656,9 +656,7 @@ NFCSTATUS Mfc_ReadNdef(void) {
     /* Set Completion Routine for ReadNdef */
     NdefMap->CompletionRoutine[1].CompletionRoutine =
         Mfc_ReadNdef_Completion_Routine;
-    NdefInfo.NdefContinueRead = (uint8_t)((phLibNfc_Ndef_EBegin == Offset)
-                                              ? PH_FRINFC_NDEFMAP_SEEK_BEGIN
-                                              : PH_FRINFC_NDEFMAP_SEEK_CUR);
+    NdefInfo.NdefContinueRead = (uint8_t)PH_FRINFC_NDEFMAP_SEEK_BEGIN;
   }
 
   PacketData = NdefInfo.psUpperNdefMsg->buffer;
@@ -1535,12 +1533,6 @@ STATIC void phLibNfc_CalSectorAddress(uint8_t* Sector_Address) {
 STATIC NFCSTATUS phLibNfc_GetKeyNumberMFC(uint8_t* buffer, uint8_t* bKey) {
   int32_t sdwStat = 0X00;
   NFCSTATUS wStatus = NFCSTATUS_INVALID_PARAMETER;
-
-  /*Key Configuration
-    uint8_t NdefKey[PHLIBNFC_MFC_AUTHKEYLEN] = {0xD3,0XF7,0xD3,0XF7,0xD3,0XF7};
-    uint8_t RawKey[PHLIBNFC_MFC_AUTHKEYLEN] = {0xFF,0XFF,0xFF,0XFF,0xFF,0XFF};
-    uint8_t MadKey[PHLIBNFC_MFC_AUTHKEYLEN] = {0xA0,0XA1,0xA2,0XA3,0xA4,0XA5};
-    uint8_t Key[PHLIBNFC_MFC_AUTHKEYLEN] = {0x00,0x00,0x00,0x00,0x00,0x00}; */ /*Key used during ndef format*/
 
   uint8_t bIndex = 0x00;
   uint8_t bNoOfKeys = 0x00;

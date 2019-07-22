@@ -233,7 +233,7 @@ public class NativeNfcManager implements DeviceHost {
     public boolean setRoutingEntry(int type, int value, int route, int power) {
         return(doSetRoutingEntry(type, value, route, power));
     }
-    
+
     @Override
     public native boolean routeAid(byte[] aid, int route, int aidInfo, int powerState);
 
@@ -241,9 +241,6 @@ public class NativeNfcManager implements DeviceHost {
     @Override
     public native boolean unrouteAid(byte[] aid);
 
-    @Override
-    public native boolean routeApduPattern(int route, int powerState, byte[] apduData, byte[] apduMask);
-    
     @Override
     public native int getAidTableSize();
 
@@ -258,6 +255,9 @@ public class NativeNfcManager implements DeviceHost {
 
     @Override
     public native int   getDefaultFelicaCLTRoute();
+
+    @Override
+    public native void doResonantFrequency(boolean isResonantFreq);
 
     @Override
     public native int   getDefaultAidPowerState();
@@ -284,10 +284,13 @@ public class NativeNfcManager implements DeviceHost {
     public native void setEmptyAidRoute(int deafultAidroute);
 
     @Override
-    public native boolean unrouteApduPattern(byte[] apduData);
+    public native int[] doGetActiveSecureElementList();
 
     @Override
-    public native int[] doGetActiveSecureElementList();
+    public native int doSetFieldDetectMode(boolean mode);
+
+    @Override
+    public native boolean isFieldDetectEnabled();
 
     public native int doRegisterT3tIdentifier(byte[] t3tIdentifier);
 
@@ -333,9 +336,7 @@ public class NativeNfcManager implements DeviceHost {
     public native void doSetScreenState(int screen_state_mask);
 
     @Override
-    public native void doResonantFrequency(boolean isResonantFreq);
 
-    @Override
     public native int getNciVersion();
 
     private native void doEnableDiscovery(int techMask,

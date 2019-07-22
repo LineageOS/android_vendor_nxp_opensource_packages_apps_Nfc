@@ -1,6 +1,6 @@
 /******************************************************************************
  *
- *  Copyright (C) 2015-2018 NXP Semiconductors
+ *  Copyright (C) 2015-2019 NXP Semiconductors
  *
  *  Licensed under the Apache License, Version 2.0 (the "License");
  *  you may not use this file except in compliance with the License.
@@ -40,7 +40,6 @@ typedef enum transactionId {
   NFA_EE_ACTION_EVENT,
   NFA_TRANS_CE_ACTIVATED_EVENT,
   etsiReader,
-  jcosDownload,
   setScreenState,
   staticDualUicc,
   getTransanctionRequest,
@@ -92,16 +91,16 @@ typedef struct Transcation_Check {
 class transactionController {
  private:
   static transactionController* pInstance;  // Reference to controller
-  sem_t barrier;  // barrier: Guard for controlling access to NFCC when profile
+  sem_t mBarrier;  // barrier: Guard for controlling access to NFCC when profile
                   // switch happening
-  IntervalTimer*
-      abortTimer;  // abortTimer: Used for aborting a stuck transaction
-  IntervalTimer* pendingTransHandleTimer;  // pendingTransHandleTimer: Used to
+  IntervalTimer
+      mAbortTimer;  // abortTimer: Used for aborting a stuck transaction
+  IntervalTimer mPendingTransHandleTimer;  // pendingTransHandleTimer: Used to
                                            // schedule pending transaction
                                            // handler thread
   Transcation_Check_t*
-      pTransactionDetail;    // transactionDetail: holds last transaction detail
-  eTransactionId requestor;  // requestor: Identifier of transaction trigger
+      mPTransactionDetail;    // transactionDetail: holds last transaction detail
+  eTransactionId mRequestor;  // requestor: Identifier of transaction trigger
 
   transactionController(void);  // Constructor
   bool transactionLiveLockable(eTransactionId transactionRequestor);

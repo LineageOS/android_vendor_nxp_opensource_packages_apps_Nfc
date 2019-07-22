@@ -23,6 +23,7 @@
 #include <phNfcStatus.h>
 #include <phNfcTypes.h>
 #include <time.h>
+#include <Mutex.h>
 
 typedef void (*TIMER_FUNC)(union sigval);
 
@@ -30,6 +31,7 @@ typedef struct phFriNfc_MifareStdTimer {
   timer_t mTimerId;   // timer id which will be assigned by create timer
   TIMER_FUNC mCb;     // callback function for timeout
   uint32_t mtimeout;  // timeout value in ms.
+  Mutex timerSyncMutex;  // mutext to synchronize timer update
 } phFriNfc_MifareStdTimer_t;
 
 NFCSTATUS phFriNfc_MifareStd_StartTimer(phFriNfc_MifareStdTimer_t* timer);
