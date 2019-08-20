@@ -358,8 +358,10 @@ bool RoutingManager::addAidRouting(const uint8_t* aid, uint8_t aidLen,
       powerState = mCeRouteStrictDisable
                        ? mDefaultIso7816Powerstate
                        : (mDefaultIso7816Powerstate & POWER_STATE_MASK);
-    } else
+    } else {
+      if (route == SecureElement::DH_ID) power = HOST_PWR_STATE;
       powerState = power;
+    }
   }
   tNFA_STATUS nfaStat =
       NFA_EeAddAidRouting(seId, aidLen, (uint8_t*)aid, powerState, aidInfo);
@@ -809,7 +811,6 @@ void RoutingManager::nfaEeCallback(tNFA_EE_EVT event,
   routingManager.mCbEventData = *eventData;
 #if (NXP_EXTNS == TRUE)
   SecureElement& se = SecureElement::getInstance();
-  tNFA_EE_DISCOVER_REQ info = eventData->discover_req;
 #endif
 
   switch (event) {
@@ -920,11 +921,6 @@ void RoutingManager::nfaEeCallback(tNFA_EE_EVT event,
              sizeof(routingManager.mEeInfo));
       routingManager.mReceivedEeInfo = true;
       routingManager.mEeInfoEvent.notifyOne();
-#if (NXP_EXTNS == TRUE)
-      if(nfcFL.nfcNxpEse && nfcFL.eseFL._ESE_ETSI_READER_ENABLE) {
-          MposManager::getInstance().hanldeEtsiReaderReqEvent(&info);
-      }
-#endif
     } break;
 
     case NFA_EE_NO_CB_ERR_EVT:
