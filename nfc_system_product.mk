@@ -1,3 +1,4 @@
+ifeq ($(TARGET_FWK_SUPPORTS_FULL_VALUEADDS), true)
 TARGET_USES_QSSI_NQ_NFC := true
 
 NQ_SYSTEM_NFC := NQNfcNci
@@ -14,4 +15,5 @@ NQ_SYSTEM_NFC += com.android.nfc_extras
 ifeq ($(strip $(TARGET_USES_QSSI_NQ_NFC)),true)
 PRODUCT_PACKAGES += $(NQ_SYSTEM_NFC)
 PRODUCT_BOOT_JARS += com.nxp.nfc.nq
+endif
 endif
