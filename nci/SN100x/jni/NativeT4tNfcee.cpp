@@ -348,9 +348,11 @@ void NativeT4tNfcee::t4tReadComplete(tNFA_STATUS status, tNFA_RX_DATA data) {
     mReadData.len = data.len;
     if (mReadData.len > 0) {
       mReadData.p_data = (uint8_t*)malloc(sizeof(uint8_t) * mReadData.len);
-      memcpy(mReadData.p_data, data.p_data, data.len);
-      DLOG_IF(INFO, nfc_debug_enabled)
-          << StringPrintf("%s: Read Data len: %d ", __func__, mReadData.len);
+      if (mReadData.p_data != nullptr) {
+        memcpy(mReadData.p_data, data.p_data, data.len);
+        DLOG_IF(INFO, nfc_debug_enabled)
+            << StringPrintf("%s: Read Data len: %d ", __func__, mReadData.len);
+      }
     }
   }
   SyncEventGuard g(mT4tNfcEeRWEvent);
