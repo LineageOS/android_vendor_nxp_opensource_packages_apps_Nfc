@@ -196,7 +196,6 @@ public class NfcService implements DeviceHostListener {
     static final int MSG_SCR_STOP_SUCCESS = 71;
     static final int MSG_SCR_STOP_FAIL = 72;
     static final int MSG_SCR_REMOVE_CARD = 73;
-
     // Update stats every 4 hours
     static final long STATS_UPDATE_INTERVAL_MS = 4 * 60 * 60 * 1000;
     static final long MAX_POLLING_PAUSE_TIMEOUT = 40000;
@@ -555,48 +554,43 @@ public class NfcService implements DeviceHostListener {
         sendMessage(NfcService.MSG_TRANSACTION_EVENT, dataObj);
         StatsLog.write(StatsLog.NFC_CARDEMULATION_OCCURRED, StatsLog.NFC_CARDEMULATION_OCCURRED__CATEGORY__OFFHOST, seName);
     }
+
     @Override
-    public void onReaderRequestedFail()
-    {
+    public void onReaderRequestedFail() {
         sendMessage(NfcService.MSG_SCR_REQUESTED_FAIL , null);
     }
+
     @Override
-    public void onReaderStartSuccess()
-     {
+    public void onReaderStartSuccess() {
         sendMessage(NfcService.MSG_SCR_START_SUCCESS , null);
-     }
+    }
+
     @Override
-    public void onReaderStartFail()
-     {
+    public void onReaderStartFail() {
         sendMessage(NfcService.MSG_SCR_START_FAIL , null);
     }
 
     @Override
-    public void onReaderRestart()
-     {
+    public void onReaderRestart() {
         sendMessage(NfcService.MSG_SCR_RESTART , null);
-     }
+    }
 
-    public void onReaderStopSuccess()
-    {
+    public void onReaderStopSuccess() {
         sendMessage(NfcService.MSG_SCR_STOP_SUCCESS , null);
-     }
+    }
 
     @Override
-    public void onReaderStopFail()
-    {
+    public void onReaderStopFail() {
         sendMessage(NfcService.MSG_SCR_STOP_FAIL , null);
     }
 
     @Override
-    public void onReaderRemoveCard()
-    {
+    public void onReaderRemoveCard() {
         sendMessage(NfcService.MSG_SCR_REMOVE_CARD , null);
     }
 
     @Override
-    public void onReaderTimeout()
-    {
+    public void onReaderTimeout() {
         sendMessage(NfcService.MSG_SCR_TIMEOUT, null);
     }
 
@@ -1773,6 +1767,7 @@ public class NfcService implements DeviceHostListener {
                 mDeviceHost.stopPoll(mode);
             }
         }
+
         @Override
         public void startPoll(String pkg) {
            // Check if NFC is enabled
@@ -1934,6 +1929,7 @@ public class NfcService implements DeviceHostListener {
             }
             return TRANSIT_SETCONFIG_STAT_SUCCESS;
         }
+
         @Override
         public int selectUicc(int uiccSlot) throws RemoteException {
             synchronized(NfcService.this) {
@@ -1969,6 +1965,7 @@ public class NfcService implements DeviceHostListener {
                 return status;
             }
         }
+
         @Override
         public List<NfcAidServiceInfo> getServicesAidInfo(int userId, String category){
             return mCardEmulationManager.getServicesAidInfo(userId, category);
@@ -2527,7 +2524,10 @@ public class NfcService implements DeviceHostListener {
 
     boolean _nfcEeReset() throws IOException {
         synchronized (NfcService.this) {
-          return mSecureElement.doReset(EE_HANDLE_0xF3);
+            if (!isNfcEnabledOrShuttingDown()) {
+               throw new IOException("NFC adapter is disabled");
+            }
+            return mSecureElement.doReset(EE_HANDLE_0xF3);
         }
      }
 
@@ -3203,6 +3203,7 @@ public class NfcService implements DeviceHostListener {
                             break;
                         }
                     }
+
                     if (tag.getConnectedTechnology() == TagTechnology.NFC_BARCODE) {
                         // When these tags start containing NDEF, they will require
                         // the stack to deal with them in a different way, since
@@ -3214,6 +3215,7 @@ public class NfcService implements DeviceHostListener {
                         break;
                     }
                     NdefMessage ndefMsg = tag.findAndReadNdef();
+
                     if (ndefMsg == null) {
                         // First try to see if this was a bad tag read
                         if (!tag.reconnect()) {
@@ -3384,6 +3386,7 @@ public class NfcService implements DeviceHostListener {
 
                 case MSG_SCR_RESTART: {
                     Log.d(TAG, "NfcServiceHandler - MSG_SWP_READER_RESTART");
+
                     /* Send broadcast ordered */
                     Intent scrRestartIntent = new Intent();
                     scrRestartIntent
@@ -3393,8 +3396,8 @@ public class NfcService implements DeviceHostListener {
                     }
                     mContext.sendBroadcast(scrRestartIntent);
                     break;
-               }
-               case MSG_SCR_REQUESTED_FAIL: {
+                }
+                case MSG_SCR_REQUESTED_FAIL: {
                     Log.d(TAG, "NfcServiceHandler - MSG_SCR_REQUESTED_FAIL");
                     break;
                }
@@ -3525,9 +3528,9 @@ public class NfcService implements DeviceHostListener {
                  }
                  break;
                }
-               default:
-                 Log.e(TAG, "Unknown message received");
-                 break;
+                default:
+                    Log.e(TAG, "Unknown message received");
+                    break;
             }
         }
 

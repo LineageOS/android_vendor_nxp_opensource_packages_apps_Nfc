@@ -2112,7 +2112,6 @@ void RoutingManager::nfaEeCallback(tNFA_EE_EVT event,
     } break;
 
     case NFA_EE_DISCOVER_REQ_EVT: {
-      tNFA_EE_DISCOVER_REQ info = eventData->discover_req;
       DLOG_IF(INFO, nfc_debug_enabled) << StringPrintf(
           "%s: NFA_EE_DISCOVER_REQ_EVT; status=0x%X; num ee=%u", __func__,
           eventData->discover_req.status, eventData->discover_req.num_ee);
@@ -2121,9 +2120,6 @@ void RoutingManager::nfaEeCallback(tNFA_EE_EVT event,
              sizeof(routingManager.mEeInfo));
       routingManager.mReceivedEeInfo = true;
       routingManager.mEeInfoEvent.notifyOne();
-      if (nfcFL.nfcNxpEse && nfcFL.eseFL._ESE_ETSI_READER_ENABLE) {
-        MposManager::getInstance().hanldeEtsiReaderReqEvent(&info);
-      }
     }
       break;
 
