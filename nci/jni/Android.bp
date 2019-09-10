@@ -21,8 +21,11 @@ cc_library_shared {
 
     srcs: ["**/*.cpp"],
 
+    header_libs: [
+        "libnativehelper_header_only",
+    ],
+
     include_dirs: [
-        "libnativehelper/include/nativehelper",
         "vendor/nxp/opensource/commonsys/external/libnfc-nci/src/nfa/include",
         "vendor/nxp/opensource/commonsys/external/libnfc-nci/src/nfc/include",
         "vendor/nxp/opensource/commonsys/external/libnfc-nci/src/include",

@@ -22,7 +22,7 @@
 
 #include <android-base/stringprintf.h>
 #include <base/logging.h>
-#include <ScopedPrimitiveArray.h>
+#include <nativehelper/ScopedPrimitiveArray.h>
 #include "JavaClassConstants.h"
 #include "NfcTag.h"
 #include "PowerSwitch.h"
