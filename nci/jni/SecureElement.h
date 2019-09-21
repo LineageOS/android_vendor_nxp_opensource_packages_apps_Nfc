@@ -151,7 +151,6 @@ typedef enum apdu_gate {
 typedef enum nfcee_type { UICC1 = 0x01, UICC2 = 0x02, ESE = 0x04 } nfcee_type_t;
 typedef enum { NONE = 0x00, FW_DOWNLOAD, JCOP_DOWNLOAD } Downlaod_mode_t;
 namespace android {
-extern SyncEvent sNfaEnableDisablePollingEvent;
 extern void startStopPolling(bool isStartPolling);
 
 }  // namespace android
@@ -159,6 +158,7 @@ extern void startStopPolling(bool isStartPolling);
 class SecureElement {
  public:
   tNFA_HANDLE mActiveEeHandle;
+  bool mActivatedInListenMode;  // whether we're activated in listen mode
 #if (NXP_EXTNS == TRUE)
 #define MAX_NFCEE 5
   struct mNfceeData {
@@ -789,7 +789,6 @@ class SecureElement {
   int mAtrInfolen;
   uint8_t mAtrStatus;
   bool mUseOberthurWarmReset;         // whether to use warm-reset command
-  bool mActivatedInListenMode;        // whether we're activated in listen mode
   uint8_t mOberthurWarmResetCommand;  // warm-reset command byte
   tNFA_EE_INFO mEeInfo[MAX_NUM_EE];   // actual size stored in mActualNumEe
   tNFA_EE_DISCOVER_REQ mUiccInfo;
