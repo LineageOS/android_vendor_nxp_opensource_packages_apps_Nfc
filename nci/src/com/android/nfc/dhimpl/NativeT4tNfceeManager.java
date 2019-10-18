@@ -14,15 +14,13 @@
  *  See the License for the specific language governing permissions and
  *  limitations under the License.
  *
- *
  ******************************************************************************/
-/*This class describes the interface object and functions to be
-notified to external JNI about JNI events*/
-#include "string"
-#pragma once
-class NativeNfcExtnsEvt {
- public:
-  virtual int notifyNfcEvt(std::string evt, void* evt_data = NULL,
-                           void* evt_code = NULL);
-  virtual ~NativeNfcExtnsEvt();
-};
+package com.android.nfc.dhimpl;
+
+import com.android.nfc.DeviceHost;
+
+public class NativeT4tNfceeManager {
+  public native int doWriteT4tData(byte[] fileId, byte[] data, int length);
+
+  public native byte[] doReadT4tData(byte[] fileId);
+}

@@ -62,6 +62,7 @@ SecureElement::SecureElement() :
     mActiveEeHandle(NFA_HANDLE_INVALID),
     mNewPipeId (0),
     mIsWiredModeOpen (false),
+    mIsSeIntfActivated(false),
     SmbTransceiveTimeOutVal(0),
     mErrorRecovery(false),
     EE_HANDLE_0xF4(0),
@@ -136,6 +137,7 @@ bool SecureElement::initialize(nfc_jni_native_data* native) {
     mActualNumEe    = nfcFL.nfccFL._NFA_EE_MAX_EE_SUPPORTED;
     mbNewEE         = true;
     mNewPipeId      = 0;
+    mIsSeIntfActivated = false;
     mNewSourceGate  = 0;
     memset (mEeInfo, 0, sizeof(mEeInfo));
     memset (&mHciCfg, 0, sizeof(mHciCfg));

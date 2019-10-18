@@ -83,6 +83,7 @@ NfcTag::NfcTag()
       mTechListIndex (0),
       mIsMultiProtocolTag(false),
       mCashbeeDetected(false),
+      mCurrentRequestedProtocol(NFC_PROTOCOL_UNKNOWN),
 #endif
       mTechnologyTimeoutsTable(MAX_NUM_TECHNOLOGY),
       mNativeData(NULL),
@@ -102,7 +103,6 @@ NfcTag::NfcTag()
   memset(mTechParams, 0, sizeof(mTechParams));
   memset(mLastKovioUid, 0, NFC_KOVIO_MAX_LEN);
 #if (NXP_EXTNS == TRUE)
-  mPrevNumTechList = 0;
   memset(&mActivationParams_t, 0, sizeof(activationParams_t));
 #endif
   memset (&mLastKovioTime, 0, sizeof(timespec));

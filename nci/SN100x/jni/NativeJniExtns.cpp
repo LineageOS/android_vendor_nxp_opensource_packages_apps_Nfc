@@ -75,6 +75,12 @@ NativeJniExtns::NativeJniExtns() : lib_handle(NULL) {
 bool NativeJniExtns::loadExtnsLibrary() {
   DLOG_IF(INFO, true) << StringPrintf("%s: Enter", __func__);
   char* error;
+  /*Clear the previous dlerrors if any*/
+  if ((error = dlerror()) != NULL) {
+    DLOG_IF(ERROR, nfc_debug_enabled)
+      << StringPrintf("%s: Clear previous dlerror message = %s",
+           __func__, error);
+  }
   lib_handle = dlopen("/system/lib64/libnfc_jni_extns.so", RTLD_NOW);
 
   if (lib_handle == NULL) {
@@ -180,9 +186,10 @@ NativeJniExtns::~NativeJniExtns() { unloadExtnsLibrary(); };
 ** Returns:         None
 **
 *******************************************************************************/
-void NativeJniExtns::notifyNfcEvent(std::string evt, void* evt_data) {
+void NativeJniExtns::notifyNfcEvent(std::string evt, void* evt_data,
+                                    void* evt_code) {
   if (gNfcExtnsImplInstance != NULL)
-    gNfcExtnsImplInstance->notifyNfcEvt(evt, evt_data);
+    gNfcExtnsImplInstance->notifyNfcEvt(evt, evt_data, evt_code);
 }
 
 /*******************************************************************************
