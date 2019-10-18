@@ -23,7 +23,7 @@ NfcSelfTest NfcSelfTest::sSelfTestMgr;
 
 nxp_selftest_data gselfTestData;
 extern bool nfc_debug_enabled;
-extern SyncEvent sChangeDiscTechEvent;
+extern SyncEvent sNfaEnableDisablePollingEvent;
 extern SyncEvent sNfaSetConfigEvent;
 
 using android::base::StringPrintf;
@@ -152,13 +152,13 @@ uint8_t NfcSelfTest::GetCmdBuffer(uint8_t* aCmdBuf, uint8_t aType) {
       break;
     }
     case CMD_TYPE_RF_ON: {
-      uint8_t CMD_RF_ON[] = {0x2F, 0x3F, 0x03, 0x32, 0x01, 0x00};
+      uint8_t CMD_RF_ON[] = {0x2F, 0x3D, 0x02, 0x20, 0x01};
       cmdLen = sizeof(CMD_RF_ON);
       memcpy(aCmdBuf, CMD_RF_ON, cmdLen);
       break;
     }
     case CMD_TYPE_RF_OFF: {
-      uint8_t CMD_RF_OFF[] = {0x2F, 0x3F, 0x03, 0x32, 0x00, 0x00};
+      uint8_t CMD_RF_OFF[] = {0x2F, 0x3D, 0x02, 0x20, 0x00};
       cmdLen = sizeof(CMD_RF_OFF);
       memcpy(aCmdBuf, CMD_RF_OFF, cmdLen);
       break;
@@ -315,7 +315,7 @@ tNFA_STATUS NfcSelfTest::PerformTransacAB(uint8_t aType) {
   tNFA_STATUS status = NFA_STATUS_FAILED;
   uint8_t tech_mask = 0;
   uint8_t readerProfileSelCfg[] = {0x20, 0x02, 0x09, 0x02, 0xA0, 0x3F,
-                                   0x01, 0x01, 0xA0, 0x44, 0x01, 0x63};
+                                   0x01, 0x03, 0xA0, 0x44, 0x01, 0x63};
   uint8_t val85[] = {0x01};
   uint8_t NFCInitCmdSeq[3] = {CMD_TYPE_CORE_RESET, CMD_TYPE_CORE_INIT,
                               CMD_TYPE_NXP_PROP_EXT};
@@ -324,9 +324,11 @@ tNFA_STATUS NfcSelfTest::PerformTransacAB(uint8_t aType) {
   if (isDiscoveryStarted()) startRfDiscovery(false);
 
   {
-    SyncEventGuard gaurd(sChangeDiscTechEvent);
-    status = NFA_ChangeDiscoveryTech(0x00, 0x00);
-    if (status == NFA_STATUS_OK) sChangeDiscTechEvent.wait(2 * ONE_SECOND_MS);
+    SyncEventGuard gaurd(sNfaEnableDisablePollingEvent);
+    NFA_DisableListening();
+    status = NFA_DisablePolling();
+    if (status == NFA_STATUS_OK)
+      sNfaEnableDisablePollingEvent.wait(2 * ONE_SECOND_MS);
   }
 
   if (aType == TEST_TYPE_TRANSAC_A) {
@@ -363,9 +365,14 @@ tNFA_STATUS NfcSelfTest::PerformTransacAB(uint8_t aType) {
 
   if (status == NFA_STATUS_OK) {
     NFA_SetEmvCoState(TRUE);
-    SyncEventGuard gaurd(sChangeDiscTechEvent);
-    if ((status = NFA_ChangeDiscoveryTech(tech_mask, 0x00)) == NFA_STATUS_OK) {
-      sChangeDiscTechEvent.wait(2 * ONE_SECOND_MS);
+    {
+      SyncEventGuard gaurd(sNfaEnableDisablePollingEvent);
+      status = NFA_EnablePolling(tech_mask);
+      if (status == NFA_STATUS_OK) {
+        sNfaEnableDisablePollingEvent.wait(2 * ONE_SECOND_MS);
+      }
+    }
+    if (status == NFA_STATUS_OK) {
       startRfDiscovery(true);
       {
         SyncEventGuard gaurd(mSelfTestTransacAB);
@@ -373,9 +380,12 @@ tNFA_STATUS NfcSelfTest::PerformTransacAB(uint8_t aType) {
       }
     }
   } else {
-    SyncEventGuard gaurd(sChangeDiscTechEvent);
-    status = NFA_ChangeDiscoveryTech(tech_mask, 0x00);
-    if (status == NFA_STATUS_OK) sChangeDiscTechEvent.wait(2 * ONE_SECOND_MS);
+    {
+      SyncEventGuard gaurd(sNfaEnableDisablePollingEvent);
+      status = NFA_EnablePolling(tech_mask);
+      if (status == NFA_STATUS_OK)
+        sNfaEnableDisablePollingEvent.wait(2 * ONE_SECOND_MS);
+    }
     startRfDiscovery(true);
   }
 
