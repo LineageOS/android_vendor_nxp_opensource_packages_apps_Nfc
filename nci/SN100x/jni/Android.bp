@@ -44,5 +44,6 @@ cc_library_shared {
     static_libs: ["libxml2"],
     sanitize: {
         cfi: true,
+        integer_overflow: true,
     },
 }
