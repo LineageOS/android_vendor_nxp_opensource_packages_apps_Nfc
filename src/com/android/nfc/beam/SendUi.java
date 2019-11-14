@@ -239,7 +239,7 @@ public class SendUi implements Animator.AnimatorListener, View.OnTouchListener,
                 | WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN,
                 PixelFormat.OPAQUE);
         mWindowLayoutParams.privateFlags |=
-                WindowManager.LayoutParams.PRIVATE_FLAG_SHOW_FOR_ALL_USERS;
+                WindowManager.LayoutParams.SYSTEM_FLAG_SHOW_FOR_ALL_USERS;
         mWindowLayoutParams.token = new Binder();
 
         mFrameCounterAnimator = new TimeAnimator();
@@ -539,7 +539,7 @@ public class SendUi implements Animator.AnimatorListener, View.OnTouchListener,
         mContext.unregisterReceiver(mReceiver);
         if (mToastString != null) {
             Toast toast = Toast.makeText(mContext, mToastString, Toast.LENGTH_LONG);
-            toast.getWindowParams().privateFlags |= LayoutParams.PRIVATE_FLAG_SHOW_FOR_ALL_USERS;
+            toast.getWindowParams().privateFlags |= LayoutParams.SYSTEM_FLAG_SHOW_FOR_ALL_USERS;
             toast.show();
         }
         mToastString = null;
