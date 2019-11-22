@@ -62,4 +62,8 @@ cc_library_shared {
             cflags: ["-DDCHECK_ALWAYS_ON"],
         },
     },
+    sanitize: {
+        cfi: true,
+        integer_overflow: true,
+    },
 }
