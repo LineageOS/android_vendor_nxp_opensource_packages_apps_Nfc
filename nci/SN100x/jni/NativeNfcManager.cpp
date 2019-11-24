@@ -107,6 +107,7 @@ extern void nativeLlcpConnectionlessSocket_receiveData(uint8_t* data,
                                                        uint32_t remote_sap);
 #if(NXP_EXTNS == TRUE)
 extern tNFA_STATUS Nxp_doResonantFrequency(bool modeOn);
+extern tNFA_STATUS nativeNfcTag_safeDisconnect();
 void handleWiredmode(bool isShutdown);
 int nfcManager_doPartialInitialize(JNIEnv* e, jobject o);
 int nfcManager_doPartialDeInitialize(JNIEnv* e, jobject o);
@@ -117,7 +118,8 @@ extern tNFA_STATUS NxpPropCmd_send(uint8_t * pData4Tx, uint8_t dataLen,
                                    uint8_t * rsp_len, uint8_t * rsp_buf,
                                    uint32_t rspTimeout, tHAL_NFC_ENTRY * halMgr);
 extern tNFA_STATUS send_flush_ram_to_flash();
-extern void nativeNfcTag_checkActivatedProtoParameters(tNFA_ACTIVATED& activationData);
+extern bool nativeNfcTag_checkActivatedProtoParameters(
+    tNFA_ACTIVATED& activationData);
 extern bool gIsWaiting4Deact2SleepNtf;
 extern bool gGotDeact2IdleNtf;
 #endif
@@ -290,6 +292,7 @@ static int nfcManager_doGetSelectedUicc(JNIEnv* e, jobject o);
 static jint nfcManager_nfcSelfTest(JNIEnv* e, jobject o, jint aType);
 static int nfcManager_staticDualUicc_Precondition(int uiccSlot);
 static int nfcManager_setPreferredSimSlot(JNIEnv* e, jobject o, jint uiccSlot);
+static bool nfcManager_deactivateOnPollDisabled(tNFA_ACTIVATED& activated);
 #endif
 static uint16_t sCurrentConfigLen;
 static uint8_t sConfig[256];
@@ -301,6 +304,7 @@ static bool gsNfaPartialEnabled = false;
 #endif
 #if (NXP_EXTNS==TRUE)
 static int prevScreenState = NFA_SCREEN_STATE_UNKNOWN;
+static bool scrnOnLockedPollDisabled = false;
 #else
 static int prevScreenState = NFA_SCREEN_STATE_OFF_UNLOCKED;
 #endif
@@ -539,20 +543,32 @@ static void nfaConnectionCallback(uint8_t connEvent,
       NfcTag::getInstance().setActive(true);
       if (sIsDisabling || !sIsNfaEnabled) break;
       gActivated = true;
-
+#if (NXP_EXTNS != TRUE)
       NfcTag::getInstance().setActivationState();
+#endif
       if (gIsSelectingRfInterface) {
+#if (NXP_EXTNS == TRUE)
+        if (nativeNfcTag_checkActivatedProtoParameters(eventData->activated)) {
+          NfcTag::getInstance().setActivationState();
+        }
+#endif
         nativeNfcTag_doConnectStatus(true);
-        nativeNfcTag_checkActivatedProtoParameters(eventData->activated);
         break;
       }
+#if (NXP_EXTNS == TRUE)
+      NfcTag::getInstance().setActivationState();
+#endif
 
       nativeNfcTag_resetPresenceCheck();
+#if (NXP_EXTNS == TRUE)
+      if (nfcManager_deactivateOnPollDisabled(eventData->activated)) break;
+#else
       if (!isListenMode(eventData->activated) &&
           (prevScreenState == NFA_SCREEN_STATE_OFF_LOCKED ||
            prevScreenState == NFA_SCREEN_STATE_OFF_UNLOCKED)) {
         NFA_Deactivate(FALSE);
       }
+#endif
       if (isPeerToPeer(eventData->activated)) {
         if (sReaderModeEnabled) {
           DLOG_IF(INFO, nfc_debug_enabled) << StringPrintf(
@@ -2748,6 +2764,7 @@ static void nfcManager_doSetScreenState(JNIEnv* e, jobject o,
     LOG_IF(INFO, nfc_debug_enabled)<< StringPrintf("Screen state is not changed.");
     return;
   }
+  scrnOnLockedPollDisabled = false;
   NativeJniExtns::getInstance().notifyNfcEvent(__func__);
 #endif
   DLOG_IF(INFO, nfc_debug_enabled)
@@ -2790,6 +2807,11 @@ static void nfcManager_doSetScreenState(JNIEnv* e, jobject o,
         (screen_state_mask & NFA_SCREEN_POLLING_TAG_MASK)
             ? (NCI_LISTEN_DH_NFCEE_ENABLE_MASK | NCI_POLLING_DH_ENABLE_MASK)
             : (NCI_POLLING_DH_DISABLE_MASK | NCI_LISTEN_DH_NFCEE_ENABLE_MASK);
+#if (NXP_EXTNS == TRUE)
+    if (!(screen_state_mask & NFA_SCREEN_POLLING_TAG_MASK)) {
+      scrnOnLockedPollDisabled = true;
+    }
+#endif
   }
 
   if (state == NFA_SCREEN_STATE_ON_UNLOCKED) {
@@ -3235,6 +3257,41 @@ void doStartupConfig() {
 **
 *******************************************************************************/
 bool nfcManager_isNfcActive() { return sIsNfaEnabled; }
+
+#if (NXP_EXTNS == TRUE)
+/*******************************************************************************
+**
+** Function:        nfcManager_isNfcDisabling
+**
+** Description:     Used externally to determine if NFC is being turned off.
+**
+** Returns:         'true' if the NFC stack is turning off, else 'false'.
+**
+*******************************************************************************/
+bool nfcManager_isNfcDisabling() { return sIsDisabling; }
+#endif
+
+/*******************************************************************************
+**
+** Function:        nfcManager_deactivateOnPollDisabled
+**
+** Description:     Perform deactivate when not in listen mode & polling is
+**                  disabled then return true otherwise false.
+**
+** Returns:         'true' if the NFC stack is turning off, else 'false'.
+**
+*******************************************************************************/
+static bool nfcManager_deactivateOnPollDisabled(tNFA_ACTIVATED& activated) {
+  if (!isListenMode(activated) &&
+      (prevScreenState == NFA_SCREEN_STATE_OFF_LOCKED ||
+       prevScreenState == NFA_SCREEN_STATE_OFF_UNLOCKED || scrnOnLockedPollDisabled)) {
+    DLOG_IF(INFO, nfc_debug_enabled)
+        << StringPrintf("%s: RF DEACTIVATE to discovery.....", __func__);
+    nativeNfcTag_safeDisconnect();
+    return true;
+  }
+  return false;
+}
 
 /*******************************************************************************
 **
