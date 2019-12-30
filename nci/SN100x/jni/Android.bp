@@ -35,6 +35,7 @@ cc_library_shared {
         "libsn100nfc-nci",
         "libchrome",
         "libbase",
+        "vendor.nxp.hardware.nfc@2.0",
     ],
     product_variables: {
         debuggable: {
