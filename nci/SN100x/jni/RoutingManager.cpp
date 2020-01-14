@@ -2,8 +2,7 @@
  * Copyright (c) 2016, The Linux Foundation. All rights reserved.
  * Not a Contribution.
  *
- * Copyright (C) 2018-2019 NXP Semiconductors
- * The original Work has been changed by NXP Semiconductors.
+ * Copyright 2018-2019 NXP
  *
  * Copyright (C) 2013 The Android Open Source Project
  *
@@ -222,10 +221,15 @@ bool RoutingManager::initialize(nfc_jni_native_data* native) {
 #if (NXP_EXTNS == TRUE)
   if (mHostListnTechMask) {
 #endif
-     // Register a wild-card for AIDs routed to the host
-     nfaStat = NFA_CeRegisterAidOnDH(NULL, 0, stackCallback);
-     if (nfaStat != NFA_STATUS_OK)
-        LOG(ERROR) << fn << "Failed to register wildcard AID for DH";
+    // Tell the host-routing to only listen on Nfc-A
+    nfaStat = NFA_CeSetIsoDepListenTech(NFA_TECHNOLOGY_MASK_A);
+    if (nfaStat != NFA_STATUS_OK)
+      LOG(ERROR) << StringPrintf("Failed to configure CE IsoDep technologies");
+
+    // Register a wild-card for AIDs routed to the host
+    nfaStat = NFA_CeRegisterAidOnDH(NULL, 0, stackCallback);
+    if (nfaStat != NFA_STATUS_OK)
+      LOG(ERROR) << fn << "Failed to register wildcard AID for DH";
 #if (NXP_EXTNS == TRUE)
   }
 #endif
@@ -354,14 +358,14 @@ bool RoutingManager::addAidRouting(const uint8_t* aid, uint8_t aidLen,
   }
   SyncEventGuard guard(mAidAddRemoveEvent);
   if (!mSecureNfcEnabled) {
-    if ((aid == nullptr) && (aidLen == 0x00)) {
-      powerState = mCeRouteStrictDisable
-                       ? mDefaultIso7816Powerstate
-                       : (mDefaultIso7816Powerstate & POWER_STATE_MASK);
-    } else {
-      if (route == SecureElement::DH_ID) power = HOST_PWR_STATE;
-      powerState = power;
+    /*Map PWR state as per NCI2.0 if required*/
+    bool stat = checkAndUpdatePowerState(power);
+
+    if (route == SecureElement::DH_ID) {
+      power &= ~(PWR_SWTCH_OFF_MASK | PWR_BATT_OFF_MASK);
+      if (!stat) power &= HOST_PWR_STATE;
     }
+    powerState = power;
   }
   tNFA_STATUS nfaStat =
       NFA_EeAddAidRouting(seId, aidLen, (uint8_t*)aid, powerState, aidInfo);
@@ -649,10 +653,15 @@ void RoutingManager::updateDefaultRoute() {
 #if (NXP_EXTNS == TRUE)
   uint16_t routeLoc = ((mDefaultSysCodeRoute == 0x00) ? ROUTE_LOC_HOST_ID :
         ((mDefaultSysCodeRoute == 0x01 ) ? ROUTE_LOC_ESE_ID : getUiccRouteLocId(mDefaultSysCodeRoute)));
-      if(mDefaultSysCodeRoute == 0)
-      {
-        mDefaultSysCodePowerstate &= 0x11;
-      }
+
+  /*Map PWR state as per NCI2.0 if required*/
+  bool stat = checkAndUpdatePowerState((int&)mDefaultSysCodePowerstate);
+
+  if (mDefaultSysCodeRoute == SecureElement::DH_ID) {
+    mDefaultSysCodePowerstate &= ~(PWR_SWTCH_OFF_MASK | PWR_BATT_OFF_MASK);
+
+    if (!stat) mDefaultSysCodePowerstate &= (HOST_PWR_STATE);
+  }
 #endif
 
   // Register System Code for routing
@@ -660,7 +669,7 @@ void RoutingManager::updateDefaultRoute() {
 #if (NXP_EXTNS == TRUE)
   tNFA_STATUS nfaStat = NFA_EeAddSystemCodeRouting(
       mDefaultSysCode, routeLoc,
-      mSecureNfcEnabled ? 0x01 : mDefaultSysCodePowerstate);
+      mSecureNfcEnabled ? (mDefaultSysCodePowerstate & 0x01) : mDefaultSysCodePowerstate);
 #else
   tNFA_STATUS nfaStat = NFA_EeAddSystemCodeRouting(
       mDefaultSysCode, mDefaultSysCodeRoute,
@@ -708,7 +717,7 @@ tNFA_TECHNOLOGY_MASK RoutingManager::updateEeTechRouteSetting() {
     return allSeTechMask;
 
   DLOG_IF(INFO, nfc_debug_enabled)
-      << fn << ": Number of EE is " << mEeInfo.num_ee;
+      << fn << ": Number of EE is " << (int)mEeInfo.num_ee;
 
   tNFA_STATUS nfaStat;
   for (uint8_t i = 0; i < mEeInfo.num_ee; i++) {
@@ -1122,7 +1131,7 @@ void RoutingManager::nfcFCeCallback(uint8_t event,
 
 bool RoutingManager::setNfcSecure(bool enable) {
   mSecureNfcEnabled = enable;
-  DLOG_IF(INFO, true) << "chi setNfcSecure NfcService " << enable;
+  DLOG_IF(INFO, true) << "setNfcSecure NfcService " << enable;
   return true;
 }
 
@@ -1227,9 +1236,12 @@ void RoutingManager::registerProtoRouteEnrty(tNFA_HANDLE     ee_handle,
   {
     SyncEventGuard guard(mRoutingEvent);
     nfaStat = NFA_EeSetDefaultProtoRouting(
-        ee_handle, protocols_switch_on, protocols_switch_off,
-        protocols_battery_off, protocols_screen_lock, protocols_screen_off,
-        protocols_screen_off_lock);
+        ee_handle, protocols_switch_on,
+        mSecureNfcEnabled ? 0 :protocols_switch_off,
+        mSecureNfcEnabled ? 0 :protocols_battery_off,
+        mSecureNfcEnabled ? 0 :protocols_screen_lock,
+        mSecureNfcEnabled ? 0 :protocols_screen_off,
+        mSecureNfcEnabled ? 0 :protocols_screen_off_lock);
     if (nfaStat == NFA_STATUS_OK) {
       mRoutingEvent.wait();
       DLOG_IF(INFO, nfc_debug_enabled) << StringPrintf("tech routing SUCCESS");
@@ -1390,9 +1402,14 @@ bool RoutingManager::setRoutingEntry(int type, int value, int route, int power)
         }
     }
 
-    if((ee_handle == ROUTE_LOC_HOST_ID) && (NFA_SET_PROTOCOL_ROUTING == type))
-    {
-      power &= (PWR_SWTCH_ON_SCRN_LOCK_MASK | PWR_SWTCH_ON_SCRN_UNLCK_MASK);
+    /*Map PWR state as per NCI2.0 if required*/
+    bool stat = checkAndUpdatePowerState(power);
+
+    if ((ee_handle == ROUTE_LOC_HOST_ID) &&
+        (NFA_SET_PROTOCOL_ROUTING == type)) {
+      power &= ~(PWR_SWTCH_OFF_MASK | PWR_BATT_OFF_MASK);
+
+      if (!stat) power &= (HOST_PWR_STATE);
       isSeIDPresent = 1;
     }
 
@@ -1651,7 +1668,7 @@ void RoutingManager::setEmptyAidEntry(int route) {
 
     DLOG_IF(INFO, nfc_debug_enabled) << StringPrintf("%s: enter",__func__);
     uint16_t routeLoc = NFA_HANDLE_INVALID;
-    uint8_t power;
+    uint32_t power;
     uint8_t count,seId=0;
     uint8_t isDefaultAidRoutePresent = 0;
     unsigned long     check_default_proto_se_id_req = 0;
@@ -1712,12 +1729,22 @@ void RoutingManager::setEmptyAidEntry(int route) {
       }
     }
     DLOG_IF(INFO, nfc_debug_enabled) << StringPrintf("%s: route %x",__func__,routeLoc);
+
+    /*Map PWR state as per NCI2.0 if required*/
+    bool stat = checkAndUpdatePowerState((int&)power);
+
     if(routeLoc == ROUTE_LOC_HOST_ID) {
-      power &= 0x11;
+      power &= ~(PWR_SWTCH_OFF_MASK | PWR_BATT_OFF_MASK);
+      if (!stat) power &= (HOST_PWR_STATE);
     }
+
     if(mDefaultGsmaPowerState) {
+      /*Map PWR state as per NCI2.0 if required*/
+      checkAndUpdatePowerState((int&)mDefaultGsmaPowerState);
+
       if(routeLoc == ROUTE_LOC_HOST_ID)
-        power = (mDefaultGsmaPowerState & 0x39);
+        power = (mDefaultGsmaPowerState &
+                 (~(PWR_SWTCH_OFF_MASK | PWR_BATT_OFF_MASK)));
       else
         power = mDefaultGsmaPowerState;
       DLOG_IF(INFO, nfc_debug_enabled) << StringPrintf("%s: gsma  %x",__func__,power);
@@ -1725,8 +1752,11 @@ void RoutingManager::setEmptyAidEntry(int route) {
 
     DLOG_IF(INFO, nfc_debug_enabled) << StringPrintf("%s: power %x",__func__,power);
     if(power){
-        tNFA_STATUS nfaStat = NFA_EeAddAidRouting(routeLoc, 0, NULL, mSecureNfcEnabled ? 0x01 : power, AID_ROUTE_QUAL_PREFIX);
-        DLOG_IF(INFO, nfc_debug_enabled) << StringPrintf("%s: Status :0x%2x", __func__, nfaStat);
+      tNFA_STATUS nfaStat = NFA_EeAddAidRouting(
+          routeLoc, 0, NULL, mSecureNfcEnabled ? 0x01 : (uint8_t)power,
+          AID_ROUTE_QUAL_PREFIX);
+      DLOG_IF(INFO, nfc_debug_enabled)
+          << StringPrintf("%s: Status :0x%2x", __func__, nfaStat);
     }else{
         LOG(ERROR) << StringPrintf("%s:Invalid Power State" ,__func__);
     }
@@ -1845,29 +1875,29 @@ void RoutingManager::dumpTables(int xx)
     {
     case 1://print only proto table
         LOG(ERROR) << StringPrintf("--------------------Proto Table Entries------------------" );
-        for(int xx=0;xx<MAX_PROTO_ENTRIES;xx++)
-        {
-            LOG(ERROR) << StringPrintf("|Index=%d|RouteLoc=0x%03X|Proto=0x%02X|Power=0x%02X|Enable=0x%01X|",
-                    xx,mProtoTableEntries[xx].routeLoc,
-                    mProtoTableEntries[xx].protocol,
-                    mProtoTableEntries[xx].power,
-                    mProtoTableEntries[xx].enable);
+        for (int xx = 0; xx < MAX_PROTO_ENTRIES; xx++) {
+          LOG(ERROR) << StringPrintf(
+              "|Index=%d|RouteLoc=0x%03X|Proto=0x%02X|Power=0x%02X|Enable=0x%"
+              "01X|",
+              xx, mProtoTableEntries[xx].routeLoc,
+              mProtoTableEntries[xx].protocol, mProtoTableEntries[xx].power,
+              mProtoTableEntries[xx].enable);
         }
         //ALOGV("---------------------------------------------------------" );
         break;
     case 2://print Lmrt proto table
         LOG(ERROR) << StringPrintf("----------------------------------------Lmrt Proto Entries------------------------------------" );
-        for(int xx=0;xx<MAX_ROUTE_LOC_ENTRIES;xx++)
-        {
-            LOG(ERROR) << StringPrintf("|Index=%d|nfceeID=0x%03X|SWTCH-ON=0x%02X|SWTCH-OFF=0x%02X|BAT-OFF=0x%02X|SCRN-LOCK=0x%02X|SCRN-OFF=0x%02X|SCRN-OFF_LOCK=0x%02X",
-                    xx,
-                    mLmrtEntries[xx].nfceeID,
-                    mLmrtEntries[xx].proto_switch_on,
-                    mLmrtEntries[xx].proto_switch_off,
-                    mLmrtEntries[xx].proto_battery_off,
-                    mLmrtEntries[xx].proto_screen_lock,
-                    mLmrtEntries[xx].proto_screen_off,
-                    mLmrtEntries[xx].proto_screen_off_lock);
+        for (int xx = 0; xx < MAX_ROUTE_LOC_ENTRIES; xx++) {
+          LOG(ERROR) << StringPrintf(
+              "|Index=%d|nfceeID=0x%03X|SWTCH-ON=0x%02X|SWTCH-OFF=0x%02X|BAT-"
+              "OFF=0x%02X|SCRN-LOCK=0x%02X|SCRN-OFF=0x%02X|SCRN-OFF_LOCK=0x%"
+              "02X",
+              xx, mLmrtEntries[xx].nfceeID, mLmrtEntries[xx].proto_switch_on,
+              mLmrtEntries[xx].proto_switch_off,
+              mLmrtEntries[xx].proto_battery_off,
+              mLmrtEntries[xx].proto_screen_lock,
+              mLmrtEntries[xx].proto_screen_off,
+              mLmrtEntries[xx].proto_screen_off_lock);
         }
         //ALOGV("----------------------------------------------------------------------------------------------" );
         break;
@@ -2009,5 +2039,31 @@ void RoutingManager::processGetRoutingRsp(tNFA_DM_CBACK_DATA* eventData) {
     SyncEventGuard guard(sNfaGetRoutingEvent);
     sNfaGetRoutingEvent.notifyOne();
   }
+}
+
+/*******************************************************************************
+**
+** Function:        checkAndUpdatePowerState
+**
+** Description:     Maps the proprietary power states to NCI2.0 power state
+**                  Input power : Proprietary power input
+**
+** Returns:         If JNI_EXTNS present(true), otherwise (false)
+**
+*******************************************************************************/
+bool RoutingManager::checkAndUpdatePowerState(int& power) {
+  bool status = false;
+  uint8_t tempPower = (uint8_t)(power & POWER_STATE_MASK);
+  NativeJniExtns& jniExtns = NativeJniExtns::getInstance();
+
+  if (jniExtns.isExtensionPresent()) {
+    NativeJniExtns::getInstance().notifyNfcEvent("updateRoutingPowerState",
+                                                 (void*)&tempPower);
+    status = true;
+  } else {
+    status = false;
+  }
+  power = tempPower;
+  return status;
 }
 #endif

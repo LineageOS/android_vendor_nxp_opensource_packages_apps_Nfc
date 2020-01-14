@@ -35,6 +35,7 @@
 
 #include <android-base/stringprintf.h>
 #include <base/logging.h>
+#include <log/log.h>
 #include <nfc_api.h>
 #include <nfc_int.h>
 #include <phNfcCompId.h>
@@ -450,6 +451,10 @@ static void Mfc_WriteNdef_Completion_Routine(void* NdefCtxt, NFCSTATUS status) {
   (void)NdefCtxt;
   tNFA_CONN_EVT_DATA conn_evt_data;
 
+#if (NXP_EXTNS == TRUE)
+  NdefInfo.psUpperNdefMsg->buffer = nullptr;
+  NdefInfo.psUpperNdefMsg->length = 0x00;
+#endif
   conn_evt_data.status = status;
   (*gphNxpExtns_Context.p_conn_cback)(NFA_WRITE_CPLT_EVT, &conn_evt_data);
 
@@ -1010,12 +1015,21 @@ NFCSTATUS Mfc_Transceive(uint8_t* p_data, uint32_t len) {
   NFCSTATUS status = NFCSTATUS_FAILED;
   uint8_t i = 0x00;
 
+  if (len == 0) {
+    android_errorWriteLog(0x534e4554, "132082342");
+    return status;
+  }
+
   gphNxpExtns_Context.RawWriteCallBack = false;
   gphNxpExtns_Context.CallBackMifare = NULL;
   gphNxpExtns_Context.CallBackCtxt = NdefMap;
 
   EXTNS_SetCallBackFlag(true);
   if (p_data[0] == 0x60 || p_data[0] == 0x61) {
+    if (len < 12) {
+      android_errorWriteLog(0x534e4554, "125900276");
+      return status;
+    }
     NdefMap->Cmd.MfCmd = (phNfc_eMifareCmdList_t)p_data[0];
 
     NdefMap->SendRecvBuf[i++] = p_data[1];
@@ -1533,12 +1547,6 @@ static NFCSTATUS phLibNfc_GetKeyNumberMFC(uint8_t* buffer, uint8_t* bKey) {
   int32_t sdwStat = 0X00;
   NFCSTATUS wStatus = NFCSTATUS_INVALID_PARAMETER;
 
-  /*Key Configuration
-    uint8_t NdefKey[PHLIBNFC_MFC_AUTHKEYLEN] = {0xD3,0XF7,0xD3,0XF7,0xD3,0XF7};
-    uint8_t RawKey[PHLIBNFC_MFC_AUTHKEYLEN] = {0xFF,0XFF,0xFF,0XFF,0xFF,0XFF};
-    uint8_t MadKey[PHLIBNFC_MFC_AUTHKEYLEN] = {0xA0,0XA1,0xA2,0XA3,0xA4,0XA5};
-    uint8_t Key[PHLIBNFC_MFC_AUTHKEYLEN] = {0x00,0x00,0x00,0x00,0x00,0x00}; */ /*Key used during ndef format*/
-
   uint8_t bIndex = 0x00;
   uint8_t bNoOfKeys = 0x00;
 
@@ -1873,6 +1881,11 @@ NFCSTATUS phFriNfc_ExtnsTransceive(phNfc_sTransceiveInfo_t* pTransceiveInfo,
   uint8_t restore_payload[] = {
       0x00, 0x00, 0x00, 0x00,
   };
+
+  if (SendLength == 0) {
+    android_errorWriteLog(0x534e4554, "132083376");
+    return status;
+  }
 
   buff = (uint8_t*)malloc((uint32_t)MAX_BUFF_SIZE);
   if (NULL == buff) {

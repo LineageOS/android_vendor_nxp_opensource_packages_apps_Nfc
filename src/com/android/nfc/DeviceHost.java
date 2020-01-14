@@ -78,21 +78,7 @@ public interface DeviceHost {
         /**
          * Notifies SWP Reader Events.
          */
-        public void onReaderRequestedFail();
-
-        public void onReaderStartSuccess();
-
-        public void onReaderStartFail();
-
-        public void onReaderRestart();
-
-        public void onReaderStopSuccess();
-
-        public void onReaderStopFail();
-
-        public void onReaderRemoveCard();
-
-        public void onReaderTimeout();
+        public void onScrNotifyEvents(int event);
 
         public void onNfcTransactionEvent(byte[] aid, byte[] data, String seName);
     }
@@ -357,4 +343,7 @@ public interface DeviceHost {
     public boolean isFieldDetectEnabled();
     public int doWriteT4tData(byte[] fileId, byte[] data, int length);
     public byte[] doReadT4tData(byte[] fileId);
+    public boolean doLockT4tData(boolean lock);
+    public boolean isLockedT4tData();
+    public boolean doClearNdefT4tData();
 }

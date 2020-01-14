@@ -66,7 +66,15 @@ enum NFCSELFTESTCMDTYPE {
   CMD_TYPE_NFCC_DISC_MAP,
   CMD_TYPE_NFCC_DEACTIVATE,
   CMD_TYPE_RF_ON,
-  CMD_TYPE_RF_OFF
+  CMD_TYPE_RF_OFF,
+  CMD_TYPE_PRBS_ON,
+  CMD_TYPE_SPC_NTF_EN,
+  CMD_TYPE_SPC_BLK1,
+  CMD_TYPE_SPC_BLK2,
+  CMD_TYPE_SPC_BLK3,
+  CMD_TYPE_SPC_START,
+  CMD_TYPE_SPC_ROUTE,
+  CMD_TYPE_NFCC_ALLOW_CHANGE_PARAM,
 };
 
 enum NFCCSELFTESTTYPE {
@@ -76,6 +84,9 @@ enum NFCCSELFTESTTYPE {
   TEST_TYPE_RF_OFF,
   TEST_TYPE_TRANSAC_A,
   TEST_TYPE_TRANSAC_B,
+  TEST_TYPE_PRBS_ON,
+  TEST_TYPE_PRBS_OFF,
+  TEST_TYPE_SPC,
   TEST_TYPE_NONE = 0xFF
 };
 
@@ -89,6 +100,8 @@ typedef struct nxp_selftest_data {
   bool isStored;
   bool copyData;
   bool fSetResFreq;
+  uint8_t prbsTech;
+  uint8_t prbsRate;
   tNFA_STATUS wstatus;
 } nxp_selftest_data;
 
@@ -182,6 +195,21 @@ class NfcSelfTest {
    */
   tNFA_STATUS PerformResonantFreq(bool on);
 
+  /**
+   * Executes: Configures the FW and starts the SPC algorithm to save the customer
+   *           phase offset into RF_CUST_PHASE_COMPENSATION.
+   * @param    None
+   * @return status SUCCESS or FAILED.
+   */
+  tNFA_STATUS PerformSPCTest();
+  /*******************************************************************************
+   ** Executes: Perform Prbs
+   ** @param  on denotes
+   **         TRUE  - prbs start()
+   **         FALSE - prbs stop()
+   ** @return status SUCCESS or FAILED.
+   *******************************************************************************/
+  tNFA_STATUS PerformPrbs(bool on);
   /**
    * Provides the command buffer for the given command type
    * @param CmdBuf- for the given command type

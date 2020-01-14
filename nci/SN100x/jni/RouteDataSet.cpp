@@ -2,8 +2,7 @@
  * Copyright (c) 2016, The Linux Foundation. All rights reserved.
  * Not a Contribution.
  *
- * Copyright (C) 2015 NXP Semiconductors
- * The original Work has been changed by NXP Semiconductors.
+ * Copyright 2019 NXP
  *
  * Copyright (C) 2012 The Android Open Source Project
  *
@@ -62,9 +61,11 @@ AidBuffer::AidBuffer(std::string& aid) : mBuffer(NULL), mBufferLen(0) {
 
   // parse the AID string; each hex number is separated by a colon;
   mBuffer = new uint8_t[aid.length()];
-  while (true) {
-    num = 0;
-    if (mBuffer != NULL) {
+#if (NXP_EXTNS == TRUE)
+  if (mBuffer != NULL) {
+#endif
+    while (true) {
+      num = 0;
       if (pos2 == std::string::npos) {
         sscanf(aid.substr(pos1).c_str(), "%x", &num);
         mBuffer[mBufferLen] = (uint8_t)num;
@@ -78,7 +79,9 @@ AidBuffer::AidBuffer(std::string& aid) : mBuffer(NULL), mBufferLen(0) {
         pos2 = aid.find_first_of(delimiter, pos1);
       }
     }
+#if (NXP_EXTNS == TRUE)
   }
+#endif
 }
 
 /*******************************************************************************
