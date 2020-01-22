@@ -477,6 +477,11 @@ public class CardEmulationManager implements RegisteredServicesCache.Callback,
         public boolean supportsAidPrefixRegistration() throws RemoteException {
             return mAidCache.supportsAidPrefixRegistration();
         }
+
+        @Override
+        public ApduServiceInfo getPreferredPaymentService(int userId) throws RemoteException {
+            throw new RemoteException("Not Implemented");
+        }
     }
 
     /**
