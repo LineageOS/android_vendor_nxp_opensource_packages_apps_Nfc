@@ -38,7 +38,7 @@ import android.os.SystemProperties;
 
 import android.os.RemoteException;
 import java.util.NoSuchElementException;
-import vendor.nxp.hardware.nfc.V1_1.INqNfc;
+import vendor.nxp.hardware.nfc.V2_0.INqNfc;
 
 /**
  * Native interface to the NFC Manager functions
@@ -98,7 +98,7 @@ public class NativeNfcManager implements DeviceHost {
 
         try {
             if(mNqHal == null) {
-                Log.d(TAG, "INqNfc 1.1 interface not initialized yet. Getting INqNfcV1_1 Service");
+                Log.d(TAG, "INqNfc 2.0 interface not initialized yet. Getting INqNfcV2_0 Service");
                 mNqHal = INqNfc.getService();
             }
             if(mNqHal != null) {
@@ -108,7 +108,7 @@ public class NativeNfcManager implements DeviceHost {
             }
         }
         catch(RemoteException | NoSuchElementException e) {
-            Log.e(TAG, "INqNfc 1.1 element not supported");
+            Log.e(TAG, "INqNfc 2.0 element not supported");
         }
 
         if(isHalServiceSupported == false) {

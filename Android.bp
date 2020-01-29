@@ -12,7 +12,7 @@ android_app {
     libs: ["com.nxp.nfc.nq"],
     static_libs: [
         "android-support-core-utils",
-        "vendor.nxp.hardware.nfc-V1.1-java",
+        "vendor.nxp.hardware.nfc-V2.0-java",
         ],
     optimize: {
         enabled: false,
