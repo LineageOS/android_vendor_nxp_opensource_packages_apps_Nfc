@@ -1,5 +1,6 @@
 cc_library_shared {
     name: "libsn100nfc_nci_jni",
+    system_ext_specific: true,
 
     cflags:
      ["-DNXP_EXTNS=TRUE"]  + [
