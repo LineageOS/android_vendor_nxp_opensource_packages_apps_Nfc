@@ -39,6 +39,7 @@ import android.os.UserHandle;
 import android.util.Log;
 
 import com.android.nfc.NfcService;
+import com.android.nfc.NfcStatsLog;
 import com.android.nfc.cardemulation.RegisteredAidCache.AidResolveInfo;
 
 import java.io.FileDescriptor;
@@ -227,12 +228,12 @@ public class HostEmulationManager {
                         mState = STATE_W4_SERVICE;
                     }
                     if(CardEmulation.CATEGORY_PAYMENT.equals(resolveInfo.category))
-                      StatsLog.write(StatsLog.NFC_CARDEMULATION_OCCURRED,
-                                     StatsLog.NFC_CARDEMULATION_OCCURRED__CATEGORY__HCE_PAYMENT,
+                      NfcStatsLog.write(NfcStatsLog.NFC_CARDEMULATION_OCCURRED,
+                                     NfcStatsLog.NFC_CARDEMULATION_OCCURRED__CATEGORY__HCE_PAYMENT,
                                      "HCE");
                     else
-                      StatsLog.write(StatsLog.NFC_CARDEMULATION_OCCURRED,
-                                     StatsLog.NFC_CARDEMULATION_OCCURRED__CATEGORY__HCE_OTHER,
+                      NfcStatsLog.write(NfcStatsLog.NFC_CARDEMULATION_OCCURRED,
+                                     NfcStatsLog.NFC_CARDEMULATION_OCCURRED__CATEGORY__HCE_OTHER,
                                      "HCE");
 
                 } else {
