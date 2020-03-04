@@ -25,10 +25,7 @@
 | android-10.0.0_r2              |  10.00.0D (SN110) |  NFC_AR_00_6000_10.00.0D_OpnSrc |
 | android-10.0.0_r2              |  10.00.0F (SN110) |  NFC_AR_00_6000_10.00.0F_OpnSrc || android-10.0.0_r2              |  10.00.0F (SN110) |  NFC_AR_00_6000_10.00.0F_OpnSrc |
 
-
-
-
-
-
-
-
+#### Supported Version on "br_android_ncihalx_11" branch
+| Android Version        | NXP Release          | NXP Tag  |
+| :-------------: |:---------------------:| :-----:|
+| aosp-master           |  11.01.00 (SN110) |  NFC_AR_00_6000_11.01.00_OpnSrc |

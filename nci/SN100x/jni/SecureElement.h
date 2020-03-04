@@ -37,6 +37,7 @@
 #define CONNECTIVITY_PIPE_ID_UICC3 0x31
 #define NFA_EE_TAG_HCI_HOST_ID 0xA0 /* HCI host ID */
 #define SMX_PIPE_ID 0x19
+#define NFA_ESE_HARD_RESET  0x05
 #if (NXP_EXTNS == TRUE)
 typedef enum {
   UICC_01_SELECTED_ENABLED = 0x01,
@@ -57,6 +58,7 @@ public:
   static const uint8_t UICC3_ID = 0x04;
   static const uint8_t ESE_ID = 0x01;
   static const uint8_t DH_ID = 0x00;
+  static const uint8_t T4T_NFCEE_ID = 0x7F;
   static const uint8_t NFCC_DECIDES     = 0x00;     //NFCC decides
   static const uint8_t POWER_ALWAYS_ON  = 0x01;     //NFCEE Power Supply always On
   static const uint8_t COMM_LINK_ACTIVE = 0x02;     //NFCC to NFCEE Communication link always active when the NFCEE  is powered on.
@@ -79,6 +81,7 @@ public:
   static const tNFA_HANDLE EE_HANDLE_0xF8 = 0x481; //handle to secure element in slot 2
   static const tNFA_HANDLE EE_HANDLE_0xF9 = 0x482; //handle to secure element in slot 3
   static const tNFA_HANDLE EE_HANDLE_0xF0 = 0x400;//NFCEE handle for host
+  static const tNFA_HANDLE EE_HANDLE_0xFE = 0x410;  // T4T NFCEE handle
   static const uint8_t EE_APP_HANLDE_ESE   = 0xF3;
   static const uint8_t EE_APP_HANLDE_UICC  = 0xF4;
   static const uint8_t EE_APP_HANLDE_UICC2 = 0xF8;

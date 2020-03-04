@@ -2,7 +2,7 @@
  * Copyright (c) 2016, The Linux Foundation. All rights reserved.
  * Not a Contribution.
  *
- * Copyright (C) 2018-2019 NXP Semiconductors
+ * Copyright (C) 2018-2020 NXP Semiconductors
  * The original Work has been changed by NXP Semiconductors.
  *
  * Copyright (C) 2012 The Android Open Source Project
@@ -188,15 +188,14 @@ static jboolean nativeNfcSecureElement_doResetForEseCosUpdate(JNIEnv*, jobject,
   int ret = -1;
   NfcAdaptation& theInstance = NfcAdaptation::GetInstance();
   tHAL_NFC_ENTRY* halFuncEntries = theInstance.GetHalEntryFuncs ();
-  nfc_nci_IoctlInOutData_t inpOutData;
-  inpOutData.inp.level = (uint64_t)Constants::NCI_ESE_HARD_RESET_IOCTL;
+
   LOG(INFO) << StringPrintf("%s: Entry", __func__);
   if(NULL == halFuncEntries) {
     LOG(INFO) << StringPrintf("%s: halFuncEntries is NULL", __func__);
   } else {
-    ret = halFuncEntries->ioctl((long)NfcEvent1::HAL_NFC_IOCTL_ESE_HARD_RESET, (void*)&inpOutData);
-    if(ret < 0) {
-      LOG(INFO) << StringPrintf("%s: IOCTL failed", __func__);
+    ret = theInstance.resetEse((uint64_t)NFA_ESE_HARD_RESET);
+    if(ret == 0) {
+      LOG(INFO) << StringPrintf("%s: reset IOCTL failed", __func__);
     } else {
       stat = true;
     }

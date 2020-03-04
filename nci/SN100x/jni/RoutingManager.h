@@ -159,11 +159,13 @@ class RoutingManager {
     void configureOffHostNfceeTechMask(void);
     void configureEeRegister(bool eeReg);
     void dumpTables(int);
+    tNFA_HANDLE checkAndUpdateAltRoute(int& routeLoc);
 
     uint32_t getUicc2selected();
     bool addAidRouting(const uint8_t* aid, uint8_t aidLen,
                                    int route, int aidInfo, int power);
     bool checkAndUpdatePowerState(int& power);
+    bool isNfceeActive(int routeLoc, tNFA_HANDLE& ActDevHandle);
     uint16_t sRoutingBuffLen;
     uint8_t* sRoutingBuff;
     SyncEvent       sNfaGetRoutingEvent;
@@ -264,6 +266,9 @@ class RoutingManager {
     //FIX THIS:static const int ROUTE_LOC_UICC3_ID     = SecureElement::EE_HANDLE_0xF9;
     static const int ROUTE_LOC_UICC2_ID     = 0x481;
     static const int ROUTE_LOC_UICC3_ID     = 0x482;
+    static const int ROUTE_DISABLE          = 0x00;
+    static const int ROUTE_DH               = 0x01;
+    static const int ROUTE_ESE              = 0x02;
     int mHostListnTechMask;
     int mUiccListnTechMask;
     int mFwdFuntnEnable;
@@ -279,6 +284,7 @@ class RoutingManager {
     uint32_t mTechSupportedByUicc1;
     uint32_t mTechSupportedByUicc2;
     uint8_t mOffHostAidRoutingPowerState;
+    uint8_t mHostListenTechMask;
 
 #endif
 };

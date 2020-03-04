@@ -4,7 +4,7 @@
  *  Copyright (c) 2016, The Linux Foundation. All rights reserved.
  *  Not a Contribution.
  *
- *  Copyright (C) 2018-2019 NXP Semiconductors
+ *  Copyright (C) 2018-2020 NXP Semiconductors
  *  The original Work has been changed by NXP Semiconductors.
  *
  *  Copyright (C) 2012 The Android Open Source Project
@@ -124,7 +124,8 @@ extern bool nativeNfcTag_checkActivatedProtoParameters(
 extern bool gIsWaiting4Deact2SleepNtf;
 extern bool gGotDeact2IdleNtf;
 extern void nativeNfcTag_abortTagOperations(tNFA_STATUS status);
-extern void nativeNfcTag_setRfProtocol(tNFA_INTF_TYPE rfProtocol);
+extern void nativeNfcTag_setRfProtocol(tNFA_INTF_TYPE rfProtocol, uint8_t mode);
+extern uint8_t nativeNfcTag_getActivatedMode();
 #endif
 }  // namespace android
 
@@ -137,7 +138,6 @@ bool gActivated = false;
 SyncEvent gDeactivatedEvent;
 SyncEvent sNfaSetPowerSubState;
 bool legacy_mfc_reader = true;
-bool gNfccConfigControlStatus = false;
 SyncEvent sChangeDiscTechEvent;
 SyncEvent sNfaSetConfigEvent;  // event for Set_Config....
 #if(NXP_EXTNS == TRUE)
@@ -537,7 +537,15 @@ static void nfaConnectionCallback(uint8_t connEvent,
         nativeNfcTag_setRfInterface(
                 (tNFA_INTF_TYPE)eventData->activated.activate_ntf.intf_param.type);
 #if (NXP_EXTNS == TRUE)
-        nativeNfcTag_setRfProtocol((tNFA_INTF_TYPE)eventData->activated.activate_ntf.protocol);
+        nativeNfcTag_setRfProtocol(
+            (tNFA_INTF_TYPE)eventData->activated.activate_ntf.protocol,
+            eventData->activated.activate_ntf.rf_tech_param.mode);
+        if (nativeNfcTag_getActivatedMode() == TARGET_TYPE_ISO14443_3B) {
+          DLOG_IF(INFO, nfc_debug_enabled) << StringPrintf(
+              "%s: NFA_ACTIVATED_EVT: received typeB NFCID0", __func__);
+          NfcTag::getInstance().updateNfcID0Param(
+              eventData->activated.activate_ntf.rf_tech_param.param.pb.nfcid0);
+        }
 #endif
       }
       if (EXTNS_GetConnectFlag() == TRUE) {
@@ -1038,7 +1046,7 @@ void nfaDeviceManagementCallback(uint8_t dmEvent,
 #if(NXP_EXTNS == TRUE)
       SecureElement::getInstance().notifyRfFieldEvent (
                     eventData->rf_field.rf_field_status == NFA_DM_RF_FIELD_ON);
-#endif
+#else
 if (!sP2pActive && eventData->rf_field.status == NFA_STATUS_OK) {
         struct nfc_jni_native_data* nat = getNative(NULL, NULL);
         JNIEnv* e = NULL;
@@ -1054,6 +1062,7 @@ if (!sP2pActive && eventData->rf_field.status == NFA_STATUS_OK) {
           e->CallVoidMethod(nat->manager,
                             android::gCachedNfcManagerNotifyRfFieldDeactivated);
       }
+#endif
       break;
 
     case NFA_DM_NFCC_TRANSPORT_ERR_EVT:
@@ -1285,18 +1294,9 @@ static jboolean nfcManager_routeAid(JNIEnv* e, jobject, jbyteArray aid,
 #endif
   uint8_t* buf;
   size_t bufLen;
-  ScopedByteArrayRO bytes(e);
-  if (aid == NULL) {
-    buf = NULL;
-    bufLen = 0;
-    DLOG_IF(INFO, nfc_debug_enabled)
-        << StringPrintf("nfcManager_routeAid:  NULL");
-  } else {
-    bytes.reset(aid);
-    buf = const_cast<uint8_t*>(reinterpret_cast<const uint8_t*>(&bytes[0]));
-    bufLen = bytes.size();
-  }
 #if (NXP_EXTNS == TRUE)
+  if (aid == NULL)
+    RoutingManager::getInstance().checkAndUpdateAltRoute(route);
   SecureElement& se = SecureElement::getInstance();
   if ((!isDynamicUiccEnabled) &&
       (route == se.UICC_ID || route == se.UICC2_ID)) {  // UICC or UICC2 HANDLE
@@ -1309,7 +1309,26 @@ static jboolean nfcManager_routeAid(JNIEnv* e, jobject, jbyteArray aid,
      */
     route = (sCurrentSelectedUICCSlot != se.UICC_ID) ? se.UICC_ID : se.UICC2_ID;
   }
+#endif
+  if (aid == NULL) {
+    buf = NULL;
+    bufLen = 0;
+    DLOG_IF(INFO, nfc_debug_enabled)
+        << StringPrintf("nfcManager_routeAid:  NULL");
+#if (NXP_EXTNS == TRUE)
     return RoutingManager::getInstance().addAidRouting(buf, bufLen, route,
+        aidInfo, power);
+#else
+    return RoutingManager::getInstance().addAidRouting(buf, bufLen, route,
+                                                     aidInfo);
+#endif
+  }
+  ScopedByteArrayRO bytes(e);
+  bytes.reset(aid);
+  buf = const_cast<uint8_t*>(reinterpret_cast<const uint8_t*>(&bytes[0]));
+  bufLen = bytes.size();
+#if (NXP_EXTNS == TRUE)
+  return RoutingManager::getInstance().addAidRouting(buf, bufLen, route,
                                                      aidInfo, power);
 #else
   return RoutingManager::getInstance().addAidRouting(buf, bufLen, route,
@@ -1331,18 +1350,17 @@ static jboolean nfcManager_routeAid(JNIEnv* e, jobject, jbyteArray aid,
 static jboolean nfcManager_unrouteAid(JNIEnv* e, jobject, jbyteArray aid) {
   uint8_t* buf;
   size_t bufLen;
-  ScopedByteArrayRO bytes(e);
 
   if (aid == NULL) {
     buf = NULL;
     bufLen = 0;
-  } else {
-    bytes.reset(aid);
-    buf = const_cast<uint8_t*>(reinterpret_cast<const uint8_t*>(&bytes[0]));
-    bufLen = bytes.size();
+    return RoutingManager::getInstance().removeAidRouting(buf, bufLen);
   }
-  bool result = RoutingManager::getInstance().removeAidRouting(buf, bufLen);
-  return result;
+  ScopedByteArrayRO bytes(e);
+  bytes.reset(aid);
+  buf = const_cast<uint8_t*>(reinterpret_cast<const uint8_t*>(&bytes[0]));
+  bufLen = bytes.size();
+  return RoutingManager::getInstance().removeAidRouting(buf, bufLen);
 }
 
 /*******************************************************************************
@@ -1488,9 +1506,9 @@ static jboolean nfcManager_doInitialize(JNIEnv* e, jobject o) {
 #if (NXP_EXTNS == TRUE)
     mwVer=  NFA_GetMwVersion();
     LOG(ERROR) << StringPrintf(
-        "%s:  MW Version: NFC_AR_%02X_%04X_%02d.%02x.%02x_RC%0x", __func__,
+        "%s:  MW Version: NFC_AR_%02X_%04X_%02d.%02x.%02x", __func__,
         mwVer.cust_id, mwVer.validation, mwVer.android_version,
-        mwVer.major_version, mwVer.minor_version,mwVer.rc_version);
+        mwVer.major_version, mwVer.minor_version);
 
     if (NfcConfig::hasKey(NAME_NXP_DUAL_UICC_ENABLE)) {
       isDynamicUiccEnabled = NfcConfig::getUnsigned(NAME_NXP_DUAL_UICC_ENABLE);
@@ -1649,7 +1667,6 @@ static void nfcManager_configNfccConfigControl(bool flag) {
   if (NFC_GetNCIVersion() != NCI_VERSION_1_0) {
     uint8_t nfa_set_config[] = { 0x00 };
     nfa_set_config[0] = (flag == true ? 1 : 0);
-    gNfccConfigControlStatus = flag;
 
     tNFA_STATUS status = NFA_SetConfig(NCI_PARAM_ID_NFCC_CONFIG_CONTROL, sizeof(nfa_set_config),
             &nfa_set_config[0]);
@@ -1747,16 +1764,21 @@ static void nfcManager_enableDiscovery(JNIEnv* e, jobject o,
         struct nfc_jni_native_data* nat = getNative(e, o);
         sReaderModeEnabled = false;
         NFA_EnableListening();
-#if (NXP_EXTNS == FALSE)
+
         // configure NFCC_CONFIG_CONTROL- NFCC allowed to manage RF configuration.
-        if(gNfccConfigControlStatus == false){
-            nfcManager_configNfccConfigControl(true);
-       }
-#endif
+        nfcManager_configNfccConfigControl(true);
+
         NFA_SetRfDiscoveryDuration(nat->discovery_duration);
       }
     }
   } else {
+#if (NXP_EXTNS == TRUE)
+    if (!enable_p2p && sP2pEnabled) {
+      sP2pEnabled = false;
+      PeerToPeer::getInstance().enableP2pListening(false);
+      NFA_PauseP2p();
+    }
+#endif
     // No technologies configured, stop polling
     stopPolling_rfDiscoveryDisabled();
   }
@@ -2131,6 +2153,7 @@ static jobject nfcManager_doCreateLlcpConnectionlessSocket(JNIEnv*, jobject,
       << StringPrintf("%s: nSap=0x%X", __func__, nSap);
   return NULL;
 }
+#if (NXP_EXTNS == TRUE)
 /*******************************************************************************
 **
 ** Function:        nfcManager_getDefaultAidRoute
@@ -2143,42 +2166,22 @@ static jobject nfcManager_doCreateLlcpConnectionlessSocket(JNIEnv*, jobject,
 ** Returns:         None
 **
 *******************************************************************************/
-static jint nfcManager_getDefaultAidRoute (JNIEnv* /* e */, jobject /* o */) {
-  unsigned long num = 0;
+static jint nfcManager_getDefaultAidRoute(JNIEnv* /* e */, jobject /* o */) {
+  int num = 0;
   if (NfcConfig::hasKey(NAME_DEFAULT_AID_ROUTE))
-    num = NfcConfig::getUnsigned(NAME_DEFAULT_AID_ROUTE);
-#if (NXP_EXTNS == TRUE)
+    num = (int)NfcConfig::getUnsigned(NAME_DEFAULT_AID_ROUTE);
   else
     return NFA_HANDLE_INVALID;
-#endif
 
-  DLOG_IF(INFO, nfc_debug_enabled) << StringPrintf("%s: num %lx", __func__, num);
-  if(num != SecureElement::DH_ID) {
-    tNFA_HANDLE defaultRouteHandle = SecureElement::getInstance().getEseHandleFromGenericId(num) & ~NFA_HANDLE_GROUP_EE;
-    DLOG_IF(INFO, nfc_debug_enabled) << StringPrintf("%s: defaultRouteHandle %hx", __func__, defaultRouteHandle);
-    bool  found = false;
-    tNFA_HANDLE ee_handleList[nfcFL.nfccFL._NFA_EE_MAX_EE_SUPPORTED];
-    uint8_t count = 0;
-    SecureElement::getInstance().getEeHandleList(ee_handleList, &count);
-    for (int  i = 0; i < count; i++) {
-      if(ee_handleList[i] == defaultRouteHandle) {
-        DLOG_IF(INFO, nfc_debug_enabled)
-          << StringPrintf("%s: Default AID Route handle found 0x %hx", __func__, defaultRouteHandle);
-        found = true;
-        break;
-      }
-    }
-    if(!found) {
-      DLOG_IF(INFO, nfc_debug_enabled)
-        << StringPrintf(" Default AID Route handle not found , DH ");
-      num = SecureElement::DH_ID;
-    }
-  }
+  DLOG_IF(INFO, nfc_debug_enabled) << StringPrintf("%s: num %x", __func__, num);
 
+  RoutingManager::getInstance().checkAndUpdateAltRoute(num);
   DLOG_IF(INFO, nfc_debug_enabled)
-    << StringPrintf("%s route = %lx",__func__, num);
+    << StringPrintf("%s route = %x",__func__, num);
   return num;
 }
+#endif
+
 /*******************************************************************************
 **
 ** Function:        nfcManager_getDefaultDesfireRoute
@@ -2197,6 +2200,27 @@ static jint nfcManager_getDefaultDesfireRoute (JNIEnv* /* e */, jobject /* o */)
       num = NfcConfig::getUnsigned(NAME_DEFAULT_ISODEP_ROUTE);
     return num;
   }
+
+/*******************************************************************************
+**
+** Function:        nfcManager_getT4TNfceePowerState
+**
+** Description:     Get the T4T Nfcee power state supported.
+**                  e: JVM environment.
+**                  o: Java object.
+**                  mode: Not used.
+**
+** Returns:         None
+**
+*******************************************************************************/
+static jint nfcManager_getT4TNfceePowerState(JNIEnv* /* e */, jobject /* o */) {
+  RoutingManager& routingManager = RoutingManager::getInstance();
+  int defaultPowerState = ~(routingManager.PWR_SWTCH_OFF_MASK |
+          routingManager.PWR_BATT_OFF_MASK);
+
+  return NfcConfig::getUnsigned(NAME_DEFAULT_T4TNFCEE_AID_POWER_STATE,
+          defaultPowerState);
+}
 
 /*******************************************************************************
  **
@@ -3135,6 +3159,8 @@ static JNINativeMethod gMethods[] = {
     {"getDefaultMifareCLTPowerState", "()I",
             (void*) nfcManager_getDefaultMifareCLTPowerState},
 #if(NXP_EXTNS == TRUE)
+    {"getT4TNfceePowerState", "()I",
+            (void*) nfcManager_getT4TNfceePowerState},
     {"getGsmaPwrState", "()I",
             (void*) nfcManager_getDefaulGsmaPowerState}
      ,{"getDefaultFelicaCLTPowerState", "()I",
@@ -3288,12 +3314,11 @@ void doStartupConfig() {
   }
 
   // configure NFCC_CONFIG_CONTROL- NFCC allowed to manage RF configuration.
-  if(gNfccConfigControlStatus == false){
-     nfcManager_configNfccConfigControl(true);
+  nfcManager_configNfccConfigControl(true);
 #if (NXP_EXTNS == TRUE)
     send_flush_ram_to_flash();
 #endif
-  }
+
 }
 
 /*******************************************************************************
@@ -3317,6 +3342,28 @@ bool nfcManager_isNfcActive() { return sIsNfaEnabled; }
 **
 *******************************************************************************/
 bool nfcManager_isNfcDisabling() { return sIsDisabling; }
+
+/*******************************************************************************
+**
+** Function:        nfcManager_isReaderModeEnabled
+**
+** Description:     Used externally to determine if reader mode is Enabled.
+**
+** Returns:         'true' if reader mode enabled, else 'false'.
+**
+*******************************************************************************/
+bool nfcManager_isReaderModeEnabled() { return sReaderModeEnabled; }
+
+/*******************************************************************************
+**
+** Function:        nfcManager_isNfcPartialEnabled
+**
+** Description:     Used externally to determine if NFC is being Enabled partially.
+**
+** Returns:         'true' if the NFC Partially enabled, else 'false'.
+**
+*******************************************************************************/
+bool nfcManager_isNfcPartialEnabled() { return gsNfaPartialEnabled; }
 
 /*******************************************************************************
 **

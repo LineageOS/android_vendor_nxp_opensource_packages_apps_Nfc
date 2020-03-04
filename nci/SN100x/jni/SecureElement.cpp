@@ -442,19 +442,31 @@ void SecureElement::notifyRfFieldEvent (bool isActive)
 
 
     mMutex.lock();
+    JNIEnv* e = NULL;
+    if (mNativeData == NULL) {
+        DLOG_IF(ERROR, nfc_debug_enabled)
+                << StringPrintf("%s: mNativeData is null", fn);
+        return;
+    }
+    ScopedAttach attach(mNativeData->vm, &e);
+    if (e == NULL) {
+      LOG(ERROR) << StringPrintf("jni env is null");
+      return;
+    }
     int ret = clock_gettime (CLOCK_MONOTONIC, &mLastRfFieldToggle);
     if (ret == -1) {
         DLOG_IF(ERROR, nfc_debug_enabled)
                 << StringPrintf("%s: clock_gettime failed", fn);
         // There is no good choice here...
     }
-    if (isActive)
-    {
+    if (isActive) {
         mRfFieldIsOn = true;
-    }
-    else
-    {
+        e->CallVoidMethod(mNativeData->manager,
+                                android::gCachedNfcManagerNotifyRfFieldActivated);
+    } else {
         mRfFieldIsOn = false;
+        e->CallVoidMethod(mNativeData->manager,
+                          android::gCachedNfcManagerNotifyRfFieldDeactivated);
     }
     mMutex.unlock();
     DLOG_IF(ERROR, nfc_debug_enabled)
@@ -1514,9 +1526,13 @@ tNFA_HANDLE SecureElement::getEseHandleFromGenericId(jint eseId)
     {
       handle = rm.getUiccRouteLocId(eseId);
     }
+    else if(eseId == T4T_NFCEE_ID) //T4T NFCEE
+    {
+      handle = SecureElement::getInstance().EE_HANDLE_0xFE;  // 0x410;
+    }
     else if(eseId == EE_APP_HANLDE_UICC) //UICC
     {
-        handle = SecureElement::getInstance().EE_HANDLE_0xF4; //0x402;
+      handle = SecureElement::getInstance().EE_HANDLE_0xF4;  // 0x402;
     }
     else if(eseId == EE_APP_HANLDE_UICC2) //UICC
     {
@@ -1699,6 +1715,10 @@ struct timespec SecureElement::getLastRfFiledToggleTime(void)
 void SecureElement::finalize() {
   mIsInit     = false;
   mNativeData = NULL;
+#if(NXP_EXTNS == TRUE)
+  mRfFieldIsOn = false;
+  memset (&mLastRfFieldToggle, 0, sizeof(mLastRfFieldToggle));
+#endif
 }
 
 /*******************************************************************************

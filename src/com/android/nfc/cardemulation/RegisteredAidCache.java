@@ -958,6 +958,16 @@ public class RegisteredAidCache {
         }
     }
 
+    public ComponentName getPreferredService() {
+        if (mPreferredForegroundService != null) {
+            // return current foreground service
+            return mPreferredForegroundService;
+        } else {
+            // return current preferred service
+            return mPreferredPaymentService;
+        }
+    }
+
     public void onRoutingTableChanged() {
       if (DBG)
         Log.d(TAG, "onRoutingTableChanged");
@@ -1032,10 +1042,10 @@ public class RegisteredAidCache {
           /*Mapping SWITCH_ON(0x01) to PROP_SCRN_ON_UNLOCKED(0x20)*/
           tempPwrState |= PROP_SCRN_ON_UNLOCKED;
         }
-        if((inputPwr & SCREEN_STATE_OFF_UNLOCKED) == SCREEN_STATE_OFF_UNLOCKED||
-                (inputPwr & SCREEN_STATE_OFF_UNLOCKED) == SCREEN_STATE_OFF_UNLOCKED) {
-          /*Mapping SCREEN_STATE_OFF_UNLOCKED or SCREEN_STATE_OFF_UNLOCKED
-           * to SCREEN_STATE_OFF_UNLOCKED*/
+        if((inputPwr & SCREEN_STATE_OFF_UNLOCKED) == SCREEN_STATE_OFF_UNLOCKED ||
+                (inputPwr & SCREEN_STATE_OFF_LOCKED) == SCREEN_STATE_OFF_LOCKED) {
+          /*Mapping SCREEN_STATE_OFF_UNLOCKED(0x08) or SCREEN_STATE_OFF_LOCKED(0x20)
+           * to PROP_SCRN_OFF(0x08)*/
           tempPwrState |= PROP_SCRN_OFF;
         }
         inputPwr = tempPwrState;

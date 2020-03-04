@@ -35,7 +35,7 @@
 *  See the License for the specific language governing permissions and
 *  limitations under the License.
 *
-*  Copyright 2018-2019 NXP
+*  Copyright 2018-2020 NXP
 *
 ******************************************************************************/
 
@@ -46,6 +46,7 @@
 
 #include <android-base/stringprintf.h>
 #include <base/logging.h>
+#include <log/log.h>
 #include <nativehelper/ScopedLocalRef.h>
 #include <nativehelper/ScopedPrimitiveArray.h>
 
@@ -64,6 +65,10 @@ static void deleteglobaldata(JNIEnv* e);
 static jobjectArray techActBytes1;
 int selectedId = 0;
 static jobjectArray techPollBytes2;
+static bool isP2pDetected = false;
+namespace android {
+  extern bool nfcManager_isReaderModeEnabled();
+}
 #endif
 
 /*******************************************************************************
@@ -142,6 +147,7 @@ void NfcTag::initialize(nfc_jni_native_data* native) {
   mNumDiscNtf = 0;
   mNumDiscTechList = 0;
   mTechListIndex = 0;
+  isP2pDetected = false;
 #endif
   mtT1tMaxMessageSize = 0;
   mReadCompletedStatus = NFA_STATUS_OK;
@@ -228,6 +234,22 @@ void NfcTag::resetActivationState() {
   mActivationState = InActive;
   DLOG_IF(INFO, nfc_debug_enabled)
       << StringPrintf("%s: state=%u", fn, mActivationState);
+}
+
+/******************************************************************************
+**
+** Function:        updateNfcID0Param
+**
+** Description:     Update TypeB NCIID0 from interface activated ntf.
+**
+** Returns:         None.
+**
+*******************************************************************************/
+void NfcTag::updateNfcID0Param(uint8_t* nfcID0) {
+  static const char fn[] = "NfcTag::updateNfcID0Param";
+  DLOG_IF(INFO, nfc_debug_enabled) << StringPrintf(
+      "%s: nfcID0 =%x%x%x%x", fn, nfcID0[0], nfcID0[1], nfcID0[2], nfcID0[3]);
+  memcpy(&mNfcID0[0], nfcID0, 4);
 }
 #endif
 /*******************************************************************************
@@ -677,7 +699,7 @@ void NfcTag::createNativeNfcTag(tNFA_ACTIVATED& activationData) {
   // notify NFC service about this new tag
 #if (NXP_EXTNS == TRUE)
   DLOG_IF(ERROR, nfc_debug_enabled) << StringPrintf("%s; mNumDiscNtf=%x", fn,mNumDiscNtf);
-  if(!mNumDiscNtf || NfcTag::getInstance().checkNextValidProtocol() == -1) {
+  if(isNfcCombiCard() || !mNumDiscNtf || NfcTag::getInstance().checkNextValidProtocol() == -1) {
     mNumDiscNtf = 0;
     DLOG_IF(INFO, nfc_debug_enabled)
         << StringPrintf("%s: try notify nfc service", fn);
@@ -716,6 +738,24 @@ void NfcTag::createNativeNfcTag(tNFA_ACTIVATED& activationData) {
 **
 *******************************************************************************/
 bool NfcTag::isCashBeeActivated() { return mCashbeeDetected; }
+
+/*******************************************************************************
+**
+** Function:        isNfcCombiCard
+**
+** Description:     checks if NFCDEP combi card detected
+**
+** Returns:         True if tag is activated.
+**
+*******************************************************************************/
+bool NfcTag::isNfcCombiCard() {
+  if ((android::nfcManager_isReaderModeEnabled() && isP2pDetected &&
+       mNumDiscNtf == 1)) {
+    isP2pDetected = false;
+    return true;
+  } else
+    return false;
+}
 
 /*******************************************************************************
 **
@@ -893,7 +933,14 @@ void NfcTag::fillNativeNfcTagMembers3(JNIEnv* e, jclass tag_cls, jobject tag,
         DLOG_IF(INFO, nfc_debug_enabled)
             << StringPrintf("%s: tech B; TARGET_TYPE_ISO14443_3B", fn);
         len = mTechParams[i].param.pb.sensb_res_len;
-        len = len - 4;  // subtract 4 bytes for NFCID0 at byte 2 through 5
+        if (len >= NFC_NFCID0_MAX_LEN) {
+          // subtract 4 bytes for NFCID0 at byte 2 through 5
+          len = len - NFC_NFCID0_MAX_LEN;
+        } else {
+          android_errorWriteLog(0x534e4554, "124940143");
+          LOG(ERROR) << StringPrintf("%s: sensb_res_len error", fn);
+          len = 0;
+        }
         pollBytes.reset(e->NewByteArray(len));
         e->SetByteArrayRegion(pollBytes.get(), 0, len,
                               (jbyte*)(mTechParams[i].param.pb.sensb_res + 4));
@@ -1243,6 +1290,10 @@ bool NfcTag::isP2pDiscovered() {
       break;
     }
   }
+#if (NXP_EXTNS == TRUE)
+  if (!isP2pDetected) isP2pDetected = retval;
+#endif
+
   DLOG_IF(INFO, nfc_debug_enabled) << StringPrintf("%s: return=%u", fn, retval);
   return retval;
 }
@@ -1305,6 +1356,7 @@ void NfcTag::resetTechnologies() {
   mNumTechList = 0;
 #if (NXP_EXTNS == TRUE)
   mTechListIndex = 0;
+  isP2pDetected = false;
 #endif
   memset(mTechList, 0, sizeof(mTechList));
   memset(mTechHandles, 0, sizeof(mTechHandles));
