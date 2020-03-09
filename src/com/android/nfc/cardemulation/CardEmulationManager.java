@@ -509,11 +509,6 @@ public class CardEmulationManager implements RegisteredServicesCache.Callback,
             NfcPermissions.enforcePreferredPaymentInfoPermissions(mContext);
             return mServiceCache.getService(userId, mAidCache.getPreferredService());
         }
-
-        @Override
-        public ApduServiceInfo getPreferredPaymentService(int userId) throws RemoteException {
-            throw new RemoteException("Not Implemented");
-        }
     }
 
     /**
