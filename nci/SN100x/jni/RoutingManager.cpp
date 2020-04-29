@@ -2,7 +2,7 @@
  * Copyright (c) 2016, The Linux Foundation. All rights reserved.
  * Not a Contribution.
  *
- * Copyright 2018-2019 NXP
+ * Copyright 2018-2020 NXP
  *
  * Copyright (C) 2013 The Android Open Source Project
  *
@@ -202,6 +202,11 @@ bool RoutingManager::initialize(nfc_jni_native_data* native) {
     mDefaultFelicaRoute = NfcConfig::getUnsigned(NAME_DEFAULT_FELICA_CLT_ROUTE, 0x00);
 
     mDefaultOffHostRoute = NfcConfig::getUnsigned(NAME_DEFAULT_OFFHOST_ROUTE, 0x00);
+
+    mDefaultSysCodePowerstate = NfcConfig::getUnsigned(
+        NAME_DEFAULT_SYS_CODE_PWR_STATE,
+        (PWR_SWTCH_ON_SCRN_UNLCK_MASK | PWR_SWTCH_ON_SCRN_LOCK_MASK |
+         PWR_SWTCH_ON_SCRN_OFF_MASK));
 
     DLOG_IF(INFO, nfc_debug_enabled)
         << StringPrintf("%s: mDefaultGsmaPowerState %02x)", fn, mDefaultGsmaPowerState);

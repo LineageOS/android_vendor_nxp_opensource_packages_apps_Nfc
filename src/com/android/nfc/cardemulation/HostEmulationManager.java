@@ -2,7 +2,7 @@
  * Copyright (c) 2015, The Linux Foundation. All rights reserved.
  * Not a Contribution.
  *
- * Copyright (C) 2018 NXP Semiconductors
+ * Copyright (C) 2018-2020 NXP Semiconductors
  * The original Work has been changed by NXP Semiconductors.
  * Copyright (C) 2013 The Android Open Source Project
  *
@@ -32,6 +32,7 @@ import android.nfc.cardemulation.HostApduService;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.IBinder;
+import android.os.Looper;
 import android.os.Message;
 import android.os.Messenger;
 import android.os.RemoteException;
@@ -115,13 +116,15 @@ public class HostEmulationManager {
     }
 
     public void onPreferredPaymentServiceChanged(ComponentName service) {
-        synchronized (mLock) {
-            if (service != null) {
-                bindPaymentServiceLocked(ActivityManager.getCurrentUser(), service);
-            } else {
-                unbindPaymentServiceLocked();
+        new Handler(Looper.getMainLooper()).post(() -> {
+            synchronized (mLock) {
+                if (service != null) {
+                    bindPaymentServiceLocked(ActivityManager.getCurrentUser(), service);
+                } else {
+                    unbindPaymentServiceLocked();
+                }
             }
-        }
+        });
      }
 
      public void onPreferredForegroundServiceChanged(ComponentName service) {

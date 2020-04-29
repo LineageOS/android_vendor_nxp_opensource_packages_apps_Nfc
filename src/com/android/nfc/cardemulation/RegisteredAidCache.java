@@ -2,7 +2,7 @@
  * Copyright (c) 2015, The Linux Foundation. All rights reserved.
  * Not a Contribution.
  *
- * Copyright (C) 2018-2019 NXP Semiconductors
+ * Copyright (C) 2018-2020 NXP Semiconductors
  * The original Work has been changed by NXP Semiconductors.
  * Copyright (C) 2014 The Android Open Source Project
  *
@@ -958,6 +958,14 @@ public class RegisteredAidCache {
         }
     }
 
+    public void onRoutingTableChanged() {
+      if (DBG)
+        Log.d(TAG, "onRoutingTableChanged");
+      synchronized (mLock) {
+        generateAidCacheLocked();
+      }
+    }
+
     public ComponentName getPreferredService() {
         if (mPreferredForegroundService != null) {
             // return current foreground service
@@ -966,14 +974,6 @@ public class RegisteredAidCache {
             // return current preferred service
             return mPreferredPaymentService;
         }
-    }
-
-    public void onRoutingTableChanged() {
-      if (DBG)
-        Log.d(TAG, "onRoutingTableChanged");
-      synchronized (mLock) {
-        generateAidCacheLocked();
-      }
     }
 
     public void onNfcDisabled() {

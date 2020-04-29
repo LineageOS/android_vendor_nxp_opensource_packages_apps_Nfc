@@ -2,7 +2,7 @@
  * Copyright (c) 2015-2016, The Linux Foundation. All rights reserved.
  * Not a Contribution.
  *
- * Copyright (C) 2018-2019 NXP Semiconductors
+ * Copyright (C) 2018-2020 NXP Semiconductors
  * The original Work has been changed by NXP Semiconductors.
  * Copyright (C) 2014 The Android Open Source Project
  *
@@ -24,7 +24,6 @@ import java.io.FileDescriptor;
 import java.io.PrintWriter;
 import java.util.List;
 import java.util.ArrayList;
-import android.app.ActivityManager;
 import android.app.ActivityManager;
 import android.content.ComponentName;
 import android.content.Context;
