@@ -39,7 +39,7 @@
 *  See the License for the specific language governing permissions and
 *  limitations under the License.
 *
-*  Copyright 2019 NXP
+*  Copyright 2020 NXP
 *
 ******************************************************************************/
 #pragma once
@@ -86,6 +86,7 @@ class NfcTag {
   bool mIsMultiProtocolTag;
   bool mCashbeeDetected;
   int  mCurrentRequestedProtocol;
+  uint8_t mNfcID0[4];
 #endif
 
   /*******************************************************************************
@@ -200,6 +201,17 @@ class NfcTag {
 **
 *******************************************************************************/
   void resetActivationState();
+
+  /*******************************************************************************
+  **
+  ** Function:        updateNfcID0Param
+  **
+  ** Description:     Update TypeB NCIID0 from interface activated ntf.
+  **
+  ** Returns:         None.
+  **
+  *******************************************************************************/
+  void updateNfcID0Param(uint8_t* nfcID0);
 #endif
   /*******************************************************************************
   **
@@ -280,6 +292,18 @@ class NfcTag {
   **
   *******************************************************************************/
   bool isCashBeeActivated();
+
+  /*******************************************************************************
+  **
+  ** Function:        isNfcCombiCard
+  **
+  ** Description:     checks if NFCDEP combi card detected
+  **
+  ** Returns:         True if tag is activated.
+  **
+  *******************************************************************************/
+  bool isNfcCombiCard();
+
 #endif
 
   /*******************************************************************************
