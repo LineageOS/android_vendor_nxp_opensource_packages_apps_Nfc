@@ -291,9 +291,6 @@ static jboolean nativeNfcSecureElement_doDisconnectSecureElementConnection(
 
   SecureElement& se = SecureElement::getInstance();
   se.NfccStandByOperation(STANDBY_TIMER_STOP);
-  if (isLowRamDevice()) {
-    se.NfccStandByOperation(STANDBY_ESE_PWR_RELEASE);
-  }
 #endif
 
 #if (NXP_EXTNS == TRUE)
@@ -441,14 +438,6 @@ static jboolean nativeNfcSecureElement_doResetForEseCosUpdate(JNIEnv*, jobject,
     }
     {
       stat = se.SecEle_Modeset(0x00);
-      if (handle == SecureElement::EE_HANDLE_0xF3) {
-        if (checkP61Status()) se.NfccStandByOperation(STANDBY_GPIO_LOW);
-      }
-      usleep(100 * 1000);
-      if (handle == SecureElement::EE_HANDLE_0xF3) {
-        if (checkP61Status() && (se.mIsWiredModeOpen == true))
-          se.NfccStandByOperation(STANDBY_GPIO_HIGH);
-      }
 
       if (nfcFL.eseFL._WIRED_MODE_STANDBY && (se.mNfccPowerMode == 1)) {
         uint8_t status = se.setNfccPwrConfig(se.POWER_ALWAYS_ON | se.COMM_LINK_ACTIVE);
@@ -464,42 +453,6 @@ static jboolean nativeNfcSecureElement_doResetForEseCosUpdate(JNIEnv*, jobject,
     stat = se.SecEle_Modeset(0x01);
   }
   DLOG_IF(INFO, nfc_debug_enabled) << StringPrintf("%s: exit", __func__);
-  return stat ? JNI_TRUE : JNI_FALSE;
-}
-
-/*******************************************************************************
- **
- ** Function:        nativeNfcSecureElement_doeSEChipResetSecureElement
- **
- ** Description:     Reset the secure element.
- **                  e: JVM environment.
- **                  o: Java object.
- **                  handle: Handle of secure element.
- **
- ** Returns:         True if ok.
- **
- *******************************************************************************/
-__attribute__((unused)) static jboolean
-nativeNfcSecureElement_doeSEChipResetSecureElement(JNIEnv*, jobject) {
-  bool stat = false;
-  NFCSTATUS status = NFCSTATUS_FAILED;
-  unsigned long num = 0x01;
-#if (NXP_EXTNS == TRUE)
-  SecureElement& se = SecureElement::getInstance();
-  if (nfcFL.nfcNxpEse) {
-    if (NfcConfig::hasKey("NXP_ESE_POWER_DH_CONTROL")) {
-      num = NfcConfig::getUnsigned("NXP_ESE_POWER_DH_CONTROL");
-      DLOG_IF(INFO, nfc_debug_enabled)
-          << StringPrintf("Power schemes enabled in config file is %ld", num);
-    }
-    if (num == 0x02) {
-      status = se.eSE_Chip_Reset();
-      if (status == NFCSTATUS_SUCCESS) {
-        stat = true;
-      }
-    }
-  }
-#endif
   return stat ? JNI_TRUE : JNI_FALSE;
 }
 
