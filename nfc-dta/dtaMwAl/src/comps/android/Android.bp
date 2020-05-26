@@ -16,6 +16,7 @@
 
 cc_library_shared {
     name: "libmwif",
+    system_ext_specific: true,
 
     arch: {
         arm: {
@@ -27,13 +28,13 @@ cc_library_shared {
         "libnativehelper",
         "libcutils",
         "libutils",
-        "libnfc-nci",
+        "libsn100nfc-nci",
         "libosal",
         "libhardware",
         "libc",
         "libdl",
         "liblog",
-        "vendor.nxp.nxpnfc@2.0",
+        "vendor.nxp.hardware.nfc@2.0",
         "android.hardware.nfc@1.0",
     ],
     cflags: [
@@ -49,17 +50,17 @@ cc_library_shared {
     ],
 
     include_dirs: [
-        "system/nfc-dta/dtaPlatform/phDtaOsal/src/comps/android/inc",
-        "system/nfc-dta/dtaPlatform/phDtaOsal/inc",
-        "system/nfc-dta/dtaPlatform/phInfra/inc",
-        "system/nfc-dta/dtaMwAl/inc",
+        "vendor/nxp/opensource/commonsys/packages/apps/Nfc/nfc-dta/dtaPlatform/phDtaOsal/src/comps/android/inc",
+        "vendor/nxp/opensource/commonsys/packages/apps/Nfc/nfc-dta/dtaPlatform/phDtaOsal/inc",
+        "vendor/nxp/opensource/commonsys/packages/apps/Nfc/nfc-dta/dtaPlatform/phInfra/inc",
+        "vendor/nxp/opensource/commonsys/packages/apps/Nfc/nfc-dta/dtaMwAl/inc",
         "frameworks/native/include",
-        "system/nfc/SN100x/src/include",
-        "system/nfc/SN100x/src/nfa/include",
-        "system/nfc/SN100x/src/nfc/include",
-        "system/nfc/SN100x/src/gki/ulinux",
-        "system/nfc/SN100x/src/gki/common",
-        "system/nfc/SN100x/utils/include",
+        "vendor/nxp/opensource/commonsys/external/libnfc-nci/SN100x/src/include",
+        "vendor/nxp/opensource/commonsys/external/libnfc-nci/SN100x/src/nfa/include",
+        "vendor/nxp/opensource/commonsys/external/libnfc-nci/SN100x/src/nfc/include",
+        "vendor/nxp/opensource/commonsys/external/libnfc-nci/SN100x/src/gki/ulinux",
+        "vendor/nxp/opensource/commonsys/external/libnfc-nci/SN100x/src/gki/common",
+        "vendor/nxp/opensource/commonsys/external/libnfc-nci/SN100x/utils/include",
         "frameworks/base/media/mca/filterfw/native/base",
     ],
     local_include_dirs: [
@@ -72,7 +73,7 @@ cc_library_shared {
         },
     },
     static_libs: [
-        "libnfcutils",
+        "libsn100nfcutils",
     ],
 }
 

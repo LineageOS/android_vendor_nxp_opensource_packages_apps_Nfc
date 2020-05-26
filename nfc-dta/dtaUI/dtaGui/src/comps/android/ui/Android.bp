@@ -16,7 +16,7 @@
 
 android_app {
     name: "NxpDTA",
-
+    system_ext_specific: true,
     certificate: "platform",
     platform_apis: true,
 
@@ -27,7 +27,7 @@ android_app {
         "src/**/*.java",
     ],
 
-    libs: ["com.nxp.nfc"],
+    libs: ["com.nxp.nfc.nq"],
 
     static_libs: [
         "android-support-v4",

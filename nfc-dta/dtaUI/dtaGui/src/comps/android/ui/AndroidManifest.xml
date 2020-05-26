@@ -82,7 +82,7 @@
         </intent-filter>
     </service>
 
-    <uses-library android:name="com.nxp.nfc"
+    <uses-library android:name="com.nxp.nfc.nq"
             android:required="true"
         />
 

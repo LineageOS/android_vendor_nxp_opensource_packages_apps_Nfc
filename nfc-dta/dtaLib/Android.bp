@@ -16,6 +16,7 @@
 
 cc_library_shared {
     name: "libdta",
+    system_ext_specific: true,
 
     arch: {
         arm: {
@@ -28,14 +29,14 @@ cc_library_shared {
         "libosal",
     ],
     include_dirs: [
-        "system/nfc-dta/dtaMwAl/inc/",
-        "system/nfc-dta/dtaLib/inc",
-        "system/nfc-dta/dtaLib/src/inc",
-        "system/nfc-dta/dtaPlatform/phInfra/inc",
-        "system/nfc-dta/dtaPlatform/phDtaOsal/inc",
-        "system/nfc-dta/dtaPlatform/phDtaOsal/src/comps/android/inc",
-        "system/nfc/SN100x/src/gki/common/",
-        "system/nfc/SN100x/src/gki/ulinux/",
+        "vendor/nxp/opensource/commonsys/packages/apps/Nfc/nfc-dta/dtaMwAl/inc/",
+        "vendor/nxp/opensource/commonsys/packages/apps/Nfc/nfc-dta/dtaLib/inc",
+        "vendor/nxp/opensource/commonsys/packages/apps/Nfc/nfc-dta/dtaLib/src/inc",
+        "vendor/nxp/opensource/commonsys/packages/apps/Nfc/nfc-dta/dtaPlatform/phInfra/inc",
+        "vendor/nxp/opensource/commonsys/packages/apps/Nfc/nfc-dta/dtaPlatform/phDtaOsal/inc",
+        "vendor/nxp/opensource/commonsys/packages/apps/Nfc/nfc-dta/dtaPlatform/phDtaOsal/src/comps/android/inc",
+        "vendor/nxp/opensource/commonsys/external/libnfc-nci/SN100x/src/gki/common/",
+        "vendor/nxp/opensource/commonsys/external/libnfc-nci/SN100x/src/gki/ulinux/",
     ],
     local_include_dirs: [
         "inc/",
