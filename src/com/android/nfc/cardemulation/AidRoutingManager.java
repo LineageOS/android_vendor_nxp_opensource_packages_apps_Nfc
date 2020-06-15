@@ -29,7 +29,7 @@
 *  See the License for the specific language governing permissions and
 *  limitations under the License.
 *
-*  Copyright 2018-2019 NXP
+*  Copyright 2018-2020 NXP
 *
 ******************************************************************************/
 package com.android.nfc.cardemulation;
@@ -87,7 +87,7 @@ public class AidRoutingManager {
     final byte[] mOffHostRouteEse;
     // Used for backward compatibility in case application doesn't specify the
     // SE
-    final int mDefaultOffHostRoute;
+    int mDefaultOffHostRoute;
 
     // How the NFC controller can match AIDs in the routing table;
     // see AID_MATCHING constants
@@ -143,7 +143,7 @@ public class AidRoutingManager {
           Log.d(TAG, "mDefaultAidRoute=0x" + Integer.toHexString(mDefaultAidRoute));
         mDefaultIsoDepRoute = doGetDefaultIsoDepRouteDestination();
         if (DBG) Log.d(TAG, "mDefaultIsoDepRoute=0x" + Integer.toHexString(mDefaultIsoDepRoute));
-        mLastCommitStatus = true;
+        mLastCommitStatus = false;
 
         Context context = (Context) ActivityThread.currentApplication();
         mActivityManager = (ActivityManager) context.getSystemService(Context.ACTIVITY_SERVICE);
@@ -249,8 +249,12 @@ public class AidRoutingManager {
         HashMap<String, Integer> powerForAid = new HashMap<String, Integer>(aidMap.size());
         mAidRoutingTableSize = NfcService.getInstance().getAidRoutingTableSize();
         mDefaultAidRoute =   NfcService.getInstance().GetDefaultRouteEntry() >> 0x08;
+        mDefaultOffHostRoute = doGetDefaultOffHostRouteDestination();
         Log.e(TAG, "Size of routing table"+mAidRoutingTableSize);
         seList.add(mDefaultAidRoute);
+        if (mDefaultRoute != ROUTE_HOST) {
+            seList.add(ROUTE_HOST);
+        }
         // Then, populate internal data structures first
         for (Map.Entry<String, AidEntry> aidEntry : aidMap.entrySet())  {
             int route = ROUTE_HOST;
@@ -285,6 +289,7 @@ public class AidRoutingManager {
           seList.add(ROUTE_HOST);
 
         synchronized (mLock) {
+            mLastCommitStatus = false;
             if (routeForAid.equals(mRouteForAid) && !force) {
                 NfcService.getInstance().addT4TNfceeAid();
                 if (DBG) Log.d(TAG, "Routing table unchanged, not updating");
@@ -387,9 +392,9 @@ public class AidRoutingManager {
               }
             }
             if(aidRouteResolved == true) {
-              commit(aidRoutingTableCache);
               NfcService.getInstance().updateDefaultAidRoute(mDefaultRoute);
               mLastCommitStatus = true;
+              commit(aidRoutingTableCache);
           } else {
               NfcStatsLog.write(NfcStatsLog.NFC_ERROR_OCCURRED, NfcStatsLog.NFC_ERROR_OCCURRED__TYPE__AID_OVERFLOW, 0, 0);
               Log.e(TAG, "RoutingTable unchanged because it's full, not updating");
@@ -397,8 +402,6 @@ public class AidRoutingManager {
               mLastCommitStatus = false;
           }
         }
-        if (NfcService.getInstance().isNfcEnabled())
-          NfcService.getInstance().commitRouting();
         return true;
     }
 
@@ -418,10 +421,13 @@ public class AidRoutingManager {
                  element.aidInfo,
                  element.powerstate);
         }
+
         AidEntry emptyAidEntry = routeCache.get("");
         if (emptyAidEntry != null)
           NfcService.getInstance().routeAids(
               "", emptyAidEntry.route, emptyAidEntry.aidInfo, emptyAidEntry.powerstate);
+        if (NfcService.getInstance().isNfcEnabled())
+          NfcService.getInstance().commitRouting();
     }
     /**
      * This notifies that the AID routing table in the controller

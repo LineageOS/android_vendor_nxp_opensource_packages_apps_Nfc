@@ -33,6 +33,7 @@
 #include "nfc_brcm_defs.h"
 #include "phNxpExtns.h"
 #include "rw_int.h"
+#include <log/log.h>
 
 using android::base::StringPrintf;
 
@@ -420,6 +421,17 @@ void NfcTag::discoverTechnologies(tNFA_ACTIVATED& activationData) {
     // type-4 tag uses technology ISO-DEP and technology A or B
     mTechList[mNumTechList] =
         TARGET_TYPE_ISO14443_4;  // is TagTechnology.ISO_DEP by Java API
+    if ((NFC_DISCOVERY_TYPE_POLL_A == rfDetail.rf_tech_param.mode) ||
+        (NFC_DISCOVERY_TYPE_POLL_A_ACTIVE == rfDetail.rf_tech_param.mode)) {
+      uint8_t fwi = rfDetail.intf_param.intf_param.pa_iso.fwi;
+      if (fwi >= MIN_FWI && fwi <= MAX_FWI) {
+        //2^MIN_FWI * 256 * 16 * 1000 / 13560000 is approximately 618
+        int fwt = (1 << (fwi - MIN_FWI)) * 618;
+        DLOG_IF(INFO, nfc_debug_enabled) << StringPrintf(
+            "Setting the transceive timeout = %d, fwi = %0#x", fwt, fwi);
+        setTransceiveTimeout(mTechList[mNumTechList], fwt);
+      }
+    }
 #if (NXP_EXTNS == TRUE)
     if (((rfDetail.rf_tech_param.mode == NFC_DISCOVERY_TYPE_POLL_A) ||
          (rfDetail.rf_tech_param.mode == NFC_DISCOVERY_TYPE_POLL_A_ACTIVE) ||
@@ -904,16 +916,18 @@ void NfcTag::fillNativeNfcTagMembers3(JNIEnv* e, jclass tag_cls, jobject tag,
         DLOG_IF(INFO, nfc_debug_enabled)
             << StringPrintf("%s: tech B; TARGET_TYPE_ISO14443_3B", fn);
         len = mTechParams[i].param.pb.sensb_res_len;
-        len = len - 4;  // subtract 4 bytes for NFCID0 at byte 2 through 5
-        if (len > 0) {
-          pollBytes.reset(e->NewByteArray(len));
-          e->SetByteArrayRegion(
+        if (len >= NFC_NFCID0_MAX_LEN) {
+          // subtract 4 bytes for NFCID0 at byte 2 through 5
+          len = len - NFC_NFCID0_MAX_LEN;
+        } else {
+          android_errorWriteLog(0x534e4554, "124940143");
+          LOG(ERROR) << StringPrintf("%s: sensb_res_len error", fn);
+          len = 0;
+        }
+        pollBytes.reset(e->NewByteArray(len));
+        e->SetByteArrayRegion(
               pollBytes.get(), 0, len,
               (jbyte*)(mTechParams[i].param.pb.sensb_res + 4));
-        } else {
-          DLOG_IF(INFO, nfc_debug_enabled)
-              << StringPrintf("%s: tech B; Activation param missing", fn);
-        }
       } else {
         pollBytes.reset(e->NewByteArray(0));
       }

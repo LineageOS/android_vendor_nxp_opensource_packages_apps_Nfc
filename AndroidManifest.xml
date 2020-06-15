@@ -28,7 +28,7 @@
      See the License for the specific language governing permissions and
      limitations under the License.
 
-     Copyright 2019 NXP
+     Copyright 2019-2020 NXP
 -->
 
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
@@ -40,12 +40,12 @@
     <uses-permission android:name="android.permission.BLUETOOTH_ADMIN" />
     <uses-permission android:name="android.permission.BLUETOOTH_PRIVILEGED" />
     <uses-permission android:name="android.permission.NFC" />
+    <uses-permission android:name="android.permission.NFC_UNLOCK" />
     <uses-permission android:name="android.permission.BIND_NFC_SERVICE" />
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
     <uses-permission android:name="android.permission.STATUS_BAR" />
     <uses-permission android:name="android.permission.WRITE_SETTINGS" />
     <uses-permission android:name="android.permission.WRITE_SECURE_SETTINGS" />
-    <uses-permission android:name="android.permission.NETWORK_SETTINGS" />
     <uses-permission android:name="android.permission.WAKE_LOCK" />
     <uses-permission android:name="android.permission.STOP_APP_SWITCHES" />
     <uses-permission android:name="android.permission.MASTER_CLEAR" />
@@ -62,7 +62,10 @@
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.MANAGE_USERS" />
     <uses-permission android:name="android.permission.INTERNAL_SYSTEM_WINDOW" />
+    <uses-permission android:name="android.permission.CHANGE_WIFI_STATE" />
+    <uses-permission android:name="android.permission.ACCESS_WIFI_STATE" />
     <uses-permission android:name="android.permission.SET_ACTIVITY_WATCHER" />
+    <uses-permission android:name="android.permission.CONNECTIVITY_INTERNAL" />
     <uses-permission android:name="android.permission.NFC_HANDOVER_STATUS" />
     <uses-permission android:name="android.permission.LOCAL_MAC_ADDRESS" />
     <uses-permission android:name="com.android.permission.WHITELIST_BLUETOOTH_DEVICE" />
@@ -85,6 +88,14 @@
     <protected-broadcast android:name="com.nxp.nfc_extras.action.NFC_MPOS_READER_MODE_STOP_FAIL" />
     <protected-broadcast android:name="com.nxp.nfc_extras.action.NFC_MPOS_READER_MODE_REMOVE_CARD" />
     <protected-broadcast android:name="com.nxp.nfc_extras.action.NFC_MPOS_READER_MODE_MULTIPLE_TARGET_DETECTED" />
+    <protected-broadcast android:name="com.nxp.nfc_extras.action.NFC_SECURE_READER_MODE_START_SUCCESS" />
+    <protected-broadcast android:name="com.nxp.nfc_extras.action.NFC_SECURE_READER_MODE_START_FAIL" />
+    <protected-broadcast android:name="com.nxp.nfc_extras.action.NFC_SECURE_READER_MODE_RESTART" />
+    <protected-broadcast android:name="com.nxp.nfc_extras.action.NFC_SECURE_READER_MODE_TIMEOUT" />
+    <protected-broadcast android:name="com.nxp.nfc_extras.action.NFC_SECURE_READER_MODE_ACTIVATED" />
+    <protected-broadcast android:name="com.nxp.nfc_extras.action.NFC_SECURE_READER_MODE_STOP_SUCCESS" />
+    <protected-broadcast android:name="com.nxp.nfc_extras.action.NFC_SECURE_READER_MODE_STOP_FAIL" />
+
     <protected-broadcast android:name="nfc.intent.action.AID_ROUTING_TABLE_FULL" />
     <application android:name=".NfcApplication"
                  android:icon="@drawable/icon"

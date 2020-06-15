@@ -3,7 +3,7 @@
  *  Copyright (c) 2016, The Linux Foundation. All rights reserved.
  *  Not a Contribution.
  *
- *  Copyright (C) 2018-2019 NXP Semiconductors
+ *  Copyright (C) 2018-2020 NXP Semiconductors
  *  The original Work has been changed by NXP Semiconductors.
  *
  *  Copyright (C) 2012 The Android Open Source Project
