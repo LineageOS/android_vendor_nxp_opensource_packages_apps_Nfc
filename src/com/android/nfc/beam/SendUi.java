@@ -42,6 +42,7 @@ import android.graphics.Rect;
 import android.graphics.SurfaceTexture;
 import android.os.AsyncTask;
 import android.os.Binder;
+import android.os.IBinder;
 import android.util.DisplayMetrics;
 import android.util.Log;
 import android.view.ActionMode;
@@ -639,7 +640,15 @@ public class SendUi implements Animator.AnimatorListener, View.OnTouchListener,
         int height = crop.height();
         // Take the screenshot. SurfaceControl will generate a hardware bitmap in the correct
         // orientation and size.
-        Bitmap bitmap = SurfaceControl.screenshot(crop, width, height, rot);
+        final IBinder displayToken = SurfaceControl.getInternalDisplayToken();
+        final SurfaceControl.DisplayCaptureArgs captureArgs =
+                new SurfaceControl.DisplayCaptureArgs.Builder(displayToken)
+                        .setSourceCrop(crop)
+                        .setSize(width, height)
+                        .build();
+        final SurfaceControl.ScreenshotHardwareBuffer screenshotBuffer =
+                SurfaceControl.captureDisplay(captureArgs);
+        Bitmap bitmap = screenshotBuffer == null ? null : screenshotBuffer.asBitmap();
         // Bail if we couldn't take the screenshot
         if (bitmap == null) {
             return null;
