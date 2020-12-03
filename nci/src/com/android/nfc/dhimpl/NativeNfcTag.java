@@ -13,6 +13,43 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+ /***************************************************************************
+ *
+ *  Copyright 2020 NXP
+ *
+ *  Licensed under the Apache License, Version 2.0 (the "License");
+ *  you may not use this file except in compliance with the License.
+ *  You may obtain a copy of the License at
+ *
+ *  http://www.apache.org/licenses/LICENSE-2.0
+ *
+ *  Unless required by applicable law or agreed to in writing, software
+ *  distributed under the License is distributed on an "AS IS" BASIS,
+ *  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ *  See the License for the specific language governing permissions and
+ *  limitations under the License.
+ *
+ ******************************************************************************/
+
+/******************************************************************************
+*
+*  The original Work has been changed by NXP.
+*
+*  Licensed under the Apache License, Version 2.0 (the "License");
+*  you may not use this file except in compliance with the License.
+*  You may obtain a copy of the License at
+*
+*  http://www.apache.org/licenses/LICENSE-2.0
+*
+*  Unless required by applicable law or agreed to in writing, software
+*  distributed under the License is distributed on an "AS IS" BASIS,
+*  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+*  See the License for the specific language governing permissions and
+*  limitations under the License.
+*
+*  Copyright 2020 NXP
+*
+******************************************************************************/
 
 package com.android.nfc.dhimpl;
 
@@ -285,6 +322,11 @@ public class NativeNfcTag implements TagEndpoint {
         mConnectedTechIndex = -1;
         mConnectedHandle = -1;
         return result;
+    }
+
+    native int doGetSrdState();
+    public int getSrdState() {
+      return doGetSrdState();
     }
 
     native int doReconnect();
@@ -614,6 +656,11 @@ public class NativeNfcTag implements TagEndpoint {
          * Read four blocks from page 2, which will get us both
          * the lock page, the OTP page and the version info.
          */
+        int ENABLE = 0x01;
+        if(getSrdState() == ENABLE) {
+          /* Ignore to send read cmd incase of SRD is enabled.*/
+          return false;
+        }
         boolean isUltralightC = false;
         byte[] readCmd = { 0x30, 0x02 };
         int[] retCode = new int[2];

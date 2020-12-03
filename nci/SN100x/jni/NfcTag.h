@@ -46,13 +46,12 @@
 #include <vector>
 #include "NfcJniUtil.h"
 #include "SyncEvent.h"
-
 #include "nfa_rw_api.h"
 #if (NXP_EXTNS == TRUE)
-#define RETRY_COUNT 5
 #define MIN_FWI (0)
 #define MAX_FWI (14)
-#define MIN_TRANSCEIVE_TIMEOUT_IN_MILLISEC (500.0)
+#define NON_STD_CARD_SAK (0x13)
+#define TIME_MUL_100MS 100
 
 typedef struct activationParams {
   int mTechParams;
@@ -64,6 +63,10 @@ class NfcTag {
  public:
 #if (NXP_EXTNS == TRUE)
   enum ActivationState { Idle, Sleep, Active, InActive };
+  enum NonStdTagRefTimeIndx { MFC, ISO_DEP };
+  typedef struct NonStdTagProcParams {
+    tNFC_RESULT_DEVT discovery_ntf;  /* RF discovery notification details */
+  } nonStdTagProcParams_t;
 #else
   enum ActivationState { Idle, Sleep, Active };
 #endif
@@ -74,19 +77,28 @@ class NfcTag {
 #endif
   int mTechList[MAX_NUM_TECHNOLOGY];  // array of NFC technologies according to
                                       // NFC service
-  int mTechHandles[MAX_NUM_TECHNOLOGY];  // array of tag handles according to
-                                         // NFC service
-  int mTechLibNfcTypes[MAX_NUM_TECHNOLOGY];  // array of detailed tag types
-                                             // according to NFC service
+  int mTechHandles[MAX_NUM_TECHNOLOGY];  // array of tag handles (RF DISC ID)
+                                         // according to NFC service received
+                                         // from RF_INTF_ACTIVATED NTF
+  int mTechLibNfcTypes[MAX_NUM_TECHNOLOGY];  // array of detailed tag types (RF
+                                             // Protocol) according to NFC
+                                             // service received from
+                                             // RF_INTF_ACTIVATED NTF
   int mNumTechList;  // current number of NFC technologies in the list
 #if (NXP_EXTNS == TRUE)
-  int mNumDiscNtf;
-  int mNumDiscTechList;
   int mTechListIndex;
   bool mIsMultiProtocolTag;
   bool mCashbeeDetected;
   int  mCurrentRequestedProtocol;
   uint8_t mNfcID0[4];
+  bool mIsNonStdMFCTag;
+  bool mIsSkipNdef;
+  struct timespec LastDetectedTime;
+  vector<uint32_t> mNonStdCardTimeDiff;
+  nonStdTagProcParams_t mNonStdTagdata;
+  bool isNonStdCardSupported;
+  bool isNonStdTagDetected;
+  bool isIsoDepDhReqFailed;
 #endif
 
   /*******************************************************************************
@@ -212,6 +224,63 @@ class NfcTag {
   **
   *******************************************************************************/
   void updateNfcID0Param(uint8_t* nfcID0);
+
+  /******************************************************************************
+   **
+   ** Function:        clearActivationParams
+   **
+   ** Description:     Clears the current activation parameters value.
+   **
+   ** Returns:         None.
+   **
+   *******************************************************************************/
+  void clearActivationParams();
+
+  /*******************************************************************************
+   **
+   ** Function:        notifyNfcAbortTagops()
+   **
+   ** Description:     Notify service to abort TAG ops.
+   **
+   ** Returns:         None
+   **
+   *******************************************************************************/
+  static void notifyNfcAbortTagops(union sigval);
+
+/*******************************************************************************
+**
+** Function         isTagDetectedInRefTime
+**
+** Description      Computes time difference in milliseconds and compare it
+**                  with the reference provided.
+**
+** Returns          TRUE(time diff less than reference)/FALSE(Otherwise)
+**
+*******************************************************************************/
+bool isTagDetectedInRefTime(uint32_t nonStdCardRefTime);
+
+  /*******************************************************************************
+  **
+  ** Function         updateNdefState
+  **
+  ** Description      Update Non standatd MFC state based on RF_DISC_NTF or
+  **                  INTF_ACTIVATED_NTF
+  **
+  ** Returns          TRUE(time diff less than reference)/FALSE(Otherwise)
+  **
+  *******************************************************************************/
+  void updateNdefState(uint8_t protocol, uint8_t more_disc_ntf);
+
+  /*******************************************************************************
+  **
+  ** Function         clearNonStdMfcState
+  **
+  ** Description      Clear Non standard MFC states
+  **
+  ** Returns          None
+  **
+  *******************************************************************************/
+  void clearNonStdMfcState();
 #endif
   /*******************************************************************************
   **
@@ -261,29 +330,6 @@ class NfcTag {
 #if (NXP_EXTNS == TRUE)
   /*******************************************************************************
   **
-  ** Function:        selectNextTag
-  **
-  ** Description:     When multiple tags are discovered, selects the Nex one to
-  **                  activate.
-  **
-  ** Returns:         None
-  **
-  *******************************************************************************/
-  void selectNextTag ();
-
-  /*******************************************************************************
-  **
-  ** Function:        checkNextValidProtocol
-  **
-  ** Description:     When multiple tags are discovered, check next valid protocol
-  **
-  ** Returns:         id
-  **
-  *******************************************************************************/
-  int checkNextValidProtocol(void );
-
-  /*******************************************************************************
-  **
   ** Function:        isCashBeeActivated
   **
   ** Description:     checks if cashbee tag is detected
@@ -305,6 +351,18 @@ class NfcTag {
   bool isNfcCombiCard();
 
 #endif
+
+  /*******************************************************************************
+  **
+  ** Function:        selectNextTagIfExists
+  **
+  ** Description:     When multiple tags are discovered, selects the Next one to
+  **                  activate.
+  **
+  ** Returns:         None
+  **
+  *******************************************************************************/
+  void selectNextTagIfExists();
 
   /*******************************************************************************
   **
@@ -430,7 +488,7 @@ class NfcTag {
   **
   ** Description:     Get the timeout value for one technology.
   **                  techId: one of the values in TARGET_TYPE_* defined in
-  *NfcJniUtil.h
+  **                  NfcJniUtil.h
   **
   ** Returns:         Timeout value in millisecond.
   **
@@ -485,6 +543,40 @@ class NfcTag {
   *******************************************************************************/
   bool isKovioType2Tag();
 
+  /*******************************************************************************
+  **
+  ** Function:        setMultiProtocolTagSupport
+  **
+  ** Description:     Update mIsMultiProtocolTag
+  **
+  ** Returns:         None
+  **
+  *******************************************************************************/
+  void setMultiProtocolTagSupport(bool isMultiProtocolSupported);
+
+  /*******************************************************************************
+  **
+  ** Function:        setNumDiscNtf
+  **
+  ** Description:     Update mNumDiscNtf
+  **
+  ** Returns:         None
+  **
+  *******************************************************************************/
+  void setNumDiscNtf(int numDiscNtfValue);
+
+  /*******************************************************************************
+  **
+  ** Function:        getNumDiscNtf
+  **
+  ** Description:     number of discovery notifications received from NFCC after
+  **                  last RF DISCOVERY state
+  **
+  ** Returns:         number of discovery notifications received from NFCC
+  **
+  *******************************************************************************/
+  int getNumDiscNtf();
+
  private:
   std::vector<int> mTechnologyTimeoutsTable;
   std::vector<int> mTechnologyDefaultTimeoutsTable;
@@ -504,6 +596,16 @@ class NfcTag {
   bool mIsDynamicTagId;  // whether the tag has dynamic tag ID
   tNFA_RW_PRES_CHK_OPTION mPresenceCheckAlgorithm;
   bool mIsFelicaLite;
+  int mTechHandlesDiscData[MAX_NUM_TECHNOLOGY];      // array of tag handles (RF
+                                                     // DISC ID) received from
+                                                     // RF_DISC_NTF
+  int mTechLibNfcTypesDiscData[MAX_NUM_TECHNOLOGY];  // array of detailed tag
+                                                     // types ( RF Protocol)
+                                                     // received from
+                                                     // RF_DISC_NTF
+  int mNumDiscNtf;
+  int mNumDiscTechList;
+  int mTechListTail;  // Index of Last added entry in mTechList
   /*******************************************************************************
   **
   ** Function:        IsSameKovio
@@ -572,6 +674,19 @@ class NfcTag {
   **
   *******************************************************************************/
   void storeActivationParams();
+
+ /*******************************************************************************
+**
+** Function:        processNonStandardTag
+**
+** Description:     Handle Non standard Tag
+*
+**                  Data: The Discovery ntf information.
+**
+** Returns:         None
+**
+*******************************************************************************/
+void processNonStandardTag();
 #endif
 
   /*******************************************************************************

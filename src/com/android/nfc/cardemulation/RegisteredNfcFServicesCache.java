@@ -29,7 +29,7 @@
 *  See the License for the specific language governing permissions and
 *  limitations under the License.
 *
-*  Copyright 2019 NXP
+*  Copyright 2019-2020 NXP
 *
 ******************************************************************************/
 
@@ -57,6 +57,7 @@ import android.util.AtomicFile;
 import android.util.Log;
 import android.util.SparseArray;
 import android.util.Xml;
+import android.util.proto.ProtoOutputStream;
 
 import com.android.internal.util.FastXmlSerializer;
 import com.google.android.collect.Maps;
@@ -431,6 +432,7 @@ public class RegisteredNfcFServicesCache {
                 int currentUid = -1;
                 String systemCode = null;
                 String nfcid2 = null;
+                String description = null;
                 while (eventType != XmlPullParser.END_DOCUMENT) {
                     tagName = parser.getName();
                     if (eventType == XmlPullParser.START_TAG) {
@@ -439,18 +441,15 @@ public class RegisteredNfcFServicesCache {
                                     parser.getAttributeValue(null, "component");
                             String uidString =
                                     parser.getAttributeValue(null, "uid");
-                            String systemCodeString =
-                                    parser.getAttributeValue(null, "system-code");
-                            String nfcid2String =
-                                    parser.getAttributeValue(null, "nfcid2");
                             if (compString == null || uidString == null) {
                                 Log.e(TAG, "Invalid service attributes");
                             } else {
                                 try {
                                     componentName = ComponentName.unflattenFromString(compString);
                                     currentUid = Integer.parseInt(uidString);
-                                    systemCode = systemCodeString;
-                                    nfcid2 = nfcid2String;
+                                    systemCode = parser.getAttributeValue(null, "system-code");
+                                    description = parser.getAttributeValue(null, "description");
+                                    nfcid2 = parser.getAttributeValue(null, "nfcid2");
                                 } catch (NumberFormatException e) {
                                     Log.e(TAG, "Could not parse service uid");
                                 }
@@ -478,6 +477,7 @@ public class RegisteredNfcFServicesCache {
                             componentName = null;
                             currentUid = -1;
                             systemCode = null;
+                            description = null;
                             nfcid2 = null;
                         }
                     }
@@ -738,6 +738,26 @@ public class RegisteredNfcFServicesCache {
                 pw.println("");
             }
             pw.println("");
+        }
+    }
+
+    /**
+     * Dump debugging information as a RegisteredNfcFServicesCacheProto
+     *
+     * Note:
+     * See proto definition in frameworks/base/core/proto/android/nfc/card_emulation.proto
+     * When writing a nested message, must call {@link ProtoOutputStream#start(long)} before and
+     * {@link ProtoOutputStream#end(long)} after.
+     * Never reuse a proto field number. When removing a field, mark it as reserved.
+     */
+    void dumpDebug(ProtoOutputStream proto) {
+        synchronized (mLock) {
+            UserServices userServices = findOrCreateUserLocked(ActivityManager.getCurrentUser());
+            for (NfcFServiceInfo service : userServices.services.values()) {
+                long token = proto.start(RegisteredNfcFServicesCacheProto.NFC_FSERVICE_INFO);
+                service.dumpDebug(proto);
+                proto.end(token);
+            }
         }
     }
 

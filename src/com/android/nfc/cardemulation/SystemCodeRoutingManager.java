@@ -13,10 +13,29 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-
+/******************************************************************************
+*
+*  The original Work has been changed by NXP.
+*
+*  Licensed under the Apache License, Version 2.0 (the "License");
+*  you may not use this file except in compliance with the License.
+*  You may obtain a copy of the License at
+*
+*  http://www.apache.org/licenses/LICENSE-2.0
+*
+*  Unless required by applicable law or agreed to in writing, software
+*  distributed under the License is distributed on an "AS IS" BASIS,
+*  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+*  See the License for the specific language governing permissions and
+*  limitations under the License.
+*
+*  Copyright 2020 NXP
+*
+******************************************************************************/
 package com.android.nfc.cardemulation;
 
 import android.util.Log;
+import android.util.proto.ProtoOutputStream;
 
 import com.android.nfc.NfcService;
 import com.android.nfc.cardemulation.RegisteredT3tIdentifiersCache.T3tIdentifier;
@@ -85,9 +104,6 @@ public class SystemCodeRoutingManager {
             mConfiguredT3tIdentifiers = t3tIdentifiers;
         }
 
-        // And finally commit the routing
-        NfcService.getInstance().commitRouting();
-
         return true;
     }
 
@@ -111,6 +127,28 @@ public class SystemCodeRoutingManager {
             for (T3tIdentifier t3tIdentifier : mConfiguredT3tIdentifiers) {
                 pw.println("    " + t3tIdentifier.systemCode +
                         "/" + t3tIdentifier.nfcid2);
+            }
+        }
+    }
+
+    /**
+     * Dump debugging information as a SystemCodeRoutingManagerProto
+     *
+     * Note:
+     * See proto definition in frameworks/base/core/proto/android/nfc/card_emulation.proto
+     * When writing a nested message, must call {@link ProtoOutputStream#start(long)} before and
+     * {@link ProtoOutputStream#end(long)} after.
+     * Never reuse a proto field number. When removing a field, mark it as reserved.
+     */
+    void dumpDebug(ProtoOutputStream proto) {
+        synchronized (mLock) {
+            for (T3tIdentifier t3tIdentifier : mConfiguredT3tIdentifiers) {
+                long token = proto.start(SystemCodeRoutingManagerProto.T3T_IDENTIFIERS);
+                proto.write(SystemCodeRoutingManagerProto.T3tIdentifier.SYSTEM_CODE,
+                        t3tIdentifier.systemCode);
+                proto.write(SystemCodeRoutingManagerProto.T3tIdentifier.NFCID2,
+                        t3tIdentifier.nfcid2);
+                proto.end(token);
             }
         }
     }

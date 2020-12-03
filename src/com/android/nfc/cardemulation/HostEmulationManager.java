@@ -38,17 +38,15 @@ import android.os.Messenger;
 import android.os.RemoteException;
 import android.os.UserHandle;
 import android.util.Log;
+import android.util.proto.ProtoOutputStream;
 
 import com.android.nfc.NfcService;
 import com.android.nfc.NfcStatsLog;
 import com.android.nfc.cardemulation.RegisteredAidCache.AidResolveInfo;
-
 import java.io.FileDescriptor;
 import java.io.PrintWriter;
 import java.util.ArrayList;
 import android.os.SystemProperties;
-
-import android.util.StatsLog;
 
 public class HostEmulationManager {
     static final String TAG = "HostEmulationManager";
@@ -115,7 +113,7 @@ public class HostEmulationManager {
         mKeyguard = (KeyguardManager) context.getSystemService(Context.KEYGUARD_SERVICE);
     }
 
-    public void onPreferredPaymentServiceChanged(ComponentName service) {
+    public void onPreferredPaymentServiceChanged(final ComponentName service) {
         new Handler(Looper.getMainLooper()).post(() -> {
             synchronized (mLock) {
                 if (service != null) {
@@ -317,8 +315,8 @@ public class HostEmulationManager {
             Intent aidIntent = new Intent(HostApduService.SERVICE_INTERFACE);
             aidIntent.setComponent(service);
             if (mContext.bindServiceAsUser(aidIntent, mConnection,
-                Context.BIND_AUTO_CREATE | Context.BIND_ALLOW_BACKGROUND_ACTIVITY_STARTS,
-                UserHandle.CURRENT)) {
+                    Context.BIND_AUTO_CREATE | Context.BIND_ALLOW_BACKGROUND_ACTIVITY_STARTS,
+                    UserHandle.CURRENT)) {
                 mServiceBound = true;
             } else {
                 Log.e(TAG, "Could not bind service.");
@@ -555,6 +553,24 @@ public class HostEmulationManager {
         }
         if (mServiceBound) {
             pw.println("    other: " + mServiceName);
+        }
+    }
+
+    /**
+     * Dump debugging information as a HostEmulationManagerProto
+     *
+     * Note:
+     * See proto definition in frameworks/base/core/proto/android/nfc/card_emulation.proto
+     * When writing a nested message, must call {@link ProtoOutputStream#start(long)} before and
+     * {@link ProtoOutputStream#end(long)} after.
+     * Never reuse a proto field number. When removing a field, mark it as reserved.
+     */
+    void dumpDebug(ProtoOutputStream proto) {
+        if (mPaymentServiceBound) {
+            mPaymentServiceName.dumpDebug(proto, HostEmulationManagerProto.PAYMENT_SERVICE_NAME);
+        }
+        if (mServiceBound) {
+            mServiceName.dumpDebug(proto, HostEmulationManagerProto.SERVICE_NAME);
         }
     }
 }

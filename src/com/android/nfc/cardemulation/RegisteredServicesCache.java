@@ -32,7 +32,7 @@
 *  See the License for the specific language governing permissions and
 *  limitations under the License.
 *
-*  Copyright 2018-2019 NXP
+*  Copyright 2018-2020 NXP
 *
 ******************************************************************************/
 package com.android.nfc.cardemulation;
@@ -53,8 +53,8 @@ import android.content.pm.ServiceInfo;
 import android.content.pm.PackageManager.NameNotFoundException;
 import android.net.Uri;
 import android.nfc.cardemulation.NfcAidGroup;
-import android.nfc.cardemulation.NfcApduServiceInfo;
 import android.nfc.cardemulation.AidGroup;
+import android.nfc.cardemulation.NfcApduServiceInfo;
 import android.nfc.cardemulation.CardEmulation;
 import android.nfc.cardemulation.HostApduService;
 import android.nfc.cardemulation.OffHostApduService;
@@ -63,6 +63,7 @@ import android.util.AtomicFile;
 import android.util.Log;
 import android.util.SparseArray;
 import android.util.Xml;
+import android.util.proto.ProtoOutputStream;
 import com.nxp.nfc.NfcConstants;
 
 import com.android.internal.util.FastXmlSerializer;
@@ -198,6 +199,13 @@ public class RegisteredServicesCache {
         File dataDir = mContext.getFilesDir();
         mDynamicSettingsFile = new AtomicFile(new File(dataDir, "dynamic_aids.xml"));
         mServiceStateFile = new AtomicFile(new File(dataDir, "service_state.xml"));
+    }
+
+    void initialize() {
+        synchronized (mLock) {
+            readDynamicSettingsLocked();
+        }
+        invalidateCache(ActivityManager.getCurrentUser());
     }
 
     void dump(ArrayList<NfcApduServiceInfo> services) {
@@ -357,7 +365,7 @@ public class RegisteredServicesCache {
 
             if (toBeRemoved.size() > 0) {
                 for (ComponentName component : toBeRemoved) {
-                    Log.d(TAG, "Removing dynamic Settings registered by " + component);
+                    Log.d(TAG, "Removing dynamic AIDs registered by " + component);
                     userServices.dynamicSettings.remove(component);
                 }
                 // Persist to filesystem
@@ -367,7 +375,6 @@ public class RegisteredServicesCache {
             Log.e(TAG,"1"+Thread.currentThread().getStackTrace()[2].getMethodName()+":WriteServiceStateToFile");
             writeServiceStateToFile(userId);
         }
-
         mCallback.onServicesUpdated(userId, Collections.unmodifiableList(validServices));
         dump(validServices);
     }
@@ -447,7 +454,7 @@ public class RegisteredServicesCache {
                 };
             }
         } catch (Exception e) {
-            Log.e(TAG, "Could not parse dynamic Settings file, trashing.");
+            Log.e(TAG, "Could not parse dynamic AIDs file, trashing.");
             mDynamicSettingsFile.delete();
         } finally {
             if (fis != null) {
@@ -488,7 +495,7 @@ public class RegisteredServicesCache {
             mDynamicSettingsFile.finishWrite(fos);
             return true;
         } catch (Exception e) {
-            Log.e(TAG, "Error writing dynamic Settings", e);
+            Log.e(TAG, "Error writing dynamic AIDs", e);
             if (fos != null) {
                 mDynamicSettingsFile.failWrite(fos);
             }
@@ -829,8 +836,8 @@ public class RegisteredServicesCache {
                 Log.e(TAG, "UID mismatch.");
                 return false;
             }
-            // Do another AID validation, since a caller could have thrown in a modified
-            // NfcAidGroup object with invalid AIDs over Binder.
+            // Do another AID validation, since a caller could have thrown in a
+            // modified AidGroup object with invalid AIDs over Binder.
             List<String> aids = nfcAidGroup.getAids();
             for (String aid : aids) {
                 if (!CardEmulation.isValidAid(aid)) {
@@ -848,7 +855,8 @@ public class RegisteredServicesCache {
             dynSettings.aidGroups.put(nfcAidGroup.getCategory(), nfcAidGroup);
             success = writeDynamicSettingsLocked();
             if (success) {
-                newServices = new ArrayList<NfcApduServiceInfo>(services.services.values());
+                newServices =
+                    new ArrayList<NfcApduServiceInfo>(services.services.values());
             } else {
                 Log.e(TAG, "Failed to persist AID group.");
                 // Undo registration
@@ -895,15 +903,15 @@ public class RegisteredServicesCache {
                     return false;
                 }
                 // Remove from local cache
-                DynamicSettings dynAids = services.dynamicSettings.get(componentName);
-                if (dynAids != null) {
-                    NfcAidGroup deletedGroup = dynAids.aidGroups.remove(category);
+                DynamicSettings dynSettings = services.dynamicSettings.get(componentName);
+                if (dynSettings != null) {
+                    NfcAidGroup deletedGroup = dynSettings.aidGroups.remove(category);
                     success = writeDynamicSettingsLocked();
                     if (success) {
                         newServices = new ArrayList<NfcApduServiceInfo>(services.services.values());
                     } else {
                         Log.e(TAG, "Could not persist deleted AID group.");
-                        dynAids.aidGroups.put(category, deletedGroup);
+                        dynSettings.aidGroups.put(category, deletedGroup);
                         return false;
                     }
                 } else {
@@ -919,13 +927,6 @@ public class RegisteredServicesCache {
         return success;
     }
 
-    void initialize() {
-        synchronized (mLock) {
-            readDynamicSettingsLocked();
-        }
-        invalidateCache(ActivityManager.getCurrentUser());
-    }
-
     public void dump(FileDescriptor fd, PrintWriter pw, String[] args) {
         pw.println("Registered HCE services for current user: ");
         UserServices userServices = findOrCreateUserLocked(ActivityManager.getCurrentUser());
@@ -934,5 +935,23 @@ public class RegisteredServicesCache {
             pw.println("");
         }
         pw.println("");
+    }
+
+    /**
+     * Dump debugging information as a RegisteredServicesCacheProto
+     *
+     * Note:
+     * See proto definition in frameworks/base/core/proto/android/nfc/card_emulation.proto
+     * When writing a nested message, must call {@link ProtoOutputStream#start(long)} before and
+     * {@link ProtoOutputStream#end(long)} after.
+     * Never reuse a proto field number. When removing a field, mark it as reserved.
+     */
+    void dumpDebug(ProtoOutputStream proto) {
+        UserServices userServices = findOrCreateUserLocked(ActivityManager.getCurrentUser());
+        for (NfcApduServiceInfo service : userServices.services.values()) {
+            long token = proto.start(RegisteredServicesCacheProto.APDU_SERVICE_INFOS);
+            service.dumpDebug(proto);
+            proto.end(token);
+        }
     }
 }
