@@ -161,7 +161,6 @@
             android:theme="@android:style/Theme.Translucent"
             android:label="@string/android_beam"
             android:noHistory="true"
-            android:exported="true"
             android:excludeFromRecents="true">
             <intent-filter>
                 <action android:name="android.intent.action.SEND" />
