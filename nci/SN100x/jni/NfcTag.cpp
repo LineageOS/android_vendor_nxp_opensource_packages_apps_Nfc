@@ -71,6 +71,7 @@ uint32_t TimeDiff(timespec start, timespec end);
 int selectedId = 0;
 static bool isP2pDetected = false;
 IntervalTimer mTimer;
+const vector<uint8_t> defaultTimeDiff = {01, 03};//timeout value in 1*100ms
 namespace android {
   extern bool nfcManager_isReaderModeEnabled();
 }
@@ -164,7 +165,15 @@ void NfcTag::initialize(nfc_jni_native_data* native) {
   isP2pDetected = false;
   mIsSkipNdef = false;
   mIsNonStdMFCTag = false;
-  vector<uint8_t> timeDiff = NfcConfig::getBytes(NAME_NXP_NON_STD_CARD_TIMEDIFF);
+  vector<uint8_t> timeDiff;
+
+  if(NfcConfig::hasKey(NAME_NXP_NON_STD_CARD_TIMEDIFF)) {
+    timeDiff = NfcConfig::getBytes(NAME_NXP_NON_STD_CARD_TIMEDIFF);
+  } else {
+    DLOG_IF(INFO, nfc_debug_enabled)
+      << StringPrintf("%s: timeout not defined taking default", __func__);
+    timeDiff = defaultTimeDiff;
+  }
   DLOG_IF(INFO, nfc_debug_enabled)
       << StringPrintf("%s: Non std card", __func__);
   for (uint8_t i=0; i<timeDiff.size(); i++) {
