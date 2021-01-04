@@ -42,6 +42,10 @@ cc_library_shared {
         "libcutils",
         "libosal",
     ],
+
+    header_libs: [
+      "jni_headers",
+    ],
 }
 
 //  Platform or chip specific build
