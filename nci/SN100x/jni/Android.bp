@@ -3,11 +3,13 @@ cc_library_shared {
     system_ext_specific: true,
 
     cflags:
-     ["-DNXP_EXTNS=TRUE"]  + [
+     ["-DNXP_EXTNS=TRUE",
+      "-DNXP_SRD=TRUE",]  + [
         "-Wall",
         "-Wextra",
         "-Wno-unused-parameter",
         "-Werror",
+        "-fexceptions",
     ],
     srcs: ["**/*.cpp"],
 
@@ -25,7 +27,6 @@ cc_library_shared {
         "extns/pn54x/inc",
         "extns/pn54x/src/common",
         "extns/pn54x/src/mifare",
-        "extns/pn54x/src/log",
     ],
     shared_libs: [
         "libandroidicu",
@@ -47,5 +48,6 @@ cc_library_shared {
     sanitize: {
         cfi: true,
         integer_overflow: true,
+        misc_undefined: ["bounds"],
     },
 }

@@ -36,6 +36,9 @@
 #include "RoutingManager.h"
 #include "HciEventManager.h"
 #include "MposManager.h"
+#if (NXP_SRD == TRUE)
+#include "SecureDigitization.h"
+#endif
 using android::base::StringPrintf;
 
 SecureElement SecureElement::sSecElem;
@@ -446,11 +449,13 @@ void SecureElement::notifyRfFieldEvent (bool isActive)
     if (mNativeData == NULL) {
         DLOG_IF(ERROR, nfc_debug_enabled)
                 << StringPrintf("%s: mNativeData is null", fn);
+        mMutex.unlock();
         return;
     }
     ScopedAttach attach(mNativeData->vm, &e);
     if (e == NULL) {
       LOG(ERROR) << StringPrintf("jni env is null");
+      mMutex.unlock();
       return;
     }
     int ret = clock_gettime (CLOCK_MONOTONIC, &mLastRfFieldToggle);
@@ -575,6 +580,7 @@ void SecureElement::nfaHciCallback(tNFA_HCI_EVT event,
                     sSecElem.mActualResponseSize = (eventData->apdu_rcvd.apdu_len > MAX_RESPONSE_SIZE) ? MAX_RESPONSE_SIZE : eventData->apdu_rcvd.apdu_len;
                 }
             sSecElem.mTransceiveStatus = eventData->apdu_rcvd.status;
+            SyncEventGuard guard(sSecElem.mTransceiveEvent);
             sSecElem.mTransceiveEvent.notifyOne ();
             break;
         }
@@ -748,9 +754,17 @@ void SecureElement::nfaHciCallback(tNFA_HCI_EVT event,
           sSecElem.mEERecoveryComplete.notifyOne();
           break;
         }
+#if (NXP_SRD == TRUE)
+    case NFA_SRD_EVT_TIMEOUT:
+    case NFA_SRD_FEATURE_NOT_SUPPORT_EVT:
+        {
+          SecureDigitization::getInstance().notifySrdEvt(event);
+          break;
+        }
+#endif
     default:
-        LOG(ERROR) << StringPrintf("%s: unknown event code=0x%X ????", fn, event);
-        break;
+      LOG(ERROR) << StringPrintf("%s: unknown event code=0x%X ????", fn, event);
+      break;
     }
 }
 
@@ -771,7 +785,6 @@ bool SecureElement::notifySeInitialized() {
     CHECK(!e->ExceptionCheck());
     return true;
 }
-
 /*******************************************************************************
 **
 ** Function:        transceive

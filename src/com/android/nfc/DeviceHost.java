@@ -60,6 +60,12 @@ public interface DeviceHost {
         public void onSeListenDeactivated();
 
         public void onSeInitialized();
+
+        /**
+         * Notifies SRD event
+         */
+        public void onNotifySrdEvt(int event);
+
         /**
          * Notifies P2P Device detected, to activate LLCP link
          */
@@ -81,6 +87,10 @@ public interface DeviceHost {
         public void onScrNotifyEvents(int event);
 
         public void onNfcTransactionEvent(byte[] aid, byte[] data, String seName);
+
+        public void onLxDebugConfigData(int len, byte[] data);
+
+        public void notifyTagAbort();
     }
 
     public interface TagEndpoint {
@@ -223,8 +233,6 @@ public interface DeviceHost {
 
     public boolean unrouteAid(byte[] aid);
 
-    public int getAidTableSize();
-
     public boolean setRoutingEntry(int type, int value, int route, int power);
 
     public boolean clearRoutingEntry(int type);
@@ -246,8 +254,6 @@ public interface DeviceHost {
     public int getDefaultMifareCLTPowerState();
 
     public int getDefaultFelicaCLTPowerState();
-
-    public int getGsmaPwrState();
 
     public boolean commitRouting();
 
@@ -285,6 +291,8 @@ public interface DeviceHost {
     boolean canMakeReadOnly(int technology);
 
     int getMaxTransceiveLength(int technology);
+
+    public int getAidTableSize();
 
     void setP2pInitiatorModes(int modes);
 
@@ -330,6 +338,8 @@ public interface DeviceHost {
 
     public boolean setNfcSecure(boolean enable);
 
+    public String getNfaStorageDir();
+
 /* NXP extension are here */
     public void doChangeDiscoveryTech(int pollTech, int listenTech);
     public boolean accessControlForCOSU (int mode);
@@ -350,4 +360,5 @@ public interface DeviceHost {
     public boolean doLockT4tData(boolean lock);
     public boolean isLockedT4tData();
     public boolean doClearNdefT4tData();
+    public int doEnableDebugNtf(byte fieldValue);
 }

@@ -32,13 +32,20 @@
 #include "SecureElement.h"
 #include "NfcAdaptation.h"
 #include "NativeJniExtns.h"
+#include "nfc_config.h"
+
 using android::base::StringPrintf;
 
 namespace android
 {
 #define INVALID_LEN_SW1 0x64
 #define INVALID_LEN_SW2 0xFF
+
+#define ESE_RESET_PROTECTION_ENABLE  0x14
+#define ESE_RESET_PROTECTION_DISABLE  0x15
+#define NFA_ESE_HARD_RESET  0x13
 static const int EE_ERROR_INIT = -3;
+static void NxpNfc_ParsePlatformID(const uint8_t*);
 extern bool nfcManager_isNfcActive();
 /*******************************************************************************
 **
@@ -193,7 +200,11 @@ static jboolean nativeNfcSecureElement_doResetForEseCosUpdate(JNIEnv*, jobject,
   if(NULL == halFuncEntries) {
     LOG(INFO) << StringPrintf("%s: halFuncEntries is NULL", __func__);
   } else {
-    ret = theInstance.resetEse((uint64_t)NFA_ESE_HARD_RESET);
+    if(handle == ESE_RESET_PROTECTION_ENABLE ||
+        handle == ESE_RESET_PROTECTION_DISABLE)
+      ret = theInstance.resetEse((uint64_t)handle);
+    else
+      ret = theInstance.resetEse((uint64_t)NFA_ESE_HARD_RESET);
     if(ret == 0) {
       LOG(INFO) << StringPrintf("%s: reset IOCTL failed", __func__);
     } else {
@@ -253,8 +264,8 @@ static jbyteArray nativeNfcSecureElement_doGetAtr (JNIEnv* e, jobject, jint hand
 *******************************************************************************/
 static jbyteArray nativeNfcSecureElement_doTransceive (JNIEnv* e, jobject, jint handle, jbyteArray data)
 {
-    const int32_t recvBufferMaxSize = 0x8800;//1024; 34k
-    uint8_t recvBuffer [recvBufferMaxSize];
+    const int32_t recvBufferMaxSize = 0x800B;//32k(8000) datasize + 10b Protocol Header Size + 1b support neg testcase
+    std::unique_ptr<uint8_t> recvBuffer(new uint8_t[recvBufferMaxSize]);;
     int32_t recvBufferActualSize = 0;
     ScopedByteArrayRW bytes(e, data);
     LOG(INFO) << StringPrintf("%s: enter; handle=0x%X; buf len=%zu", __func__, handle, bytes.size());
@@ -272,13 +283,13 @@ static jbyteArray nativeNfcSecureElement_doTransceive (JNIEnv* e, jobject, jint 
     if(!se.mIsWiredModeOpen)
         return NULL;
 
-    se.transceive(reinterpret_cast<uint8_t*>(&bytes[0]), bytes.size(), recvBuffer, recvBufferMaxSize, recvBufferActualSize, se.SmbTransceiveTimeOutVal);
+    se.transceive(reinterpret_cast<uint8_t*>(&bytes[0]), bytes.size(), recvBuffer.get(), recvBufferMaxSize, recvBufferActualSize, se.SmbTransceiveTimeOutVal);
 
     //copy results back to java
     jbyteArray result = e->NewByteArray(recvBufferActualSize);
     if (result != NULL)
     {
-        e->SetByteArrayRegion(result, 0, recvBufferActualSize, (jbyte *) recvBuffer);
+        e->SetByteArrayRegion(result, 0, recvBufferActualSize, (jbyte *) recvBuffer.get());
     }
 
     LOG(INFO) << StringPrintf("%s: exit: recv len=%d", __func__, recvBufferActualSize);
@@ -343,7 +354,7 @@ static jint nfcManager_doactivateSeInterface(JNIEnv* e, jobject o) {
 **                  Failure = 0x03
 **
 *******************************************************************************/
-static jint nfcManager_dodeactivateSeInterface(JNIEnv* e, jobject o) {
+jint nfcManager_dodeactivateSeInterface(JNIEnv* e, jobject o) {
   jint ret = NFA_STATUS_FAILED;
   tNFA_STATUS status = NFA_STATUS_FAILED;
   SecureElement& se = SecureElement::getInstance();
@@ -401,6 +412,103 @@ int register_com_android_nfc_NativeNfcSecureElement(JNIEnv *e)
 {
     return jniRegisterNativeMethods(e, gNativeNfcSecureElementClassName,
             gMethods, NELEM(gMethods));
+}
+/*******************************************************************************
+**
+** Function:        NxpNfc_GetHwInfo
+**
+** Description:     Read the JCOP platform Identifier data
+**
+** Returns:         None
+**
+*******************************************************************************/
+void NxpNfc_GetHwInfo() {
+  LOG(INFO) << StringPrintf("%s: Enter; ", __func__);
+  if(!NfcConfig::getUnsigned(NAME_NXP_GET_HW_INFO_LOG, 0))
+    return;
+  const int32_t recvBufferMaxSize = 1024;
+  uint8_t recvBuffer[recvBufferMaxSize];
+  int32_t recvBufferActualSize = 0;
+  bool stat = false;
+  NFCSTATUS status = NFCSTATUS_FAILED;
+  jint secElemHandle = EE_ERROR_INIT;
+  uint8_t CmdBuffer[] = {0x80, 0xCA, 0x00, 0xFE, 0x02, 0xDF, 0x20};
+  const uint8_t SUCCESS_SW1 = 0x90;
+  const uint8_t SUCCESS_SW2 = 0x00;
+  SecureElement& se = SecureElement::getInstance();
+
+  /* open SecureElement connection */
+  secElemHandle =
+      nativeNfcSecureElement_doOpenSecureElementConnection(NULL, NULL);
+  if (secElemHandle != EE_ERROR_INIT) {
+    /* Transmit command */
+    status = se.transceive(CmdBuffer, sizeof(CmdBuffer), recvBuffer,
+                           recvBufferMaxSize, recvBufferActualSize,
+                           se.SmbTransceiveTimeOutVal);
+
+    if (status) {
+      if ((recvBufferActualSize > 2) &&
+          (recvBuffer[recvBufferActualSize - 2] == SUCCESS_SW1) &&
+          (recvBuffer[recvBufferActualSize - 1] == SUCCESS_SW2)) {
+        /* null termination */
+        recvBuffer[recvBufferActualSize - 2] = '\0';
+        NxpNfc_ParsePlatformID(recvBuffer);
+      } else {
+        LOG(ERROR) << StringPrintf(
+            "%s: Get Platform Identifier command fail; exit; ", __func__);
+      }
+    } else {
+      LOG(ERROR) << StringPrintf("%s: trannsceive fail; exit; ", __func__);
+    }
+  }
+
+  stat = nativeNfcSecureElement_doDisconnectSecureElementConnection(
+      NULL, NULL, secElemHandle);
+  if (stat) {
+    LOG(INFO) << StringPrintf("%s: exit", __func__);
+  } else {
+    LOG(INFO) << StringPrintf("%s: Disconnect SecureElement fail", __func__);
+  }
+}
+
+/*******************************************************************************
+**
+** Function:        NxpNfc_ParsePlatformID
+**
+** Description:     Parse the PlatformID data to map the hardware.
+**
+** Returns:         None
+**
+*******************************************************************************/
+static void NxpNfc_ParsePlatformID(const uint8_t* data) {
+  const uint8_t PLATFORMID_OFFSET = 5;
+  const uint8_t PBYTES_SIZE = 3;
+  const uint8_t MAX_STRING_SIZE = 25;
+  const uint8_t PlatfType[][PBYTES_SIZE] = {{0x4A, 0x35, 0x55},
+                                            {0x4E, 0x35, 0x43}};
+  uint8_t PlatfStrings[][MAX_STRING_SIZE] = {
+      "NFCC HW is SN100", "NFCC HW is SN110", "Not SN1xx NFCC"};
+
+  uint32_t count = 0;
+
+#define MAX_PLATFTYPE_ELEMENTS (sizeof(PlatfType) / sizeof(PlatfType[0]))
+#define MAX_STRINGS (sizeof(PlatfStrings) / sizeof(PlatfStrings[0]))
+#define DATA_SIZE (sizeof(PlatfType[0]))
+
+  LOG(INFO) << StringPrintf("PlatformId: %s", &data[PLATFORMID_OFFSET]);
+  for (; count < MAX_PLATFTYPE_ELEMENTS; count++) {
+    if (!memcmp(&PlatfType[count][0], &data[PLATFORMID_OFFSET], DATA_SIZE)) {
+      LOG(INFO) << StringPrintf("PlatformId: %s", PlatfStrings[count]);
+      break;
+    }
+  }
+
+  if (count == MAX_PLATFTYPE_ELEMENTS) {
+    LOG(INFO) << StringPrintf("PlatformId: %s", PlatfStrings[count]);
+  }
+#undef MAX_PLATFTYPE_ELEMENTS
+#undef MAX_STRINGS
+#undef DATA_SIZE
 }
 
 } // namespace android

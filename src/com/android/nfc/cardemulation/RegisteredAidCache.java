@@ -26,6 +26,7 @@ import android.content.Context;
 import android.nfc.cardemulation.NfcApduServiceInfo;
 import android.nfc.cardemulation.CardEmulation;
 import android.util.Log;
+import android.util.proto.ProtoOutputStream;
 
 import com.google.android.collect.Maps;
 import java.util.Collections;
@@ -359,7 +360,7 @@ public class RegisteredAidCache {
             // and ignore children
             resolveinfo = resolveAidConflictLocked(aidServices, true);
             //If the AID is subsetAID check for prefix in same service.
-            if(isSubset(aidServices.get(0).aid)) {
+            if (isSubset(aidServices.get(0).aid)) {
                 resolveinfo.prefixInfo = findPrefixConflictForSubsetAid(aidServices.get(0).aid ,
                         new ArrayList<NfcApduServiceInfo>(){{add(resolveinfo.defaultService);}},true);
             }
@@ -378,7 +379,7 @@ public class RegisteredAidCache {
                         " default, ignoring conflicting AIDs.");
                 resolveinfo = resolveAidConflictLocked(aidServices, true);
                 //If the AID is subsetAID check for prefix in same service.
-                if(isSubset(aidServices.get(0).aid)) {
+                if (isSubset(aidServices.get(0).aid)) {
                     resolveinfo.prefixInfo = findPrefixConflictForSubsetAid(aidServices.get(0).aid ,
                             new ArrayList<NfcApduServiceInfo>(){{add(resolveinfo.defaultService);}},true);
                 }
@@ -399,9 +400,9 @@ public class RegisteredAidCache {
                 //conflciting services and root services.
                 if (isSubset(aidServices.get(0).aid)) {
                     ArrayList <NfcApduServiceInfo> apduServiceList = new  ArrayList <NfcApduServiceInfo>();
-                    for(ServiceAidInfo serviceInfo : conflictingServices)
+                    for (ServiceAidInfo serviceInfo : conflictingServices)
                         apduServiceList.add(serviceInfo.service);
-                    for(ServiceAidInfo serviceInfo : aidServices)
+                    for (ServiceAidInfo serviceInfo : aidServices)
                         apduServiceList.add(serviceInfo.service);
                     resolveinfo.prefixInfo =
                          findPrefixConflictForSubsetAid(aidServices.get(0).aid ,apduServiceList,false);
@@ -806,7 +807,11 @@ public class RegisteredAidCache {
             resolvedAids.clear();
         }
 
-        updateRoutingLocked(false);
+        if (NfcService.getInstance().mIsRouteForced) {
+            updateRoutingLocked(true);
+        } else {
+            updateRoutingLocked(false);
+        }
     }
 
     void updateRoutingLocked(boolean force) {
@@ -815,7 +820,7 @@ public class RegisteredAidCache {
             return;
         }
         final HashMap<String, AidRoutingManager.AidEntry> routingEntries = Maps.newHashMap();
-        int mGsmaPwrState = NfcService.getInstance().getGsmaPwrState();
+        boolean isNxpExtnEnabled = NfcService.getInstance().isNfcExtnsPresent();
         // For each AID, find interested services
         for (Map.Entry<String, AidResolveInfo> aidEntry:
                 mAidCache.entrySet()) {
@@ -836,7 +841,7 @@ public class RegisteredAidCache {
             if (resolveInfo.services.size() == 0) {
                 // No interested services
             } else if (resolveInfo.defaultService != null) {
-                // There is a default service set, route to where that service resides
+                // There is a default service set, route to where that service resides -
                 // either on the host (HCE) or on an SE.
                 NfcApduServiceInfo.ESeInfo seInfo = resolveInfo.defaultService.getSEInfo();
                 aidType.isOnHost = resolveInfo.defaultService.isOnHost();
@@ -848,27 +853,6 @@ public class RegisteredAidCache {
                 int screenstate= 0;
                 if(powerstate == 0x00) {
                     powerstate = (NfcService.getInstance().GetDefaultMifateCLTRouteEntry() & 0x3F);
-                    if(mGsmaPwrState > 0)
-                    {
-                        if(aidType.isOnHost)
-                        {
-                            if(NfcService.getInstance().getNciVersion() ==
-                                        NfcService.getInstance().NCI_VERSION_1_0){
-                                powerstate = updateRoutePowerState(mGsmaPwrState & 0x39);
-                            } else {
-                                powerstate = (mGsmaPwrState & 0x39);
-                            }
-                        } else
-                        {
-                            if(NfcService.getInstance().getNciVersion() ==
-                                           NfcService.getInstance().NCI_VERSION_1_0){
-                                powerstate = updateRoutePowerState(mGsmaPwrState);
-                            } else {
-                                powerstate = (mGsmaPwrState);
-                            }
-                        }
-                        if (DBG) Log.d(TAG," Setting GSMA power state"+ aid  + powerstate);
-                    }
                 }
 
                 boolean isOnHost = resolveInfo.defaultService.isOnHost();
@@ -880,7 +864,7 @@ public class RegisteredAidCache {
                   } else {
                       screenstate |= SCREEN_STATE_ON_LOCKED;
                   }
-                  if (!isOnHost) {
+                  if (!isOnHost || isNxpExtnEnabled) {
                     if (DBG) Log.d(TAG," set screen off enable for " + aid);
                     if(NfcService.getInstance().getNciVersion() ==
                                         NfcService.getInstance().NCI_VERSION_1_0){
@@ -890,8 +874,7 @@ public class RegisteredAidCache {
                         screenstate |= SCREEN_STATE_OFF_UNLOCKED | SCREEN_STATE_OFF_LOCKED;
                     }
                   }
-                  if(mGsmaPwrState == 0x00)
-                    powerstate |= screenstate;
+                  powerstate |= screenstate;
                 }
 
                int route = isOnHost ? 0 : seInfo.getSeId();
@@ -915,12 +898,12 @@ public class RegisteredAidCache {
                 } else {
                     aidType.powerstate = POWER_STATE_SWITCH_ON | SCREEN_STATE_ON_LOCKED;
                 }
+
+                if(isNxpExtnEnabled) {
+                    aidType.powerstate |= SCREEN_STATE_OFF_UNLOCKED | SCREEN_STATE_OFF_LOCKED;
+                  }
+
                 if (DBG) Log.d(TAG," AID power state 2 "+ aid  +" "+aidType.powerstate);
-                if(mGsmaPwrState > 0)
-                {
-                    aidType.powerstate = (mGsmaPwrState & 0x39);
-                    if (DBG) Log.d(TAG," Setting GSMA power state"+ aid  + " " +aidType.powerstate);
-                }
                 if(NfcService.getInstance().getNciVersion() >=
                                         NfcService.getInstance().NCI_VERSION_2_0){
                     aidType.powerstate = updateRoutePowerState(aidType.powerstate);
@@ -957,16 +940,11 @@ public class RegisteredAidCache {
                 } else {
                     aidType.powerstate = POWER_STATE_SWITCH_ON | SCREEN_STATE_ON_LOCKED;
                 }
-                if(mGsmaPwrState > 0)
-                {
-                    if(NfcService.getInstance().getNciVersion() ==
-                                        NfcService.getInstance().NCI_VERSION_1_0){
-                        aidType.powerstate = updateRoutePowerState(mGsmaPwrState & 0x39);
-                    } else {
-                        aidType.powerstate = (mGsmaPwrState & 0x39);
-                    }
-                    if (DBG) Log.d(TAG," Setting GSMA power state"+ aid  + " " +aidType.powerstate);
+
+                if(isNxpExtnEnabled) {
+                    aidType.powerstate |= SCREEN_STATE_OFF_UNLOCKED | SCREEN_STATE_OFF_LOCKED;
                 }
+
                 if(NfcService.getInstance().getNciVersion() >=
                                         NfcService.getInstance().NCI_VERSION_2_0){
                     aidType.powerstate = updateRoutePowerState(aidType.powerstate);
@@ -1101,5 +1079,46 @@ public class RegisteredAidCache {
       }
       Log.d(TAG, "updateRoutePowerState outputPwr "+ inputPwr);
       return inputPwr;
+    }
+
+    /**
+     * Dump debugging information as a RegisteredAidCacheProto
+     *
+     * Note:
+     * See proto definition in frameworks/base/core/proto/android/nfc/card_emulation.proto
+     * When writing a nested message, must call {@link ProtoOutputStream#start(long)} before and
+     * {@link ProtoOutputStream#end(long)} after.
+     * Never reuse a proto field number. When removing a field, mark it as reserved.
+     */
+    void dumpDebug(ProtoOutputStream proto) {
+        for (Map.Entry<String, AidResolveInfo> entry : mAidCache.entrySet()) {
+            long token = proto.start(RegisteredAidCacheProto.AID_CACHE_ENTRIES);
+            proto.write(RegisteredAidCacheProto.AidCacheEntry.KEY, entry.getKey());
+            proto.write(RegisteredAidCacheProto.AidCacheEntry.CATEGORY, entry.getValue().category);
+            NfcApduServiceInfo defaultServiceInfo = entry.getValue().defaultService;
+            ComponentName defaultComponent = defaultServiceInfo != null ?
+                    defaultServiceInfo.getComponent() : null;
+            if (defaultComponent != null) {
+                defaultComponent.dumpDebug(proto,
+                        RegisteredAidCacheProto.AidCacheEntry.DEFAULT_COMPONENT);
+            }
+            for (NfcApduServiceInfo serviceInfo : entry.getValue().services) {
+                long sToken = proto.start(RegisteredAidCacheProto.AidCacheEntry.SERVICES);
+                serviceInfo.dumpDebug(proto);
+                proto.end(sToken);
+            }
+            proto.end(token);
+        }
+        if (mPreferredForegroundService != null) {
+            mPreferredForegroundService.dumpDebug(proto,
+                    RegisteredAidCacheProto.PREFERRED_FOREGROUND_SERVICE);
+        }
+        if (mPreferredPaymentService != null) {
+            mPreferredPaymentService.dumpDebug(proto,
+                    RegisteredAidCacheProto.PREFERRED_PAYMENT_SERVICE);
+        }
+        long token = proto.start(RegisteredAidCacheProto.ROUTING_MANAGER);
+        mRoutingManager.dumpDebug(proto);
+        proto.end(token);
     }
 }

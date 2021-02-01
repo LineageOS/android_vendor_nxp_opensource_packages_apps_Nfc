@@ -15,9 +15,9 @@
  */
  /******************************************************************************
  *
- *  The original Work has been changed by NXP Semiconductors.
+ *  The original Work has been changed by NXP.
  *
- *  Copyright (C) 2019 NXP Semiconductors
+ *  Copyright 2019-2020 NXP
  *
  *  Licensed under the Apache License, Version 2.0 (the "License");
  *  you may not use this file except in compliance with the License.
@@ -43,7 +43,6 @@
 #include <base/logging.h>
 #include "nfc_config.h"
 #include <phNxpExtns_MifareStd.h>
-#include <phNxpLog.h>
 
 using android::base::StringPrintf;
 
@@ -77,9 +76,6 @@ static int fd_ese_nfc_sync; /*file descriptor to hold sync driver handle*/
 NFCSTATUS EXTNS_Init(tNFA_DM_CBACK* p_nfa_dm_cback,
                      tNFA_CONN_CBACK* p_nfa_conn_cback) {
   NFCSTATUS status = NFCSTATUS_FAILED;
-
-  /* Initialize Log level */
-  phNxpLog_InitializeLogLevel();
 
   /* Validate parameters */
   if ((!p_nfa_dm_cback) || (!p_nfa_conn_cback)) {

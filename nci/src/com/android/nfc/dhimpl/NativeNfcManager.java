@@ -274,9 +274,6 @@ public class NativeNfcManager implements DeviceHost {
     public native int   getDefaultFelicaCLTPowerState();
 
     @Override
-    public native int getGsmaPwrState();
-
-    @Override
     public native boolean commitRouting();
 
     @Override
@@ -384,6 +381,9 @@ public class NativeNfcManager implements DeviceHost {
     public boolean mposGetReaderMode() {
         return mMposMgr.doMposGetReaderMode();
     }
+
+    @Override
+    public native int doEnableDebugNtf (byte fieldValue);
 
     @Override
     public int doWriteT4tData(byte[] fileId, byte[] data, int length) {
@@ -596,6 +596,9 @@ public class NativeNfcManager implements DeviceHost {
         return doSetNfcSecure(enable);
     }
 
+    @Override
+    public native String getNfaStorageDir();
+
     /**
      * Notifies Ndef Message (TODO: rename into notifyTargetDiscovered)
      */
@@ -613,6 +616,11 @@ public class NativeNfcManager implements DeviceHost {
     private void notifySeInitialized() {
         mListener.onSeInitialized();
     }
+
+    private void notifySrdEvt(int event) {
+        mListener.onNotifySrdEvt(event);
+    }
+
     /**
      * Notifies P2P Device detected, to activate LLCP link
      */
@@ -647,6 +655,10 @@ public class NativeNfcManager implements DeviceHost {
         mListener.onHostCardEmulationData(technology, data);
     }
 
+    private void notifyNfcDebugInfo(int len, byte[] data) {
+        mListener.onLxDebugConfigData(len, data);
+    }
+
     private void notifyHostEmuDeactivated(int technology) {
         mListener.onHostCardEmulationDeactivated(technology);
     }
@@ -661,6 +673,12 @@ public class NativeNfcManager implements DeviceHost {
 
     private void notifyTransactionListeners(byte[] aid, byte[] data, String evtSrc) {
         mListener.onNfcTransactionEvent(aid, data, evtSrc);
+    }
+    /**
+     * Notifies Tag abort operation
+     */
+    private void notifyTagAbort() {
+        mListener.notifyTagAbort();
     }
 /* NXP extension are here */
     @Override
