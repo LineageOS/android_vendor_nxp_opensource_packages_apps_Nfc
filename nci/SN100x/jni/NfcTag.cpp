@@ -2,8 +2,8 @@
  * Copyright (c) 2016, The Linux Foundation. All rights reserved.
  * Not a Contribution.
  *
- * Copyright (C) 2015 NXP Semiconductors
- * The original Work has been changed by NXP Semiconductors.
+ * Copyright (C) 2018-2021 NXP
+ * The original Work has been changed by NXP.
  *
  * Copyright (C) 2012 The Android Open Source Project
  *
@@ -19,25 +19,6 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-/******************************************************************************
-*
-*  The original Work has been changed by NXP.
-*
-*  Licensed under the Apache License, Version 2.0 (the "License");
-*  you may not use this file except in compliance with the License.
-*  You may obtain a copy of the License at
-*
-*  http://www.apache.org/licenses/LICENSE-2.0
-*
-*  Unless required by applicable law or agreed to in writing, software
-*  distributed under the License is distributed on an "AS IS" BASIS,
-*  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-*  See the License for the specific language governing permissions and
-*  limitations under the License.
-*
-*  Copyright 2018-2020 NXP
-*
-******************************************************************************/
 
 /*
  *  Tag-reading, tag-writing operations.
@@ -71,7 +52,6 @@ uint32_t TimeDiff(timespec start, timespec end);
 int selectedId = 0;
 static bool isP2pDetected = false;
 IntervalTimer mTimer;
-const vector<uint8_t> defaultTimeDiff = {01, 03};//timeout value in 1*100ms
 namespace android {
   extern bool nfcManager_isReaderModeEnabled();
 }
@@ -165,21 +145,18 @@ void NfcTag::initialize(nfc_jni_native_data* native) {
   isP2pDetected = false;
   mIsSkipNdef = false;
   mIsNonStdMFCTag = false;
-  vector<uint8_t> timeDiff;
-
   if(NfcConfig::hasKey(NAME_NXP_NON_STD_CARD_TIMEDIFF)) {
-    timeDiff = NfcConfig::getBytes(NAME_NXP_NON_STD_CARD_TIMEDIFF);
+    vector<uint8_t> timeDiff = NfcConfig::getBytes(NAME_NXP_NON_STD_CARD_TIMEDIFF);
+    DLOG_IF(INFO, nfc_debug_enabled)
+       << StringPrintf("%s: Non std card", __func__);
+    for (uint8_t i=0; i<timeDiff.size(); i++) {
+      mNonStdCardTimeDiff.at(i) = timeDiff.at(i) * TIME_MUL_100MS;
+      DLOG_IF(INFO, nfc_debug_enabled) << StringPrintf("%s: timediff[%d] = %d",
+          __func__, i, mNonStdCardTimeDiff.at(i));
+    }
   } else {
     DLOG_IF(INFO, nfc_debug_enabled)
-      << StringPrintf("%s: timeout not defined taking default", __func__);
-    timeDiff = defaultTimeDiff;
-  }
-  DLOG_IF(INFO, nfc_debug_enabled)
-      << StringPrintf("%s: Non std card", __func__);
-  for (uint8_t i=0; i<timeDiff.size(); i++) {
-    mNonStdCardTimeDiff.at(i) = timeDiff.at(i) * TIME_MUL_100MS;
-    DLOG_IF(INFO, nfc_debug_enabled) << StringPrintf("%s: timediff[%d] = %d",
-          __func__, i, mNonStdCardTimeDiff.at(i));
+      << StringPrintf("%s: timediff not defined taking default", __func__);
   }
   isNonStdCardSupported =
       (NfcConfig::getUnsigned(NAME_NXP_SUPPORT_NON_STD_CARD, 0) != 0) ? true
@@ -1468,6 +1445,11 @@ void NfcTag::resetTechnologies() {
   resetAllTransceiveTimeouts();
 #if (NXP_EXTNS == TRUE)
   EXTNS_SetConnectFlag(false);
+  /* reset KOVIO uidLen on disconnect/presence
+   * check failed/DEACTIVATED_NTF to enable
+   * thus isSameKovio returns false
+   * */
+  mLastKovioUidLen = 0;
 #endif
 }
 

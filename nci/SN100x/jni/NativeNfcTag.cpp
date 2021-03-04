@@ -3,8 +3,8 @@
  *  Copyright (c) 2016, The Linux Foundation. All rights reserved.
  *  Not a Contribution.
  *
- *  Copyright (C) 2018-2020 NXP Semiconductors
- *  The original Work has been changed by NXP Semiconductors.
+ *  Copyright (C) 2018-2021 NXP
+ *  The original Work has been changed by NXP.
  *
  *  Copyright (C) 2012 The Android Open Source Project
  *
@@ -1337,7 +1337,11 @@ static jbyteArray nativeNfcTag_doTransceive(JNIEnv* e, jobject o,
     DLOG_IF(INFO, nfc_debug_enabled) << StringPrintf(
         "%s: response %zu bytes", __func__, sRxDataBuffer.size());
 
-    if ((natTag.getProtocol() == NFA_PROTOCOL_T2T) &&
+    if (
+#if (NXP_EXTNS == TRUE && NXP_SRD == TRUE)
+        (SecureDigitization::getInstance().getSrdState() != 0x01) &&
+#endif
+        (natTag.getProtocol() == NFA_PROTOCOL_T2T) &&
         natTag.isT2tNackResponse(sRxDataBuffer.data(), sRxDataBuffer.size())) {
       isNack = true;
     }
@@ -1353,7 +1357,11 @@ static jbyteArray nativeNfcTag_doTransceive(JNIEnv* e, jobject o,
         DLOG_IF(INFO, nfc_debug_enabled)
             << StringPrintf("%s: reconnect finish", __func__);
       } else if (sCurrentConnectedTargetProtocol == NFC_PROTOCOL_MIFARE) {
+#if (NXP_EXTNS == TRUE)
+        uint32_t transDataLen = static_cast<uint32_t>(sRxDataBuffer.size());
+#else
         uint32_t transDataLen = sRxDataBuffer.size();
+#endif
         uint8_t* transData = (uint8_t*)sRxDataBuffer.data();
         bool doReconnect = false;
 
