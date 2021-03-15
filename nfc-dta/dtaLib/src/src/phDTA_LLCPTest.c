@@ -202,7 +202,12 @@ DTASTATUS phDtaLibi_LlcpOperations(phDtaLib_sTestProfile_t* psTestProfile,
             psLlcpConnOrientedData->dwBuffLength = sLlcpConnOrientedData.dwBuffLength;
 
             phOsal_LogDebug((const uint8_t*)"DTALib>LLCP: link is congested, data pushed to queue");
-            phOsal_QueuePush(psDtaLibHdl->qHdlCongestData, psLlcpConnOrientedData, 0);
+            dwMwIfStatus = phOsal_QueuePush(psDtaLibHdl->qHdlCongestData, psLlcpConnOrientedData, 0);
+            if(dwMwIfStatus != OSALSTATUS_SUCCESS)
+            {
+              phOsal_LogErrorString((const uint8_t*)"DTALib>LLCP::Could not push to queue", (const uint8_t*)__FUNCTION__);
+              return dwMwIfStatus;
+            }
             return DTASTATUS_SUCCESS;
         }
         else
@@ -323,17 +328,24 @@ DTASTATUS phDtaLibi_LlcpConnLessOperations(phDtaLib_sTestProfile_t* psTestProfil
             psDtaLibHdl->bRemoteSapClEchoOut = bRemoteSapClEchoOut;
         }
         else
-        {/*Its a loopback data.Send it back*/
+        {/*Its a loopback data. Send it back, if the llc is active*/
             phOsal_LogDebug((const uint8_t*)"DTALib>LLCP:Waiting for TDELAY_CL");
             phOsal_Delay(TDELAY_CL_IN_MS);
-            phOsal_LogDebugU32h((const uint8_t*)"DTALib>LLCP:Send Loopback Data back to SAP:",bRemoteSapClEchoOut);
-            dwMwIfStatus = phMwIf_LlcpConnLessSendData(psDtaLibHdl->mwIfHdl,
-                                                       psDtaLibHdl->bRemoteSapClEchoOut,
-                                                       &sLlcpConnLessData);
-            if (dwMwIfStatus != MWIFSTATUS_SUCCESS)
+            if(psDtaLibHdl->llcpConnStatus != PHMWIF_LLCP_DEACTIVATED_EVT)
             {
-                phOsal_LogErrorString((const uint8_t*)"DTALib>LLCP::Could not Send Connless Data", (const uint8_t*)__FUNCTION__);
-                return dwMwIfStatus;
+                phOsal_LogDebugU32h((const uint8_t*)"DTALib>LLCP:Send Loopback Data back to SAP:",bRemoteSapClEchoOut);
+                dwMwIfStatus = phMwIf_LlcpConnLessSendData(psDtaLibHdl->mwIfHdl,
+                                                           psDtaLibHdl->bRemoteSapClEchoOut,
+                                                           &sLlcpConnLessData);
+                if (dwMwIfStatus != MWIFSTATUS_SUCCESS)
+                {
+                    phOsal_LogErrorString((const uint8_t*)"DTALib>LLCP::Could not Send Connless Data", (const uint8_t*)__FUNCTION__);
+                    return dwMwIfStatus;
+                }
+            }
+            else
+            {
+                phOsal_LogDebug((const uint8_t*)"DTALib>LLCP: Connection Less Link Deacivated");
             }
             if(sLlcpConnLessData.pbBuff){
                 free(sLlcpConnLessData.pbBuff);
@@ -364,7 +376,7 @@ DTASTATUS phDtaLibi_LlcpHandleUncongestedEvent()
             phMwIf_sBuffParams_t               *psLlcpConnOrientedData;
             phOsal_LogDebug((const uint8_t*)"DTALib>LLCP: Pulling Data from Q");
             dwOsalStatus = phOsal_QueuePull(psDtaLibHdl->qHdlCongestData,(void**) &psLlcpConnOrientedData,10);
-            if (dwOsalStatus != 0) {
+            if((dwOsalStatus != 0) || (psLlcpConnOrientedData == NULL)) {
                 phOsal_LogErrorU32h((const uint8_t*)"Status = ", dwOsalStatus);
                 if(dwOsalStatus == OSALSTATUS_Q_UNDERFLOW){
                     phOsal_LogDebug((const uint8_t*)"DTALib>LLCP: Q UNDERFLOW");

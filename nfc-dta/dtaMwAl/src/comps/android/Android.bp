@@ -14,6 +14,12 @@
   limitations under the License.
 */
 
+/*
+ * CR12_ON_AR12_CHANGE
+ * AOSP_MASTER_COMPILATION_SUPPORT
+ *   Set it to TRUE if you are building with Vanilla AOSP
+ */
+
 cc_library_shared {
     name: "libmwif",
     system_ext_specific: true,
@@ -35,7 +41,7 @@ cc_library_shared {
         "libdl",
         "liblog",
         "vendor.nxp.hardware.nfc@2.0",
-        "android.hardware.nfc@1.0",
+        "android.hardware.nfc@1.2",
     ],
     cflags: [
         "-Wall",
@@ -44,6 +50,11 @@ cc_library_shared {
         "-Werror",
         "-DNXP_EXTNS=TRUE",
         "-DAOSP_MASTER_COMPILATION_SUPPORT=TRUE",
+        "-DAPP_HANDLE_DATA_CHAINING",
+        "-DANDROID_O=FALSE",
+        "-DANDROID_P=FALSE",
+        "-DANDROID_S=TRUE",
+        "-DENABLE_CR12_SUPPORT=TRUE"
     ],
     srcs: [
         "src/*.cpp"
