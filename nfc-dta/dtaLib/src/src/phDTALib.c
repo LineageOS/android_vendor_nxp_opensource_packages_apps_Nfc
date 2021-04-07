@@ -1,5 +1,5 @@
 /*
-* Copyright (C) 2015-2018 NXP Semiconductors
+* Copyright (C) 2015-2020 NXP Semiconductors
 *
 * Licensed under the Apache License, Version 2.0 (the "License");
 * you may not use this file except in compliance with the License.
@@ -46,16 +46,19 @@ extern "C" {
 
 phDtaLib_sHandle_t      g_DtaLibHdl;
 uint32_t gx_status = FALSE;   /**<(Check) change the type def.... also NFA_STATUS_FAILED */
-uint8_t gs_paramBuffer[600]; /**< Buffer for passing Data during operations */
 
 #define P2P_ENABLED     1 /*in case of enable, P2P flag will have 1,2,4 or addition of these values*/
 #define P2P_DISABLED    0
 
+/**< Buffer for NDEF Read Write Data during operations */
+uint8_t gs_ndefReadWriteBuff[PHDTALIB_MAX_NDEFTAG_RW_BUFFER_SIZE] = {0};
+uint32_t gs_sizeNdefRWBuff = 0;
+
 static uint8_t PHDTALIB_LLCP_GEN_BYTES_INITIATOR[]   = {0x46,0x66,0x6D, /**< LLCP magic bytes */
-                                                              0x01,0x01,0x12, /**< major, minor Version TLV*/
-                                                              0x02,0x02,0x07,0xFE, /**< MIUX TLV*/
-                                                              0x03,0x02,0x00,0x03, /**< WKS TLV*/
-                                                              0x04,0x01,0x64}; /**< LTO TLV*/
+                                                        0x01,0x01,0x12, /**< major, minor Version TLV*/
+                                                        0x02,0x02,0x07,0xFE, /**< MIUX TLV*/
+                                                        0x03,0x02,0x00,0x03, /**< WKS TLV*/
+                                                        0x04,0x01,0x64}; /**< LTO TLV*/
 static uint8_t PHDTALIB_LLCP_GEN_BYTES_TARGET[]   = {0x46,0x66,0x6D,     /**< LLCP magic bytes */
                                                      0x01,0x01,0x12,     /**< major, minor Version TLV*/
                                                      0x02,0x02,0x07,0xFE,/**< MIUX TLV*/
@@ -169,15 +172,15 @@ DTASTATUS phDtaLib_DeInit() {
     phDtaLib_sQueueData_t* psQueueData=NULL;
     OSALSTATUS dwOsalStatus = 0;
     LOG_FUNCTION_ENTRY;
-    psQueueData = (phDtaLib_sQueueData_t*)malloc(sizeof(phDtaLib_sQueueData_t));
+
     if(!dtaLibHdl->bDtaInitialized)
     {
         phOsal_LogInfo((const uint8_t*)"DTALib>DTALib already DeInitialized!!.Just returning\n");
         return DTASTATUS_SUCCESS;
     }
-
-     phOsal_LogDebug((const uint8_t*)"DTALib> Calling MwIf De-Init\n");
-     phMwIf_DeInit(dtaLibHdl->mwIfHdl);
+    psQueueData = (phDtaLib_sQueueData_t*)malloc(sizeof(phDtaLib_sQueueData_t));
+    phOsal_LogDebug((const uint8_t*)"DTALib> Calling MwIf De-Init\n");
+    phMwIf_DeInit(dtaLibHdl->mwIfHdl);
 
     dtaLibHdl->blStopCbMsgHandleThrd = TRUE;
     if (psQueueData)
@@ -195,12 +198,14 @@ DTASTATUS phDtaLib_DeInit() {
     {
         phOsal_LogErrorString((const uint8_t*)"DTALib> :Unable to Push to Queue", (const uint8_t*)__FUNCTION__);
         dtaLibHdl->blStopCbMsgHandleThrd = FALSE;
+        free(psQueueData);
         return DTASTATUS_FAILED;
     }
     dwOsalStatus = phOsal_ThreadDelete((void *)dtaLibHdl->dtaThreadHdl);
     if(dwOsalStatus != OSALSTATUS_SUCCESS)
     {
         phOsal_LogDebugString ((const uint8_t*)"DTALib>%s:Unable to Delete Thread ",(const uint8_t*)__FUNCTION__);
+        free(psQueueData);
         return DTASTATUS_FAILED;
     }
     phOsal_LogDebugString ((const uint8_t*)"DTALib>%s:phDtaLibi_CbMsgHandleThrd Thread delete successful ",(const uint8_t*)__FUNCTION__);
@@ -209,6 +214,7 @@ DTASTATUS phDtaLib_DeInit() {
     if(dwOsalStatus != OSALSTATUS_SUCCESS)
     {
         phOsal_LogDebug((const uint8_t*)"DTALib> Unable to Delete Queue\n");
+        free(psQueueData);
         return DTASTATUS_FAILED;
     }
 
@@ -216,6 +222,7 @@ DTASTATUS phDtaLib_DeInit() {
     if(dwOsalStatus != OSALSTATUS_SUCCESS)
     {
         phOsal_LogDebug((const uint8_t*)"DTALib> Unable to Delete qHdlCongestData Queue\n");
+        free(psQueueData);
         return DTASTATUS_FAILED;
     }
 
@@ -301,7 +308,10 @@ DTASTATUS phDtaLib_EnableDiscovery(phDtaLib_sDiscParams_t* discParams)
 
     if (((dtaLibHdl->sTestProfile.Pattern_Number == PHDTALIB_LLCP_CO_SET_SAP_OR_CL) ||
         (dtaLibHdl->sTestProfile.Pattern_Number == PHDTALIB_LLCP_CO_SET_NAME_OR_CL) ||
-        (dtaLibHdl->sTestProfile.Pattern_Number == PHDTALIB_LLCP_CO_SET_SNL_OR_CL)) &&
+        (dtaLibHdl->sTestProfile.Pattern_Number == PHDTALIB_LLCP_CO_SET_SNL_OR_CL)  ||
+        (dtaLibHdl->sTestProfile.Pattern_Number == PHDTALIB_LLCP_CO_SET_SAP_OR_CL_NFCF424) ||
+        (dtaLibHdl->sTestProfile.Pattern_Number == PHDTALIB_LLCP_CO_SET_NAME_OR_CL_NFCF424) ||
+        (dtaLibHdl->sTestProfile.Pattern_Number == PHDTALIB_LLCP_CO_SET_SNL_OR_CL_NFCF424)) &&
         (dtaLibHdl->bLlcpInitialized != TRUE))
     {
         phMwIf_sLlcpInitParams_t sLlcpInitPrms;
@@ -312,7 +322,8 @@ DTASTATUS phDtaLib_EnableDiscovery(phDtaLib_sDiscParams_t* discParams)
             PHDTALIB_LLCP_GEN_BYTES_TARGET[5] = 0x11;
         }else if((strcmp(dtaLibHdl->sTestProfile.Certification_Release, "CR9") == 0x00) ||
                  (strcmp(dtaLibHdl->sTestProfile.Certification_Release, "CR10") == 0x00) ||
-                 (strcmp(dtaLibHdl->sTestProfile.Certification_Release, "CR11") == 0x00)){
+                 (strcmp(dtaLibHdl->sTestProfile.Certification_Release, "CR11") == 0x00) ||
+                 (strcmp(dtaLibHdl->sTestProfile.Certification_Release, "CR12") == 0x00)){
             PHDTALIB_LLCP_GEN_BYTES_INITIATOR[5] = 0x12;
             PHDTALIB_LLCP_GEN_BYTES_TARGET[5] = 0x12;
         }
@@ -350,6 +361,9 @@ DTASTATUS phDtaLib_EnableDiscovery(phDtaLib_sDiscParams_t* discParams)
         dwMwIfStatus = phMwIf_LlcpRegisterServerConnLess(dtaLibHdl->mwIfHdl,
                                                           &sLlcpSrvrPrms,
                                                           &(dtaLibHdl->pvCLServerHandle));
+
+        PH_ON_ERROR_RETURN(MWIFSTATUS_SUCCESS,dwMwIfStatus,
+                (const uint8_t*)"DTALib> Error in registering Server Connection Less");
         dtaLibHdl->bLlcpInitialized = TRUE;
     }
 
@@ -421,32 +435,51 @@ MWIFSTATUS phDtaLibi_UpdateConfigPrams(phDtaLib_sDiscParams_t* discParams)
     dtaLibHdl->sConfigPrms.sMwIfDiscCfgParams.discParams.dwListenUICC = discParams->dwListenUICC;
     dtaLibHdl->sConfigPrms.sMwIfDiscCfgParams.discParams.dwListenHCE  = discParams->dwListenHCE;
     dtaLibHdl->sConfigPrms.sMwIfDiscCfgParams.discParams.dwListenESE  = discParams->dwListenESE;
+    dtaLibHdl->sConfigPrms.sMwIfDiscCfgParams.discParams.dwP2pAcmIni  = discParams->dwP2pAcmIni;
+    dtaLibHdl->sConfigPrms.sMwIfDiscCfgParams.discParams.dwP2pAcmTar  = discParams->dwP2pAcmTar;
 
     memcpy(dtaLibHdl->sConfigPrms.aCertRelease, dtaLibHdl->sTestProfile.Certification_Release, (strlen(dtaLibHdl->sTestProfile.Certification_Release)+1));
     dtaLibHdl->sConfigPrms.dwConnDeviceLimit = dtaLibHdl->sTestProfile.ConnDeviceLimit;
     dtaLibHdl->sConfigPrms.dwTimeSlotNumber = dtaLibHdl->sTestProfile.TimeSlotNumber;
+    if(((dtaLibHdl->sTestProfile.Pattern_Number == 0x00) ||
+        (dtaLibHdl->sTestProfile.Pattern_Number == 0x05)) &&
+       (dtaLibHdl->sTestProfile.ConnDeviceLimit > 0x01))
+    {
+        dtaLibHdl->sConfigPrms.selP2pProto = 0x01;
+    }
+    else
+    {
+        dtaLibHdl->sConfigPrms.selP2pProto = 0x00;
+    }
 
     dtaLibHdl->sConfigPrms.bPollBitRateTypeF = PHMWIF_NCI_BITRATE_212;
-    if((dtaLibHdl->sTestProfile.Pattern_Number == 0x06) ||
+    if((dtaLibHdl->sTestProfile.Pattern_Number == 0x05) ||
+       (dtaLibHdl->sTestProfile.Pattern_Number == 0x06) ||
        (dtaLibHdl->sTestProfile.Pattern_Number == 0x08) ||
-       (dtaLibHdl->sTestProfile.Pattern_Number == 0x0A))
+       (dtaLibHdl->sTestProfile.Pattern_Number == 0x0A) ||
+       (dtaLibHdl->sTestProfile.Pattern_Number == 0x0F))
     {
         dtaLibHdl->sConfigPrms.bPollBitRateTypeF = PHMWIF_NCI_BITRATE_424;
-        phOsal_LogDebugString ((const uint8_t*)"DTALib>Configured TypeF Poll Bitrate to 424Kbps for pattern number 0x06,0x08,0x09 & 0x0A",
+        phOsal_LogDebugString ((const uint8_t*)"DTALib>Configured TypeF Poll Bitrate to 424Kbps for pattern number 0x05,0x06,0x08,0x0A & 0x0F",
                                 (const uint8_t*)__FUNCTION__);
     }
-    if(dtaLibHdl->sTestProfile.Pattern_Number == 0x09)
+
+    if((dtaLibHdl->sTestProfile.Pattern_Number == 0x09) ||
+        (((dtaLibHdl->sTestProfile.Pattern_Number == 0x03) || (dtaLibHdl->sTestProfile.Pattern_Number == 0x04))
+            && ((dtaLibHdl->sConfigPrms.sMwIfDiscCfgParams.discParams.dwPollP2P) || (dtaLibHdl->sConfigPrms.sMwIfDiscCfgParams.discParams.dwP2pAcmIni)))
+      )
     {
         dtaLibHdl->sConfigPrms.bNfcdepPollBitRateHigh = TRUE;
     }
 
-    if((dtaLibHdl->sTestProfile.Pattern_Number == 0x0A) ||
-       (dtaLibHdl->sTestProfile.Pattern_Number == 0x0B))
+    if((dtaLibHdl->sTestProfile.Pattern_Number == 0x0B) ||
+       (dtaLibHdl->sTestProfile.Pattern_Number == 0x07) ||
+       (dtaLibHdl->sTestProfile.Pattern_Number == 0x09))
     {
-        /*Disable Type B Poll for pattern 0x0A & 0x0B as per DTA Spec*/
+        /*Disable Type B Poll for pattern 0x0B, 0x07 & 0x09 as per DTA Spec*/
         dtaLibHdl->sConfigPrms.sMwIfDiscCfgParams.discParams.dwPollP2P   &= (~DTALIB_RFTECHNOLOGY_MASK_B);
         dtaLibHdl->sConfigPrms.sMwIfDiscCfgParams.discParams.dwPollRdWrt &= (~DTALIB_RFTECHNOLOGY_MASK_B);
-        phOsal_LogDebugString ((const uint8_t*)"DTALib>Disabled Type B polling for pattern number 0x0A & 0x0B",
+        phOsal_LogDebugString ((const uint8_t*)"DTALib>Disabled Type B polling for pattern number0x0B, 0x07 & 0x09",
                                 (const uint8_t*)__FUNCTION__);
     }
 
@@ -466,8 +499,67 @@ MWIFSTATUS phDtaLibi_UpdateConfigPrams(phDtaLib_sDiscParams_t* discParams)
         (dtaLibHdl->sTestProfile.Pattern_Number == PHDTALIB_LLCP_CO_SET_SNL_OR_CL))
     {
         dtaLibHdl->sConfigPrms.bEnableLlcp = TRUE;
-        dtaLibHdl->sConfigPrms.bPollBitRateTypeF = (PHMWIF_NCI_BITRATE_212 | PHMWIF_NCI_BITRATE_424);
+        dtaLibHdl->sConfigPrms.bPollBitRateTypeF = PHMWIF_NCI_BITRATE_212;
     }
+    else if((dtaLibHdl->sTestProfile.Pattern_Number == PHDTALIB_LLCP_CO_SET_SAP_OR_CL_NFCF424) ||
+        (dtaLibHdl->sTestProfile.Pattern_Number == PHDTALIB_LLCP_CO_SET_NAME_OR_CL_NFCF424) ||
+        (dtaLibHdl->sTestProfile.Pattern_Number == PHDTALIB_LLCP_CO_SET_SNL_OR_CL_NFCF424))
+    {
+        dtaLibHdl->sConfigPrms.bEnableLlcp = TRUE;
+        dtaLibHdl->sConfigPrms.bPollBitRateTypeF = PHMWIF_NCI_BITRATE_424;
+    }
+
+    if (strcmp(dtaLibHdl->sConfigPrms.aCertRelease, "CR12") == 0x00)
+    {
+        if(discParams->dwP2pAcmIni != 0)
+        {
+            phOsal_LogDebugString ((const uint8_t*)"DTALib>:P2P-ACM Initiator Test Mode",(const uint8_t*)__FUNCTION__);
+            if((dtaLibHdl->sTestProfile.Pattern_Number == PHDTALIB_P2PACM_NFCA_PN_00) ||
+               (dtaLibHdl->sTestProfile.Pattern_Number == PHDTALIB_P2PACM_NFCA_PN_03) ||
+               (dtaLibHdl->sTestProfile.Pattern_Number == 0x05) ||
+               (dtaLibHdl->sTestProfile.Pattern_Number == 0x07))
+            {
+                dtaLibHdl->sConfigPrms.bEnablePollBitRateTypeA_P2PACM = TRUE;
+                phOsal_LogDebugString ((const uint8_t*)"DTALib>:P2P-ACM Test Mode NFCA : PN00 or PN03 or 0x05 or PN07",(const uint8_t*)__FUNCTION__);
+            }
+            else if(dtaLibHdl->sTestProfile.Pattern_Number == PHDTALIB_P2PACM_NFCF_212_PN_01)
+            {
+                dtaLibHdl->sConfigPrms.bEnablePollBitRateTypeF_P2PACM = PHMWIF_NCI_BITRATE_212;
+                phOsal_LogDebugString ((const uint8_t*)"DTALib>:P2P-ACM Test Mode NFC-F 212 Bit Rate : PN01",(const uint8_t*)__FUNCTION__);
+            }
+            else if(dtaLibHdl->sTestProfile.Pattern_Number == PHDTALIB_P2PACM_NFCF_424_PN_02)
+            {
+                dtaLibHdl->sConfigPrms.bEnablePollBitRateTypeF_P2PACM = PHMWIF_NCI_BITRATE_424;
+                phOsal_LogDebugString ((const uint8_t*)"DTALib>:P2P-ACM Test Mode NFC-F 424 Bit Rate : PN02",(const uint8_t*)__FUNCTION__);
+            }
+        }
+
+        if(discParams->dwP2pAcmTar != 0)
+        {
+            phOsal_LogDebugString ((const uint8_t*)"DTALib>:P2P-ACM Target Test Mode",(const uint8_t*)__FUNCTION__);
+        }
+    }
+
+    if((strcmp(dtaLibHdl->sTestProfile.Certification_Release, "CR8") == 0x00) ||
+        (strcmp(dtaLibHdl->sTestProfile.Certification_Release, "CR9") == 0x00) ||
+        (strcmp(dtaLibHdl->sTestProfile.Certification_Release, "CR10") == 0x00) ||
+        (strcmp(dtaLibHdl->sTestProfile.Certification_Release, "CR11") == 0x00))
+    {
+        /*As per NFC Forum CR11 spec and TCMT for PN05 NFCF-212 to be configured*/
+        if(dtaLibHdl->sTestProfile.Pattern_Number == 0x05)
+            dtaLibHdl->sConfigPrms.bPollBitRateTypeF = PHMWIF_NCI_BITRATE_212;
+
+        /*Till NFC Forum CR11, disable Type B Poll for pattern 0x0A & 0x0B as per DTA Spec*/
+        if((dtaLibHdl->sTestProfile.Pattern_Number == 0x0A) ||
+            (dtaLibHdl->sTestProfile.Pattern_Number == 0x0B))
+        {
+            dtaLibHdl->sConfigPrms.sMwIfDiscCfgParams.discParams.dwPollP2P   &= (~DTALIB_RFTECHNOLOGY_MASK_B);
+            dtaLibHdl->sConfigPrms.sMwIfDiscCfgParams.discParams.dwPollRdWrt &= (~DTALIB_RFTECHNOLOGY_MASK_B);
+            phOsal_LogDebugString ((const uint8_t*)"DTALib>Disabled Type B polling for pattern number0x0A & 0x0B",
+                                    (const uint8_t*)__FUNCTION__);
+        }
+    }
+
     /*Configure API to configure the FW*/
     if(phMwIf_ConfigParams(dtaLibHdl->mwIfHdl, &dtaLibHdl->sConfigPrms) != MWIFSTATUS_SUCCESS )
     {
@@ -528,7 +620,7 @@ DTASTATUS phDtaLib_DisableDiscovery() {
  */
 DTASTATUS phDtaLib_GetIUTInfo(phDtaLib_sIUTInfo_t* psIUTInfo) {
     phDtaLib_sHandle_t*   dtaLibHdl = &g_DtaLibHdl;
-    phMwIf_sVersionInfo_t sVersionInfo;
+    phMwIf_sVersionInfo_t sVersionInfo = {0, 0, 0, 0};
     LOG_FUNCTION_ENTRY;
 
     phOsal_LogDebugString((const uint8_t*)"DTALib>Version:",(const uint8_t*)DTALIB_VERSION_STR);
@@ -570,24 +662,28 @@ void phDtaLibi_EvtCb(void* mwIfHandle,
     LOG_FUNCTION_ENTRY;
     phOsal_LogDebugU32h((const uint8_t*)"DTALib> :DTA Event cb Handle=",(size_t)(mwIfHandle));
 
+    if(puEvtData == NULL)
+    {
+        phOsal_LogErrorString((const uint8_t*)"DTALib> :Error:puEvtData is NULL", (const uint8_t*)__FUNCTION__);
+        return;
+    }
     /*Prepare Data to push to Queue*/
     psQueueData = (phDtaLib_sQueueData_t*)malloc(sizeof(phDtaLib_sQueueData_t));
-    if (psQueueData)
-    {
-        psQueueData->uEvtType.eDpEvtType = eEvtType;
-        if(puEvtData)
-            psQueueData->uEvtInfo.uDpEvtInfo = *puEvtData;
-    }
-    else
+    if (psQueueData == NULL)
     {
         phOsal_LogErrorString((const uint8_t*)"DTALib> :Error:Unable to allocate memory", (const uint8_t*)__FUNCTION__);
         return;
     }
+    psQueueData->uEvtType.eDpEvtType = eEvtType;
+    if(puEvtData)
+        psQueueData->uEvtInfo.uDpEvtInfo = *puEvtData;
+
     switch (eEvtType) {
     case PHMWIF_CE_DATA_EVT:
         if(!puEvtData->sData.pvDataBuf)
         {
             phOsal_LogErrorString((const uint8_t*)"DTALib>: Invalid Data Recvd in P2P",(const uint8_t*)__FUNCTION__);
+            free(psQueueData);
             return;
         }
 
@@ -609,11 +705,15 @@ void phDtaLibi_EvtCb(void* mwIfHandle,
         break;
     case PHMWIF_T3T_TAG_ACTIVATED_EVT:
         break;
+    case PHMWIF_T5T_TAG_ACTIVATED_EVT:
+        break;
     case PHMWIF_ISODEP_ACTIVATED_EVT:
         break;
     case PHMWIF_NFCDEP_ACTIVATED_EVT:
         break;
     case PHMWIF_CE_ACTIVATED_EVT:
+        break;
+    case PHMWIF_CE_DEACTIVATED_EVT:
         break;
     case PHMWIF_DEACTIVATED_EVT:
         break;
@@ -625,7 +725,11 @@ void phDtaLibi_EvtCb(void* mwIfHandle,
 
     dwOsalStatus = phOsal_QueuePush(dtaLibHdl->queueHdl, psQueueData, 0);
     if(dwOsalStatus != OSALSTATUS_SUCCESS)
+    {
         phOsal_LogErrorString((const uint8_t*)"DTALib> :Unable to Push to Queue", (const uint8_t*)__FUNCTION__);
+        free(psQueueData);
+        return;
+    }
     else
     {
         phOsal_LogDebugString((const uint8_t*)"DTALib> : ", (const uint8_t*)__FUNCTION__);
@@ -767,20 +871,51 @@ void phDtaLibi_CbMsgHandleThrd(void *param) {
             free(psQueueData);
             break;
         case PHMWIF_T2T_TAG_ACTIVATED_EVT:
-            phDtaLibi_T2TOperations(dtaLibHdl->sTestProfile);
-            bDiscStartReqd = TRUE;
-            bDiscStopReqd  = FALSE;
+
+            if(strcmp(dtaLibHdl->sTestProfile.Certification_Release, "CR12") == 0x00)
+            {
+                phDtaLibi_T2TOperations_DynamicExecution(dtaLibHdl->sTestProfile);
+            }
+            else
+            {
+                phDtaLibi_T2TOperations(dtaLibHdl->sTestProfile);
+            }
+            bDiscStartReqd = FALSE;
+            bDiscStopReqd = FALSE;
             free(psQueueData);
             break;
         case PHMWIF_T3T_TAG_ACTIVATED_EVT:
          {
-             phDtaLibi_T3TOperations(dtaLibHdl->sTestProfile,
+            if(strcmp(dtaLibHdl->sTestProfile.Certification_Release, "CR12") == 0x00)
+            {
+                phDtaLibi_T3TOperations_DynamicExecution(dtaLibHdl->sTestProfile,
+                                                         &(psQueueData->uEvtInfo.uDpEvtInfo.sActivationPrms));
+            }
+            else
+            {
+                phDtaLibi_T3TOperations(dtaLibHdl->sTestProfile,
                                     &(psQueueData->uEvtInfo.uDpEvtInfo.sActivationPrms),&bDiscStartReqd,&bDiscStopReqd);
+            }
             free(psQueueData);
             break;
         }
+        case PHMWIF_T5T_TAG_ACTIVATED_EVT:
+            phDtaLibi_T5TOperations_DynamicExecution(dtaLibHdl->sTestProfile);
+            bDiscStartReqd = FALSE;
+            bDiscStopReqd = FALSE;
+            free(psQueueData);
+            break;
         case PHMWIF_ISODEP_ACTIVATED_EVT:
-            phDtaLibi_T4TOperations(dtaLibHdl->sTestProfile,&bDiscStartReqd,&bDiscStopReqd);
+            if(strcmp(dtaLibHdl->sTestProfile.Certification_Release, "CR12") == 0x00)
+            {
+                phDtaLibi_T4TOperations_DynamicExecution(dtaLibHdl->sTestProfile);
+                bDiscStartReqd = FALSE;
+                bDiscStopReqd = FALSE;
+            }
+            else
+            {
+                phDtaLibi_T4TOperations(dtaLibHdl->sTestProfile,&bDiscStartReqd,&bDiscStopReqd);
+            }
             free(psQueueData);
             break;
         case PHMWIF_NFCDEP_ACTIVATED_EVT:
@@ -799,12 +934,41 @@ void phDtaLibi_CbMsgHandleThrd(void *param) {
                     || (eDiscType == PHMWIF_DISCOVERY_TYPE_POLL_F))
             {
                 phOsal_LogDebug((const uint8_t*)"DTALib> We are Initiator now !! \n");
-                phDtaLibi_NfcdepTargetOperations(&bDiscStartReqd,&bDiscStopReqd);
+                dwDtaStatus = phDtaLibi_NfcdepTargetOperations(&bDiscStartReqd,&bDiscStopReqd);
+                if(dwDtaStatus != DTASTATUS_SUCCESS)
+                {
+                    bDiscStartReqd = FALSE;
+                    bDiscStopReqd  = FALSE;
+                }
             } /* Handle remote device == Initiator, for Listen mode test cases */
             else if ((eDiscType == PHMWIF_DISCOVERY_TYPE_LISTEN_A)
                     || (eDiscType == PHMWIF_DISCOVERY_TYPE_LISTEN_F))
             {
                 phOsal_LogDebug((const uint8_t*)"DTALib-DEP> We are Target now !! \n");
+
+                dwDtaStatus = phDtaLibi_NfcdepInitiatorOperations();
+                if(dwDtaStatus != DTASTATUS_SUCCESS)
+                {
+                    bDiscStartReqd = FALSE;
+                    bDiscStopReqd  = FALSE;
+                }
+            }
+            else if ((eDiscType == PHMWIF_DISCOVERY_TYPE_POLL_A_ACTIVE)
+                || (eDiscType == PHMWIF_DISCOVERY_TYPE_POLL_F_ACTIVE))
+            {
+                phOsal_LogDebug((const uint8_t*)"DTALib> We are Active Initiator now !! \n");
+                dwDtaStatus = phDtaLibi_NfcdepTargetOperations(&bDiscStartReqd,&bDiscStopReqd);
+                if(dwDtaStatus != DTASTATUS_SUCCESS)
+                {
+                    bDiscStartReqd = FALSE;
+                    bDiscStopReqd  = FALSE;
+                }
+            }
+            else if((eDiscType == PHMWIF_DISCOVERY_TYPE_LISTEN_A_ACTIVE)
+                || (eDiscType == PHMWIF_DISCOVERY_TYPE_LISTEN_F_ACTIVE))
+            {
+                phOsal_LogDebug((const uint8_t*)"DTALib-DEP> We are Active Target now !! \n");
+
                 dwDtaStatus = phDtaLibi_NfcdepInitiatorOperations();
                 if(dwDtaStatus != DTASTATUS_SUCCESS)
                 {
@@ -825,8 +989,11 @@ void phDtaLibi_CbMsgHandleThrd(void *param) {
             /*FIXME: LLCP tests require Stop/Start after each TC execution and deactivation,
              * else we get RFlinkloss and RFStuck issue*/
             if ((dtaLibHdl->sTestProfile.Pattern_Number == PHDTALIB_LLCP_CO_SET_SAP_OR_CL) ||
+                (dtaLibHdl->sTestProfile.Pattern_Number == PHDTALIB_LLCP_CO_SET_SAP_OR_CL_NFCF424) ||
                 (dtaLibHdl->sTestProfile.Pattern_Number == PHDTALIB_LLCP_CO_SET_NAME_OR_CL) ||
-                (dtaLibHdl->sTestProfile.Pattern_Number == PHDTALIB_LLCP_CO_SET_SNL_OR_CL) )
+                (dtaLibHdl->sTestProfile.Pattern_Number == PHDTALIB_LLCP_CO_SET_NAME_OR_CL_NFCF424) ||
+                (dtaLibHdl->sTestProfile.Pattern_Number == PHDTALIB_LLCP_CO_SET_SNL_OR_CL) ||
+                (dtaLibHdl->sTestProfile.Pattern_Number == PHDTALIB_LLCP_CO_SET_SNL_OR_CL_NFCF424))
             {
                 bDiscStartReqd = TRUE;
                 bDiscStopReqd  = TRUE;
@@ -846,27 +1013,46 @@ void phDtaLibi_CbMsgHandleThrd(void *param) {
                 phOsal_LogDebug((const uint8_t*)"DTALib>HCE with ISO-DEP activated");
                 dwDtaStatus = phDtaLibi_HceOperations();
                 if(dwDtaStatus != DTASTATUS_SUCCESS)
+                {
                     phOsal_LogError((const uint8_t*)"DTALib>Unable to complete HCE Operations");
+                    bDiscStartReqd = FALSE;
+                    bDiscStopReqd  = FALSE;
+                }
             }
             else if(eProtocolype == PHMWIF_PROTOCOL_UNKNOWN)
             {
                 phOsal_LogDebug((const uint8_t*)"DTALib>UICC with PROTOCOL UNKNOWN");
                 dwDtaStatus = phDtaLibi_UICCOperations();
                 if(dwDtaStatus != DTASTATUS_SUCCESS)
+                {
                     phOsal_LogError((const uint8_t*)"DTALib>Unable to complete UICC Operations");
+                    bDiscStartReqd = FALSE;
+                    bDiscStopReqd  = FALSE;
+                }
             }
             else if(eProtocolype == PHMWIF_PROTOCOL_T3T)
             {
                 phOsal_LogDebug((const uint8_t*)"DTALib>HCE with T3T activated");
                 dwDtaStatus = phDtaLibi_HceFOperations();
                 if(dwDtaStatus != DTASTATUS_SUCCESS)
+                {
                     phOsal_LogError((const uint8_t*)"DTALib>Unable to complete HCE Operations");
+                    bDiscStartReqd = FALSE;
+                    bDiscStopReqd  = FALSE;
+                }
             }
             else
             {
                 phOsal_LogError((const uint8_t*)"DTALib>Invalid Protocol in HCE. Can't be handled");
             }
             free(psQueueData);
+            break;
+        case PHMWIF_CE_DEACTIVATED_EVT:
+            eDeactType = psQueueData->uEvtInfo.uDpEvtInfo.eDeactivateType;
+            phOsal_LogDebugU32h((const uint8_t*)"DTALib> PHMWIF_CE_DEACTIVATED_EVT eDeactType = 0x%x", eDeactType);
+            free(psQueueData);
+            bDiscStartReqd = FALSE;
+            bDiscStopReqd  = FALSE;
             break;
         case PHMWIF_CE_DATA_EVT:
             /*CE DATA EVT will be read internal to HCE operations.So no
@@ -944,8 +1130,8 @@ void phDtaLibi_CbMsgHandleThrd(void *param) {
 
 
         phOsal_LogDebugString((const uint8_t*)"DTALib> : ", (const uint8_t*)__FUNCTION__);
-        phOsal_LogDebugU32h((const uint8_t*)"DiscStopReqd= ", bDiscStopReqd);
-        phOsal_LogDebugU32h((const uint8_t*)"DiscStartReqd= ", bDiscStartReqd);
+        phOsal_LogDebugU32h((const uint8_t*)"DTALib> DiscStopReqd= ", bDiscStopReqd);
+        phOsal_LogDebugU32h((const uint8_t*)"DTALib> DiscStartReqd= ", bDiscStartReqd);
 
         if(bDiscStopReqd)
         {
@@ -1011,9 +1197,11 @@ void phDtaLibi_LlcpEvtCb (void*                   pvMwIfHandle,
     {
     case PHMWIF_LLCP_ACTIVATED_EVT:
         dtaLibHdl->bIsLlcpCoRemoteClientDisconnected = FALSE;
+        dtaLibHdl->llcpConnStatus = eLlcpEvtType;
         break;
 
     case PHMWIF_LLCP_DEACTIVATED_EVT:
+        dtaLibHdl->llcpConnStatus = eLlcpEvtType;
         break;
 
     case PHMWIF_LLCP_SERVER_CONN_REQ_EVT:
@@ -1110,17 +1298,12 @@ void phDtaLib_RegisterCallback( void *dtaApplHdl, phdtaLib_EvtCb_t dtaApplCb)
 }
 
 DTASTATUS phDtaLib_SetConfig(phDtaLib_sDiscParams_t* discParams){
-    MWIFSTATUS dwMwIfStatus = 0;
     LOG_FUNCTION_ENTRY;
 
     if(phDtaLibi_UpdateConfigPrams(discParams) != MWIFSTATUS_SUCCESS)
     {
         phOsal_LogErrorString((const uint8_t*)"DTALib> :Error in Initializing",(const uint8_t*)__FUNCTION__);
             return MWIFSTATUS_FAILED;
-    }
-    if(dwMwIfStatus != DTASTATUS_SUCCESS){
-        phOsal_LogErrorString((const uint8_t*)"DTALib> :Set configuration is unsuccessful", (const uint8_t*)__FUNCTION__);
-        return DTASTATUS_FAILED;
     }
     LOG_FUNCTION_EXIT;
     return DTASTATUS_SUCCESS;

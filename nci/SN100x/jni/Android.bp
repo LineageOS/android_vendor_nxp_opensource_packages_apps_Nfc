@@ -49,5 +49,6 @@ cc_library_shared {
         cfi: true,
         integer_overflow: true,
         misc_undefined: ["bounds"],
+        scs: true,
     },
 }

@@ -2,8 +2,8 @@
  * Copyright (c) 2015-2016, The Linux Foundation. All rights reserved.
  * Not a Contribution.
  *
- * Copyright (C) 2018-2020 NXP Semiconductors
- * The original Work has been changed by NXP Semiconductors.
+ * Copyright (C) 2018-2021 NXP
+ * The original Work has been changed by NXP.
  * Copyright (C) 2010 The Android Open Source Project
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -237,8 +237,7 @@ public class NativeNfcManager implements DeviceHost {
     }
 
     @Override
-    public native boolean routeAid(byte[] aid, int route, int aidInfo, int powerState);
-
+    public native boolean routeAid(byte[] aid, int route, int aidInfo, int power);
 
     @Override
     public native boolean unrouteAid(byte[] aid);
@@ -599,6 +598,12 @@ public class NativeNfcManager implements DeviceHost {
     @Override
     public native String getNfaStorageDir();
 
+    private native void doStartStopPolling(boolean start);
+    @Override
+    public void startStopPolling(boolean start) {
+        doStartStopPolling(start);
+    }
+
     /**
      * Notifies Ndef Message (TODO: rename into notifyTargetDiscovered)
      */
@@ -669,6 +674,10 @@ public class NativeNfcManager implements DeviceHost {
 
     private void notifyRfFieldDeactivated() {
         mListener.onRemoteFieldDeactivated();
+    }
+
+    private void notifyHwErrorReported() {
+        mListener.onHwErrorReported();
     }
 
     private void notifyTransactionListeners(byte[] aid, byte[] data, String evtSrc) {

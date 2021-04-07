@@ -3,8 +3,7 @@
  *  Copyright (c) 2016, The Linux Foundation. All rights reserved.
  *  Not a Contribution.
  *
- *  Copyright (C) 2018-2020 NXP Semiconductors
- *  The original Work has been changed by NXP Semiconductors.
+ *  Copyright (C) 2018-2021 NXP
  *
  *  Copyright (C) 2012 The Android Open Source Project
  *
@@ -1607,7 +1606,7 @@ tNFA_STATUS SecureElement::setNfccPwrConfig(uint8_t value)
     LOG(INFO) << StringPrintf("%s: Enter: config= 0x%X", fn, value);
     cur_value = value;
     SyncEventGuard guard (mPwrLinkCtrlEvent);
-    nfaStat = NFA_SendPowerLinkCommand((uint8_t)EE_HANDLE_0xF3, value);
+    nfaStat = NFA_EePowerAndLinkCtrl((uint8_t)EE_HANDLE_0xF3, value);
     if(nfaStat ==  NFA_STATUS_OK) {
         if (mPwrLinkCtrlEvent.wait(NFC_CMD_TIMEOUT) == false) {
             LOG(ERROR) << StringPrintf("mPwrLinkCtrlEvent has terminated");

@@ -2,8 +2,8 @@
  * Copyright (c) 2015, The Linux Foundation. All rights reserved.
  * Not a Contribution.
  *
- * Copyright (C) 2018-2020 NXP Semiconductors
- * The original Work has been changed by NXP Semiconductors.
+ * Copyright (C) 2018-2021 NXP
+ * The original Work has been changed by NXP.
  * Copyright (C) 2013 The Android Open Source Project
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -26,7 +26,7 @@ import android.content.ComponentName;
 import android.content.Context;
 import android.content.Intent;
 import android.content.ServiceConnection;
-import android.nfc.cardemulation.NfcApduServiceInfo;
+import android.nfc.cardemulation.ApduServiceInfo;
 import android.nfc.cardemulation.CardEmulation;
 import android.nfc.cardemulation.HostApduService;
 import android.os.Bundle;
@@ -35,6 +35,7 @@ import android.os.IBinder;
 import android.os.Looper;
 import android.os.Message;
 import android.os.Messenger;
+import android.os.PowerManager;
 import android.os.RemoteException;
 import android.os.UserHandle;
 import android.util.Log;
@@ -77,6 +78,7 @@ public class HostEmulationManager {
     final Messenger mMessenger = new Messenger (new MessageHandler());
     final KeyguardManager mKeyguard;
     final Object mLock;
+    final PowerManager mPowerManager;
 
     // All variables below protected by mLock
 
@@ -111,6 +113,7 @@ public class HostEmulationManager {
         mAidCache = aidCache;
         mState = STATE_IDLE;
         mKeyguard = (KeyguardManager) context.getSystemService(Context.KEYGUARD_SERVICE);
+        mPowerManager = context.getSystemService(PowerManager.class);
     }
 
     public void onPreferredPaymentServiceChanged(final ComponentName service) {
@@ -178,12 +181,17 @@ public class HostEmulationManager {
                 if (resolveInfo.defaultService != null) {
                     // Resolve to default
                     // Check if resolvedService requires unlock
-                    NfcApduServiceInfo defaultServiceInfo = resolveInfo.defaultService;
+                    ApduServiceInfo defaultServiceInfo = resolveInfo.defaultService;
                     if (defaultServiceInfo.requiresUnlock() &&
                             mKeyguard.isKeyguardLocked() && mKeyguard.isKeyguardSecure()) {
                         // Just ignore all future APDUs until next tap
                         mState = STATE_W4_DEACTIVATE;
                         launchTapAgain(resolveInfo.defaultService, resolveInfo.category);
+                        return;
+                    }
+                    if (defaultServiceInfo.requiresScreenOn() && !mPowerManager.isScreenOn()) {
+                        // Just ignore all future APDUs
+                        mState = STATE_W4_DEACTIVATE;
                         return;
                     }
                     // In no circumstance should this be an OffHostService -
@@ -196,7 +204,7 @@ public class HostEmulationManager {
                     }
                     resolvedService = defaultServiceInfo.getComponent();
                 } else if (mActiveServiceName != null) {
-                    for (NfcApduServiceInfo serviceInfo : resolveInfo.services) {
+                    for (ApduServiceInfo serviceInfo : resolveInfo.services) {
                         if (mActiveServiceName.equals(serviceInfo.getComponent())) {
                             resolvedService = mActiveServiceName;
                             break;
@@ -208,7 +216,7 @@ public class HostEmulationManager {
                     // Ask the user to confirm.
                     // Just ignore all future APDUs until we resolve to only one
                     mState = STATE_W4_DEACTIVATE;
-                    launchResolver((ArrayList<NfcApduServiceInfo>)resolveInfo.services, null,
+                    launchResolver((ArrayList<ApduServiceInfo>)resolveInfo.services, null,
                             resolveInfo.category);
                     return;
                 }
@@ -392,7 +400,7 @@ public class HostEmulationManager {
         }
     }
 
-    void launchTapAgain(NfcApduServiceInfo service, String category) {
+    void launchTapAgain(ApduServiceInfo service, String category) {
         Intent dialogIntent = new Intent(mContext, TapAgainDialog.class);
         dialogIntent.putExtra(TapAgainDialog.EXTRA_CATEGORY, category);
         dialogIntent.putExtra(TapAgainDialog.EXTRA_APDU_SERVICE, service);
@@ -400,7 +408,7 @@ public class HostEmulationManager {
         mContext.startActivityAsUser(dialogIntent, UserHandle.CURRENT);
     }
 
-    void launchResolver(ArrayList<NfcApduServiceInfo> services, ComponentName failedComponent,
+    void launchResolver(ArrayList<ApduServiceInfo> services, ComponentName failedComponent,
             String category) {
         Intent intent = new Intent(mContext, AppChooserActivity.class);
         intent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TASK);
@@ -469,6 +477,7 @@ public class HostEmulationManager {
                 }
                 mService = new Messenger(service);
                 mServiceName = name;
+                mServiceBound = true;
                 Log.d(TAG, "Service bound");
                 mState = STATE_XFER;
                 // Send pending select APDU
@@ -484,6 +493,7 @@ public class HostEmulationManager {
             synchronized (mLock) {
                 Log.d(TAG, "Service unbound");
                 mService = null;
+                mServiceName = null;
                 mServiceBound = false;
             }
         }
@@ -526,7 +536,7 @@ public class HostEmulationManager {
                     AidResolveInfo resolveInfo = mAidCache.resolveAid(mLastSelectedAid);
                     boolean isPayment = false;
                     if (resolveInfo.services.size() > 0) {
-                        launchResolver((ArrayList<NfcApduServiceInfo>)resolveInfo.services,
+                        launchResolver((ArrayList<ApduServiceInfo>)resolveInfo.services,
                                 mActiveServiceName, resolveInfo.category);
                     }
                 }
