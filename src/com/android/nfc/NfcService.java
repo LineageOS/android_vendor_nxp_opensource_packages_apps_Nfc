@@ -1318,21 +1318,21 @@ public class NfcService implements DeviceHostListener {
 
     final class NfcAdapterService extends INfcAdapter.Stub {
 
-        // KEYSTONE(Ia20b45798e8bea70855d09fbb47ed9f78148d1ba,b/178665695)
+        // KEYSTONE(I7532feb6b67373bb028a897737eea6b564fefbef,b/178665695)
         @Override
-        public boolean isAlwaysOnSupported() throws RemoteException {
+        public boolean isControllerAlwaysOnSupported() throws RemoteException {
             // implement as necessary
             throw new UnsupportedOperationException();
         }
 
         @Override
-        public boolean isAlwaysOnEnabled() throws RemoteException {
+        public boolean isControllerAlwaysOn() throws RemoteException {
             // implement as necessary
             throw new UnsupportedOperationException();
         }
 
         @Override
-        public boolean setAlwaysOn(boolean value) throws RemoteException {
+        public boolean setControllerAlwaysOn(boolean value) throws RemoteException {
             // implement as necessary
             throw new UnsupportedOperationException();
         }

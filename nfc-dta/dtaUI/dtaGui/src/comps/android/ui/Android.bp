@@ -28,6 +28,7 @@ android_app {
     ],
 
     libs: ["com.nxp.nfc.nq"],
+    uses_libs: ["com.nxp.nfc.nq"],
 
     static_libs: [
         "android-support-v4",
