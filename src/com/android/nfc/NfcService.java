@@ -50,6 +50,7 @@ import android.nfc.IAppCallback;
 import android.nfc.INfcAdapter;
 import android.nfc.INfcAdapterExtras;
 import android.nfc.INfcCardEmulation;
+import android.nfc.INfcControllerAlwaysOnStateCallback;
 import android.nfc.INfcDta;
 import android.nfc.INfcFCardEmulation;
 import android.nfc.INfcTag;
@@ -57,6 +58,7 @@ import android.nfc.INfcUnlockHandler;
 import android.nfc.ITagRemovedCallback;
 import android.nfc.NdefMessage;
 import android.nfc.NfcAdapter;
+import android.nfc.NfcAdapter.ControllerAlwaysOnStateCallback;
 import android.nfc.Tag;
 import android.nfc.TechListParcel;
 import android.nfc.TransceiveResult;
@@ -1333,6 +1335,16 @@ public class NfcService implements DeviceHostListener {
 
         @Override
         public boolean setControllerAlwaysOn(boolean value) throws RemoteException {
+            // implement as necessary
+            throw new UnsupportedOperationException();
+        }
+
+        public void unregisterControllerAlwaysOnStateCallback(INfcControllerAlwaysOnStateCallback callback) {
+            // implement as necessary
+            throw new UnsupportedOperationException();
+        }
+
+        public void registerControllerAlwaysOnStateCallback(INfcControllerAlwaysOnStateCallback callback) {
             // implement as necessary
             throw new UnsupportedOperationException();
         }
