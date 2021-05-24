@@ -313,7 +313,8 @@ jbyteArray NativeT4tNfcee::t4tReadData(JNIEnv* e, jobject object,
       e->SetByteArrayRegion(result.get(), 0, sRxDataBuffer.size(),
             (const jbyte*)sRxDataBuffer.data());
     } else {
-      char data[1] = {0xFF};
+      // KEYSTONE(I9ce2ae7b869e96a7c2669799101a1efdb3474cba,b/187306795)
+      unsigned char data[1] = {0xFF};
       result.reset(e->NewByteArray(0x01));
       e->SetByteArrayRegion(result.get(), 0, 0x01, (jbyte*)data);
       LOG(ERROR) << StringPrintf("%s: Failed to allocate java byte array",
@@ -321,7 +322,7 @@ jbyteArray NativeT4tNfcee::t4tReadData(JNIEnv* e, jobject object,
     }
     sRxDataBuffer.clear();
   } else if (mT4tOpStatus == NFA_T4T_STATUS_INVALID_FILE_ID){
-    char data[1] = {0xFF};
+    unsigned char data[1] = {0xFF};
     result.reset(e->NewByteArray(0x01));
     e->SetByteArrayRegion(result.get(), 0, 0x01, (jbyte*)data);
   }
