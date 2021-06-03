@@ -1331,35 +1331,6 @@ public class NfcService implements DeviceHostListener {
 
     final class NfcAdapterService extends INfcAdapter.Stub {
 
-        // KEYSTONE(I7532feb6b67373bb028a897737eea6b564fefbef,b/178665695)
-        @Override
-        public boolean isControllerAlwaysOnSupported() throws RemoteException {
-            // implement as necessary
-            throw new UnsupportedOperationException();
-        }
-
-        @Override
-        public boolean isControllerAlwaysOn() throws RemoteException {
-            // implement as necessary
-            throw new UnsupportedOperationException();
-        }
-
-        @Override
-        public boolean setControllerAlwaysOn(boolean value) throws RemoteException {
-            // implement as necessary
-            throw new UnsupportedOperationException();
-        }
-
-        public void unregisterControllerAlwaysOnListener(INfcControllerAlwaysOnListener listener) {
-            // implement as necessary
-            throw new UnsupportedOperationException();
-        }
-
-        public void registerControllerAlwaysOnListener(INfcControllerAlwaysOnListener listener) {
-            // implement as necessary
-            throw new UnsupportedOperationException();
-        }
-
         @Override
         public boolean enable() throws RemoteException {
             NfcPermissions.enforceAdminPermissions(mContext);
