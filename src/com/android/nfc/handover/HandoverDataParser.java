@@ -537,7 +537,7 @@ public class HandoverDataParser {
                         break;
                 }
             }
-            result.oobData = OobData.createLeBuilder(leScC, bdaddr, (int)(role & 0xFF))
+            result.oobData = new OobData.LeBuilder(leScC, bdaddr, (int)(role & 0xFF))
                 .setRandomizerHash(leScR)
                 .setDeviceName(nameBytes)
                 .setLeTemporaryKey(securityManagerTK)

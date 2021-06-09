@@ -1,6 +1,6 @@
 /******************************************************************************
  *
- *  Copyright 2019-2020 NXP
+ *  Copyright 2019-2021 NXP
  *
  *  Licensed under the Apache License, Version 2.0 (the "License");
  *  you may not use this file except in compliance with the License.
@@ -313,7 +313,8 @@ jbyteArray NativeT4tNfcee::t4tReadData(JNIEnv* e, jobject object,
       e->SetByteArrayRegion(result.get(), 0, sRxDataBuffer.size(),
             (const jbyte*)sRxDataBuffer.data());
     } else {
-      char data[1] = {0xFF};
+      // KEYSTONE(I9ce2ae7b869e96a7c2669799101a1efdb3474cba,b/187306795)
+      unsigned char data[1] = {0xFF};
       result.reset(e->NewByteArray(0x01));
       e->SetByteArrayRegion(result.get(), 0, 0x01, (jbyte*)data);
       LOG(ERROR) << StringPrintf("%s: Failed to allocate java byte array",
@@ -321,7 +322,7 @@ jbyteArray NativeT4tNfcee::t4tReadData(JNIEnv* e, jobject object,
     }
     sRxDataBuffer.clear();
   } else if (mT4tOpStatus == NFA_T4T_STATUS_INVALID_FILE_ID){
-    char data[1] = {0xFF};
+    unsigned char data[1] = {0xFF};
     result.reset(e->NewByteArray(0x01));
     e->SetByteArrayRegion(result.get(), 0, 0x01, (jbyte*)data);
   }
@@ -846,16 +847,20 @@ bool NativeT4tNfcee::isFwSupportNonStdT4TAid() {
   jboolean isFwSupport = false;
   memset(&nfc_native_fw_version, 0, sizeof(nfc_native_fw_version));
   const uint8_t FW_ROM_VERSION = 0x01;
-  const uint8_t FW_MAJOR_VERSION = 0x10;
-  const uint8_t FW_MINOR_VERSION = 0x54;
+  const uint8_t FW_MAJOR_VERSION_SN1XX = 0x10;
+  const uint8_t FW_MAJOR_VERSION_SN2XX = 0x01;
+  const uint8_t FW_MINOR_VERSION_SN1XX = 0x54;
   nfc_native_fw_version = nfc_ncif_getFWVersion();
   DLOG_IF(INFO, nfc_debug_enabled) << StringPrintf(
       "FW Version: %x.%x.%x", nfc_native_fw_version.rom_code_version,
       nfc_native_fw_version.major_version, nfc_native_fw_version.minor_version);
-  if (nfc_native_fw_version.rom_code_version == FW_ROM_VERSION &&
-      nfc_native_fw_version.major_version == FW_MAJOR_VERSION &&
-      nfc_native_fw_version.minor_version >= FW_MINOR_VERSION) {
-    isFwSupport = true;
+
+  if (nfc_native_fw_version.rom_code_version == FW_ROM_VERSION) {
+    if ((nfc_native_fw_version.major_version == FW_MAJOR_VERSION_SN1XX &&
+         nfc_native_fw_version.minor_version >= FW_MINOR_VERSION_SN1XX) ||
+        (nfc_native_fw_version.major_version == FW_MAJOR_VERSION_SN2XX)) {
+      isFwSupport = true;
+    }
   }
   LOG(INFO) << StringPrintf(
       "nfcManager_isFwSupportNonStdT4TAid Enter isFwSupport = %d", isFwSupport);

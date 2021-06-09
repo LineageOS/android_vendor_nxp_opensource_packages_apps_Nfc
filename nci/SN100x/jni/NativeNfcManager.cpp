@@ -1055,6 +1055,10 @@ void nfaDeviceManagementCallback(uint8_t dmEvent,
                                  tNFA_DM_CBACK_DATA* eventData) {
   DLOG_IF(INFO, nfc_debug_enabled)
       << StringPrintf("%s: enter; event=0x%X", __func__, dmEvent);
+#if (NXP_EXTNS == TRUE)
+  NativeJniExtns::getInstance().notifyNfcEvent(
+      "nfaDeviceManagementCallback", (void*)&dmEvent, (void*)eventData);
+#endif
 
   switch (dmEvent) {
     case NFA_DM_ENABLE_EVT: /* Result of NFA_Enable */
@@ -3389,6 +3393,10 @@ void startRfDiscovery(bool isStart) {
   if (status == NFA_STATUS_OK) {
     sNfaEnableDisablePollingEvent.wait (); //wait for NFA_RF_DISCOVERY_xxxx_EVT
     sRfEnabled = isStart;
+#if(NXP_EXTNS == TRUE)
+    if (isStart == false && SecureElement::getInstance().mRfFieldIsOn == true)
+      SecureElement::getInstance().mRfFieldIsOn = false;
+#endif
   } else {
     LOG(ERROR) << StringPrintf(
         "%s: Failed to start/stop RF discovery; error=0x%X", __func__, status);

@@ -126,6 +126,7 @@ public class NativeNfcManager implements DeviceHost {
         switch(chip_id) {
             case "0xa3":
             case "0xa4":
+            case "0xc1":
                 libraryName = "sn100nfc_nci_jni";
                 break;
             case "0x51":
