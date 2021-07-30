@@ -14,6 +14,26 @@
  * limitations under the License.
  */
 
+/******************************************************************************
+*
+*  The original Work has been changed by NXP.
+*
+*  Licensed under the Apache License, Version 2.0 (the "License");
+*  you may not use this file except in compliance with the License.
+*  You may obtain a copy of the License at
+*
+*  http://www.apache.org/licenses/LICENSE-2.0
+*
+*  Unless required by applicable law or agreed to in writing, software
+*  distributed under the License is distributed on an "AS IS" BASIS,
+*  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+*  See the License for the specific language governing permissions and
+*  limitations under the License.
+*
+*  Copyright 2020 NXP
+*
+******************************************************************************/
+
 #include <fcntl.h>
 #include <sys/ioctl.h>
 #include <sys/time.h>
@@ -522,8 +542,8 @@ static NFCSTATUS phNxpExtns_SendMsg(phLibNfc_Message_t* sysmsg) {
 ** Returns          NFCSTATUS_SUCCESS
 **
 *******************************************************************************/
-NFCSTATUS EXTNS_MfcRegisterNDefTypeHandler(
-    tNFA_NDEF_CBACK* ndefHandlerCallback) {
+NFCSTATUS
+EXTNS_MfcRegisterNDefTypeHandler(tNFA_NDEF_CBACK* ndefHandlerCallback) {
   NFCSTATUS status = NFCSTATUS_FAILED;
   if (NULL != ndefHandlerCallback) {
     gphNxpExtns_Context.p_ndef_cback = ndefHandlerCallback;
@@ -539,18 +559,23 @@ NFCSTATUS EXTNS_MfcRegisterNDefTypeHandler(
 *******************************************************************************/
 
 bool_t EXTNS_GetConnectFlag(void) { return (gphNxpExtns_Context.ExtnsConnect); }
+
 void EXTNS_SetConnectFlag(bool_t flagval) {
   gphNxpExtns_Context.ExtnsConnect = flagval;
 }
+
 bool_t EXTNS_GetDeactivateFlag(void) {
   return (gphNxpExtns_Context.ExtnsDeactivate);
 }
+
 void EXTNS_SetDeactivateFlag(bool_t flagval) {
   gphNxpExtns_Context.ExtnsDeactivate = flagval;
 }
+
 bool_t EXTNS_GetCallBackFlag(void) {
   return (gphNxpExtns_Context.ExtnsCallBack);
 }
+
 void EXTNS_SetCallBackFlag(bool_t flagval) {
   gphNxpExtns_Context.ExtnsCallBack = flagval;
 }
@@ -559,7 +584,7 @@ NFCSTATUS EXTNS_GetPresenceCheckStatus(void) {
 
   clock_gettime(CLOCK_REALTIME, &ts);
   ts.tv_sec += 0;
-  ts.tv_nsec += 100 * 1000 * 1000;  // 100 milliseconds
+  ts.tv_nsec += 100 * 1000 * 1000;  // 100 milisec
   if (ts.tv_nsec >= 1000 * 1000 * 1000) {
     ts.tv_sec += 1;
     ts.tv_nsec = ts.tv_nsec - (1000 * 1000 * 1000);

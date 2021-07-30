@@ -461,7 +461,7 @@ public class HandoverDataParser {
         result.transport = BluetoothDevice.TRANSPORT_LE;
 
         try {
-            //KEYSTONE(I35e347ccad68e82bd35442074f52309128f5ce23,b/184262043)
+
             byte[] bdaddr = null;
             byte role = 0xF; // invalid default
             byte[] leScC = null;
@@ -537,7 +537,7 @@ public class HandoverDataParser {
                         break;
                 }
             }
-            result.oobData = new OobData.LeBuilder(leScC, bdaddr, (int)(role & 0xFF))
+            result.oobData = OobData.createLeBuilder(leScC, bdaddr, (int)(role & 0xFF))
                 .setRandomizerHash(leScR)
                 .setDeviceName(nameBytes)
                 .setLeTemporaryKey(securityManagerTK)

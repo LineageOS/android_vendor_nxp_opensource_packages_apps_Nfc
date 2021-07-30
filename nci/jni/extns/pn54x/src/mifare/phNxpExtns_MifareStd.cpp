@@ -13,6 +13,27 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+
+/******************************************************************************
+*
+*  The original Work has been changed by NXP.
+*
+*  Licensed under the Apache License, Version 2.0 (the "License");
+*  you may not use this file except in compliance with the License.
+*  You may obtain a copy of the License at
+*
+*  http://www.apache.org/licenses/LICENSE-2.0
+*
+*  Unless required by applicable law or agreed to in writing, software
+*  distributed under the License is distributed on an "AS IS" BASIS,
+*  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+*  See the License for the specific language governing permissions and
+*  limitations under the License.
+*
+*  Copyright 2020 NXP
+*
+******************************************************************************/
+
 #include <android-base/stringprintf.h>
 #include <base/logging.h>
 #include <log/log.h>
@@ -37,7 +58,7 @@ phLibNfc_NdefInfo_t NdefInfo;
 #if (NXP_EXTNS == TRUE)
 pthread_mutex_t SharedDataMutex = PTHREAD_MUTEX_INITIALIZER;
 #endif
-uint8_t current_key[6] = {0};
+uint8_t current_key[PHLIBNFC_MFC_AUTHKEYLEN] = {0};
 phNci_mfc_auth_cmd_t gAuthCmdBuf;
 phFriNfc_MifareStdTimer_t mTimerInfo;
 
@@ -867,12 +888,14 @@ STATIC NFCSTATUS phFriNfc_NdefSmtCrd_Reset__(
 *******************************************************************************/
 NFCSTATUS Mfc_FormatNdef(uint8_t* secretkey, uint8_t len) {
   NFCSTATUS status = NFCSTATUS_FAILED;
-  uint8_t mif_std_key[6] = {0};
+  uint8_t mif_std_key[PHLIBNFC_MFC_AUTHKEYLEN] = {0};
   //    static uint8_t   Index;
   //    /*commented to eliminate unused variable warning*/
   uint8_t sak = 0;
 
   EXTNS_SetCallBackFlag(false);
+
+  if (len != PHLIBNFC_MFC_AUTHKEYLEN) return NFCSTATUS_FAILED;
 
   memcpy(mif_std_key, secretkey, len);
   memcpy(current_key, secretkey, len);
@@ -1193,7 +1216,11 @@ STATIC NFCSTATUS phNciNfc_RecvMfResp(phNciNfc_Buff_t* RspBuffInfo,
             }
             gAuthCmdBuf.auth_status = true;
             status = NFCSTATUS_SUCCESS;
-
+            if ((PHNCINFC_EXTNID_SIZE + PHNCINFC_EXTNSTATUS_SIZE) >
+                RspBuffInfo->wLen) {
+              android_errorWriteLog(0x534e4554, "126204073");
+              return NFCSTATUS_FAILED;
+            }
             /* DataLen = TotalRecvdLen - (sizeof(RspId) + sizeof(Status)) */
             wPldDataSize = ((RspBuffInfo->wLen) -
                             (PHNCINFC_EXTNID_SIZE + PHNCINFC_EXTNSTATUS_SIZE));

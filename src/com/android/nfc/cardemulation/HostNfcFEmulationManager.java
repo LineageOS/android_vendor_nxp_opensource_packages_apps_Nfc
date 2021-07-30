@@ -39,8 +39,8 @@ import android.content.ComponentName;
 import android.content.Context;
 import android.content.Intent;
 import android.content.ServiceConnection;
-import android.nfc.cardemulation.NfcFServiceInfo;
 import android.nfc.cardemulation.HostNfcFService;
+import android.nfc.cardemulation.NfcFServiceInfo;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.IBinder;
@@ -254,10 +254,14 @@ public class HostNfcFEmulationManager {
             unbindServiceIfNeededLocked();
             Intent bindIntent = new Intent(HostNfcFService.SERVICE_INTERFACE);
             bindIntent.setComponent(service);
-            if (mContext.bindServiceAsUser(bindIntent, mConnection,
-                    Context.BIND_AUTO_CREATE, UserHandle.CURRENT)) {
-            } else {
-                Log.e(TAG, "Could not bind service.");
+            try {
+                mServiceBound = mContext.bindServiceAsUser(bindIntent, mConnection,
+                        Context.BIND_AUTO_CREATE, UserHandle.CURRENT);
+                if (!mServiceBound) {
+                    Log.e(TAG, "Could not bind service.");
+                }
+            } catch (SecurityException e) {
+                Log.e(TAG, "Could not bind service due to security exception.");
             }
             return null;
         }

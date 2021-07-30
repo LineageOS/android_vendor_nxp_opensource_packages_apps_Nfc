@@ -47,7 +47,6 @@ import android.util.proto.ProtoOutputStream;
 import java.io.FileDescriptor;
 import java.io.PrintWriter;
 import java.util.Collections;
-import java.util.Arrays;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Hashtable;
@@ -57,6 +56,7 @@ import java.util.Map;
 import java.util.Set;
 import java.util.List;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Hashtable;
 import android.os.SystemProperties;
 public class AidRoutingManager {
