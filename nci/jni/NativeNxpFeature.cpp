@@ -2,8 +2,8 @@
  * Copyright (c) 2016, The Linux Foundation. All rights reserved.
  * Not a Contribution.
  *
- * Copyright (C) 2015-2019 NXP Semiconductors
- * The original Work has been changed by NXP Semiconductors.
+ * Copyright (C) 2015-2020 NXP
+ * The original Work has been changed by NXP.
  *
  * Copyright (C) 2012 The Android Open Source Project
  *
@@ -1110,12 +1110,11 @@ tNFA_STATUS NxpNfc_Write_Cmd_Common(uint8_t retlen, uint8_t* buffer) {
  *******************************************************************************/
 tNFA_STATUS NxpNfc_Send_CoreResetInit_Cmd(void) {
   tNFA_STATUS status = NFA_STATUS_FAILED;
-  uint8_t* p;
 
   status = (tNFA_STATUS)NFA_Send_Core_Reset();
 
   if (status == NFA_STATUS_OK) {
-    NFA_Send_Core_Init(&p);
+    NFA_Send_Core_Init();
   }
   return status;
 }

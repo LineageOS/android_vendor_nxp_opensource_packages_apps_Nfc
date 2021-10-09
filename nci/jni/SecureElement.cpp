@@ -386,7 +386,6 @@ bool SecureElement::initialize(nfc_jni_native_data* native) {
   memset(mEeInfo, 0, sizeof(mEeInfo));
   memset(&mUiccInfo, 0, sizeof(mUiccInfo));
   memset(&mHciCfg, 0, sizeof(mHciCfg));
-  mUsedAids.clear();
   memset(mAidForEmptySelect, 0, sizeof(mAidForEmptySelect));
 #if (NXP_EXTNS == TRUE)
   mIsWiredModeBlocked = false;
@@ -551,6 +550,27 @@ void SecureElement::finalize() {
   memset(&mUiccInfo, 0, sizeof(mUiccInfo));
 
   DLOG_IF(INFO, nfc_debug_enabled) << StringPrintf("%s: exit", fn);
+}
+
+/*******************************************************************************
+**
+** Function:        releasePendingTransceive
+**
+** Description:     release any pending transceive wait.
+**
+** Returns:         None.
+**
+*******************************************************************************/
+void SecureElement::releasePendingTransceive()
+{
+    static const char fn [] = "SecureElement::releasePendingTransceive";
+    LOG(INFO) << StringPrintf("%s: Entered", fn);
+    if(mIsWiredModeOpen)
+    {
+        SyncEventGuard guard (mTransceiveEvent);
+        mTransceiveEvent.notifyOne();
+    }
+    LOG(INFO) << StringPrintf("%s: Exit", fn);
 }
 
 /*******************************************************************************
@@ -759,9 +779,10 @@ bool SecureElement::setEseListenTechMask(uint8_t tech_mask) {
     nfaStat = NFA_CeConfigureEseListenTech(EE_HANDLE_0xF3, (0x00));
     if (nfaStat == NFA_STATUS_OK) {
       SecureElement::getInstance().mEseListenEvent.wait();
-      return true;
-    } else
+    } else {
       LOG(ERROR) << StringPrintf("fail to stop ESE listen");
+      return false;
+    }
   }
 
   {

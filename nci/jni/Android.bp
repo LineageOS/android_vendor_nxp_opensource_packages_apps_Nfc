@@ -1,3 +1,7 @@
+package {
+    default_applicable_licenses: ["Android-Apache-2.0"],
+}
+
 cc_library_shared {
     name: "libnqnfc_nci_jni",
     system_ext_specific: true,
@@ -67,5 +71,7 @@ cc_library_shared {
     sanitize: {
         cfi: true,
         integer_overflow: true,
+        misc_undefined: ["bounds"],
+        scs:true,
     },
 }
