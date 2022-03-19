@@ -1153,8 +1153,9 @@ STATIC NFCSTATUS phNciNfc_RecvMfResp(phNciNfc_Buff_t* RspBuffInfo,
   if (NULL == RspBuffInfo) {
     status = NFCSTATUS_FAILED;
   } else {
-    if ((0 == (RspBuffInfo->wLen)) || (PH_NCINFC_STATUS_OK != wStatus) ||
-        (NULL == (RspBuffInfo->pBuff))) {
+    if (((PHNCINFC_EXTNID_SIZE + PHNCINFC_EXTNSTATUS_SIZE) >
+         RspBuffInfo->wLen) ||
+        (PH_NCINFC_STATUS_OK != wStatus) || (NULL == (RspBuffInfo->pBuff))) {
       status = NFCSTATUS_FAILED;
     } else {
       RecvdExtnRspId = (phNciNfc_ExtnRespId_t)RspBuffInfo->pBuff[0];
