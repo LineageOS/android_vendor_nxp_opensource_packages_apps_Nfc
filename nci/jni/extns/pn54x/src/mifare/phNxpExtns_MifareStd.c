@@ -1245,7 +1245,7 @@ phNciNfc_RecvMfResp(phNciNfc_Buff_t* RspBuffInfo,
     }
     else
     {
-        if((0 == (RspBuffInfo->wLen))
+        if(((PHNCINFC_EXTNID_SIZE + PHNCINFC_EXTNSTATUS_SIZE) > RspBuffInfo->wLen)
                 || (PH_NCINFC_STATUS_OK != wStatus)
                 || (NULL == (RspBuffInfo->pBuff))
                 )
