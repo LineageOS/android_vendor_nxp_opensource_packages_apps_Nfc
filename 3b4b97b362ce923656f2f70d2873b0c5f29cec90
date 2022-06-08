@@ -1,0 +1,21 @@
+{
+  "comments": [
+    {
+      "unresolved": false,
+      "key": {
+        "uuid": "3be26ad2_eeb19548",
+        "filename": "/PATCHSET_LEVEL",
+        "patchSetId": 1
+      },
+      "lineNbr": 0,
+      "author": {
+        "id": 13648
+      },
+      "writtenOn": "2022-06-08T13:38:18Z",
+      "side": 1,
+      "message": "Even tho this particular change is not a security fix, it is needed after the ASB merge in order to fix compilation issues:\n\n\u003e \n vendor/nxp/opensource/commonsys/packages/apps/Nfc/src/com/android/nfc/NfcService.java:2591: error: NfcService.TagService is not abstract and does not override abstract method isTagUpToDate(long) in INfcTag\n\u003e      final class TagService extends INfcTag.Stub {\n\u003e            ^\n\u003e  1 error\n",
+      "revId": "3b4b97b362ce923656f2f70d2873b0c5f29cec90",
+      "serverId": "1ec6b3db-b2c1-4fa4-84a2-4c7efe89ba71"
+    }
+  ]
+}
