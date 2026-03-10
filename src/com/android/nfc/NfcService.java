@@ -1480,6 +1480,10 @@ public class NfcService implements DeviceHostListener {
         @Override
         public boolean isNfcSecureEnabled() throws RemoteException {
             synchronized (NfcService.this) {
+                int current_userId = ActivityManager.getCurrentUser();
+                if (mUserId != current_userId) {
+                    loadSecureNfcSettings(current_userId);
+                }
                 return mIsSecureNfcEnabled;
             }
         }
